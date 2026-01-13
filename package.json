@@ -1,0 +1,43 @@
+{
+  "name": "ai-visibility-inspector",
+  "version": "0.9.1",
+  "description": "AI-gated content analysis product that measures AEO/GEO visibility",
+  "main": "assets/js/aivi-sidebar.js",
+  "scripts": {
+    "test": "jest",
+    "lint": "eslint assets/js/ --ext .js",
+    "lint:fix": "eslint assets/js/ --ext .js --fix",
+    "build": "npm run lint && npm run test",
+    "watch": "npm run lint -- --watch"
+  },
+  "keywords": [
+    "wordpress",
+    "ai",
+    "seo",
+    "aeo",
+    "geo",
+    "content-analysis"
+  ],
+  "author": "AiVI Team",
+  "license": "GPL-2.0-or-later",
+  "devDependencies": {
+    "eslint": "^8.0.0",
+    "jest": "^29.0.0",
+    "@wordpress/eslint-config": "^13.0.0"
+  },
+  "eslintConfig": {
+    "extends": ["@wordpress/eslint-config"],
+    "env": {
+      "browser": true,
+      "jquery": true
+    },
+    "globals": {
+      "wp": "readonly",
+      "AIVI_CONFIG": "readonly"
+    }
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "setupFilesAfterEnv": ["<rootDir>/tests/js/setup.js"]
+  }
+}
