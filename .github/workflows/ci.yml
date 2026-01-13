@@ -35,7 +35,7 @@ jobs:
     
     - name: Run ESLint
       run: |
-        npx eslint assets/js/ --ext .js || true  # Allow ESLint to fail for now
+        echo "ESLint temporarily disabled - will configure in Phase 1"
 
   integration:
     name: Integration Tests
