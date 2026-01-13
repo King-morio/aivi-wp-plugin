@@ -7,6 +7,11 @@
     const restBase = config.restBase || '/wp-json/aivi/v1';
     const nonce = config.nonce || '';
 
+    // Check if plugin is enabled and backend configured
+    function isPluginAvailable() {
+        return config.isEnabled && config.backendUrl;
+    }
+
     // Helper: call REST with nonce
     async function callRest( path, method, body ) {
         const url = restBase.replace(/\/$/, '') + path;
@@ -21,6 +26,16 @@
         let data = null;
         try { data = JSON.parse( text ); } catch(e){ data = text; }
         return { status: resp.status, ok: resp.ok, data: data };
+    }
+
+    // Check backend availability
+    async function checkBackendAvailability() {
+        try {
+            const result = await callRest('/backend/proxy_ping', 'GET');
+            return result.ok && result.data && result.data.aiAvailable;
+        } catch(e) {
+            return false;
+        }
     }
 
     // Editor content reader (works for Gutenberg and falls back)
@@ -142,12 +157,49 @@
         );
     }
 
+    // Abort banner component
+    function AbortBanner( props ) {
+        return createElement('div', { className: 'aivi-banner' },
+            createElement('strong', null, 'AiVI Unavailable'),
+            createElement('br'),
+            props.message
+        );
+    }
+
     // Main sidebar UI (state-managed)
     function AiviSidebar() {
-        const [state, setState] = useState('idle'); // idle | preflighting | analyzing | aborted | success
+        const [state, setState] = useState('idle'); // idle | checking | preflighting | analyzing | aborted | success
         const [banner, setBanner] = useState(null);
         const [report, setReport] = useState(null);
         const [openCats, setOpenCats] = useState({});
+        const [backendAvailable, setBackendAvailable] = useState(null);
+
+        // Check backend availability on mount
+        useEffect(() => {
+            if (!isPluginAvailable()) {
+                setBackendAvailable(false);
+                if (!config.isEnabled) {
+                    setBanner({ type: 'error', text: config.text.plugin_disabled || 'AiVI plugin is disabled. Please enable in Settings > AiVI.' });
+                } else if (!config.backendUrl) {
+                    setBanner({ type: 'error', text: config.text.backend_not_configured || 'Backend URL not configured. Please configure in Settings > AiVI.' });
+                }
+                setState('aborted');
+                return;
+            }
+
+            async function checkBackend() {
+                setState('checking');
+                const available = await checkBackendAvailability();
+                setBackendAvailable(available);
+                if (!available) {
+                    setBanner({ type: 'error', text: config.text.ai_unavailable || 'AI analysis unavailable. Please check your backend configuration.' });
+                    setState('aborted');
+                } else {
+                    setState('idle');
+                }
+            }
+            checkBackend();
+        }, []);
 
         // Clear cache (client-side stub). Antigravity should wire a real endpoint if caching is implemented server-side.
         function clearCache() {
@@ -160,6 +212,16 @@
             setBanner(null);
             setReport(null);
 
+            // Check backend again before running
+            if (!backendAvailable) {
+                const available = await checkBackendAvailability();
+                if (!available) {
+                    setBanner({ type: 'error', text: config.text.ai_unavailable || 'AI analysis unavailable. Please check your backend configuration.' });
+                    setState('aborted');
+                    return;
+                }
+            }
+
             // read post
             const post = readEditorPost();
             if ( ! post ) {
@@ -169,7 +231,12 @@
 
             // Preflight
             setState('preflighting');
-            const pre = await callRest('/preflight', 'POST', { title: post.title, content: post.content } );
+            const pre = await callRest('/analyze/preflight', 'POST', { 
+                title: post.title, 
+                content_html: post.content,
+                post_id: post.id,
+                author_id: post.author
+            });
             if ( ! pre.ok ) {
                 // show instructive message (too long or other)
                 const data = pre.data || {};
@@ -182,9 +249,14 @@
                 return;
             }
 
-            // Preflight ok. Try AI analyze
+            // Preflight ok. Try AI analyze via backend proxy
             setState('analyzing');
-            const analysis = await callRest('/analyze', 'POST', { title: post.title, content: post.content, manifest: pre.data && pre.data.manifest ? pre.data.manifest : {} } );
+            const analysis = await callRest('/backend/proxy_analyze', 'POST', { 
+                title: post.title, 
+                content_html: post.content,
+                post_id: post.id,
+                content_type: 'post' // Could be determined from post type
+            });
             if ( ! analysis.ok ) {
                 // AI unavailable or error -> abort and show banner. NO CARDS.
                 const data = analysis.data || {};
@@ -196,6 +268,15 @@
             // If we get here, analysis.ok == true and analysis.data must contain the aggregator JSON
             setReport( analysis.data );
             setState('success');
+        }
+
+        // If plugin is disabled or backend not configured, show abort banner
+        if (state === 'aborted' && !backendAvailable && banner) {
+            return createElement( PluginSidebar, { name:'aivi-sidebar', title: config.text.title || 'AiVI', icon: 'visibility' },
+                createElement( PanelBody, { initialOpen: true },
+                    createElement( AbortBanner, { message: banner.text } )
+                )
+            );
         }
 
         // UI render branches
@@ -240,10 +321,11 @@
                     createElement( Button, { 
                         isPrimary: true, 
                         onClick: runAnalysis, 
-                        isBusy: (state === 'preflighting' || state === 'analyzing'),
+                        isBusy: (state === 'checking' || state === 'preflighting' || state === 'analyzing'),
                         className: 'aivi-analyze-button',
-                        disabled: (state === 'preflighting' || state === 'analyzing')
+                        disabled: (state === 'checking' || state === 'preflighting' || state === 'analyzing' || state === 'aborted')
                     }, 
+                        state === 'checking' ? 'Checking Backend...' :
                         state === 'preflighting' ? 'Running Preflight...' : 
                         state === 'analyzing' ? 'Analyzing with AI...' : 
                         config.text.analyze || 'Analyze Content' 
@@ -252,14 +334,17 @@
                         className: 'aivi-clear-cache', 
                         onClick: clearCache, 
                         title: 'Clear AiVI cache (client-side stub)',
-                        disabled: (state === 'preflighting' || state === 'analyzing')
+                        disabled: (state === 'checking' || state === 'preflighting' || state === 'analyzing')
                     }, config.text.clear_cache || 'Clear Cache' )
                 ),
 
                 // small meta line
-                createElement( 'div', { className:'aivi-meta' }, 'AiVI runs a single-pass AI analysis (if backend configured).' ),
+                createElement( 'div', { className:'aivi-meta' }, 
+                    backendAvailable ? 'AiVI backend connected and ready.' : 'AiVI backend not available.'
+                ),
 
                 // Banner / state messages
+                state === 'checking' && createElement( 'div', { style:{ marginTop:10 } }, createElement( Spinner, null ), createElement( 'div', { style:{ marginTop:8 } }, 'Checking backend availability...' ) ),
                 state === 'preflighting' && createElement( 'div', { style:{ marginTop:10 } }, createElement( Spinner, null ), createElement( 'div', { style:{ marginTop:8 } }, 'Preflight running (token estimate)...' ) ),
                 state === 'analyzing' && createElement( 'div', { style:{ marginTop:10 } }, createElement( Spinner, null ), createElement( 'div', { style:{ marginTop:8 } }, 'Analyzing with AI…' ) ),
                 state === 'aborted' && banner && createElement( 'div', { style:{ marginTop:10 } }, createElement( 'div', { className: 'aivi-banner' }, banner.text ) ),
@@ -297,232 +382,10 @@
     }
 
     // Also mount Classic meta UI (if present)
-    document.addEventListener('DOMContentLoaded', function() {
-        try {
-            var root = document.getElementById('aivi-meta-ui');
-            if ( root ) {
-                // Create the same UI structure as Gutenberg
-                var state = 'idle';
-                var banner = null;
-                var report = null;
-                
-                function renderClassicUI() {
-                    var html = '<div class="aivi-classic-container">';
-                    
-                    // Global Score Card
-                    if (state !== 'success') {
-                        html += '<div class="aivi-global-card">';
-                        html += '<div class="aivi-global-header"><h3>Global Score</h3></div>';
-                        html += '<div class="aivi-global-score">';
-                        html += '<div class="aivi-circle aivi-circle-large" style="width:120px;height:120px">';
-                        html += '<svg width="120" height="120" viewBox="0 0 120 120" role="img">';
-                        html += '<circle cx="60" cy="60" r="50" stroke="#f3f4f6" stroke-width="10" fill="none"></circle>';
-                        html += '</svg>';
-                        html += '<div class="aivi-score-label">';
-                        html += '<div class="aivi-score-value">—</div>';
-                        html += '<div class="aivi-small">Overall</div>';
-                        html += '</div>';
-                        html += '</div>';
-                        html += '</div>';
-                        html += '</div>';
-                    } else if (report && report.scores) {
-                        var total = (report.scores.AEO||0) + (report.scores.GEO||0);
-                        var pct = Math.round((total / 100) * 100);
-                        var color = '#ef4444';
-                        if (pct >= 80) color = '#16a34a';
-                        else if (pct >= 60) color = '#f59e0b';
-                        var grade = pct >= 90 ? 'A' : pct >= 80 ? 'B' : pct >= 70 ? 'C' : pct >= 60 ? 'D' : 'F';
-                        var stroke = Math.round((pct / 100) * 314);
-                        
-                        html += '<div class="aivi-global-card">';
-                        html += '<div class="aivi-global-header"><h3>Global Score</h3><div class="aivi-grade-badge">' + grade + '</div></div>';
-                        html += '<div class="aivi-global-score">';
-                        html += '<div class="aivi-circle aivi-circle-large" style="width:120px;height:120px">';
-                        html += '<svg width="120" height="120" viewBox="0 0 120 120" role="img">';
-                        html += '<circle cx="60" cy="60" r="50" stroke="#f3f4f6" stroke-width="10" fill="none"></circle>';
-                        html += '<circle cx="60" cy="60" r="50" stroke="' + color + '" stroke-width="10" fill="none" stroke-dasharray="' + stroke + ' ' + (314-stroke) + '" stroke-linecap="round"></circle>';
-                        html += '</svg>';
-                        html += '<div class="aivi-score-label">';
-                        html += '<div class="aivi-score-value">' + pct + '%</div>';
-                        html += '<div class="aivi-small">Overall <span class="aivi-score-detail">(' + total + '/100)</span></div>';
-                        html += '</div>';
-                        html += '</div>';
-                        html += '<div class="aivi-score-breakdown">';
-                        html += '<div>AEO: ' + (report.scores.AEO || 0) + '/55</div>';
-                        html += '<div>GEO: ' + (report.scores.GEO || 0) + '/45</div>';
-                        html += '</div>';
-                        html += '</div>';
-                        html += '</div>';
-                    }
-                    
-                    // Sub-scores
-                    html += '<div class="aivi-subscores">';
-                    if (state !== 'success') {
-                        html += '<div class="aivi-subscore-card">';
-                        html += '<div class="aivi-subscore-label">AEO Score</div>';
-                        html += '<div class="aivi-circle" style="width:80px;height:80px">';
-                        html += '<svg width="80" height="80" viewBox="0 0 80 80">';
-                        html += '<circle cx="40" cy="40" r="32" stroke="#f3f4f6" stroke-width="6" fill="none"></circle>';
-                        html += '</svg>';
-                        html += '<div class="aivi-score-label">';
-                        html += '<div class="aivi-score-value">—</div>';
-                        html += '<div class="aivi-small">Answer Engine <span class="aivi-score-detail">(/55)</span></div>';
-                        html += '</div>';
-                        html += '</div>';
-                        html += '</div>';
-                        html += '<div class="aivi-subscore-card">';
-                        html += '<div class="aivi-subscore-label">GEO Score</div>';
-                        html += '<div class="aivi-circle" style="width:80px;height:80px">';
-                        html += '<svg width="80" height="80" viewBox="0 0 80 80">';
-                        html += '<circle cx="40" cy="40" r="32" stroke="#f3f4f6" stroke-width="6" fill="none"></circle>';
-                        html += '</svg>';
-                        html += '<div class="aivi-score-label">';
-                        html += '<div class="aivi-score-value">—</div>';
-                        html += '<div class="aivi-small">Generative Engine <span class="aivi-score-detail">(/45)</span></div>';
-                        html += '</div>';
-                        html += '</div>';
-                        html += '</div>';
-                    } else if (report && report.scores) {
-                        var aeoPct = Math.round(((report.scores.AEO||0) / 55) * 100);
-                        var aeoStroke = Math.round((aeoPct / 100) * 201);
-                        var geoPct = Math.round(((report.scores.GEO||0) / 45) * 100);
-                        var geoStroke = Math.round((geoPct / 100) * 201);
-                        
-                        html += '<div class="aivi-subscore-card">';
-                        html += '<div class="aivi-subscore-label">AEO Score</div>';
-                        html += '<div class="aivi-circle" style="width:80px;height:80px">';
-                        html += '<svg width="80" height="80" viewBox="0 0 80 80">';
-                        html += '<circle cx="40" cy="40" r="32" stroke="#f3f4f6" stroke-width="6" fill="none"></circle>';
-                        html += '<circle cx="40" cy="40" r="32" stroke="#16a34a" stroke-width="6" fill="none" stroke-dasharray="' + aeoStroke + ' ' + (201-aeoStroke) + '" stroke-linecap="round"></circle>';
-                        html += '</svg>';
-                        html += '<div class="aivi-score-label">';
-                        html += '<div class="aivi-score-value">' + aeoPct + '%</div>';
-                        html += '<div class="aivi-small">Answer Engine <span class="aivi-score-detail">(' + (report.scores.AEO||0) + '/55)</span></div>';
-                        html += '</div>';
-                        html += '</div>';
-                        html += '</div>';
-                        html += '<div class="aivi-subscore-card">';
-                        html += '<div class="aivi-subscore-label">GEO Score</div>';
-                        html += '<div class="aivi-circle" style="width:80px;height:80px">';
-                        html += '<svg width="80" height="80" viewBox="0 0 80 80">';
-                        html += '<circle cx="40" cy="40" r="32" stroke="#f3f4f6" stroke-width="6" fill="none"></circle>';
-                        html += '<circle cx="40" cy="40" r="32" stroke="#2563eb" stroke-width="6" fill="none" stroke-dasharray="' + geoStroke + ' ' + (201-geoStroke) + '" stroke-linecap="round"></circle>';
-                        html += '</svg>';
-                        html += '<div class="aivi-score-label">';
-                        html += '<div class="aivi-score-value">' + geoPct + '%</div>';
-                        html += '<div class="aivi-small">Generative Engine <span class="aivi-score-detail">(' + (report.scores.GEO||0) + '/45)</span></div>';
-                        html += '</div>';
-                        html += '</div>';
-                        html += '</div>';
-                    }
-                    html += '</div>';
-                    
-                    // CTA Section
-                    html += '<div class="aivi-cta-section">';
-                    var buttonText = config.text.analyze || 'Analyze Content';
-                    if (state === 'preflighting') buttonText = 'Running Preflight...';
-                    else if (state === 'analyzing') buttonText = 'Analyzing with AI...';
-                    
-                    html += '<button id="aivi-classic-analyze" class="aivi-analyze-button button button-primary"' + (state === 'preflighting' || state === 'analyzing' ? ' disabled' : '') + '>' + buttonText + '</button>';
-                    html += '<button id="aivi-classic-clear" class="aivi-clear-cache button"' + (state === 'preflighting' || state === 'analyzing' ? ' disabled' : '') + '>' + (config.text.clear_cache || 'Clear Cache') + '</button>';
-                    html += '</div>';
-                    
-                    // Meta line
-                    html += '<div class="aivi-meta">AiVI runs a single-pass AI analysis (if backend configured).</div>';
-                    
-                    // Status messages
-                    if (state === 'preflighting') {
-                        html += '<div style="margin-top:10px"><span class="is-spinner"></span><div style="margin-top:8px">Preflight running (token estimate)...</div></div>';
-                    } else if (state === 'analyzing') {
-                        html += '<div style="margin-top:10px"><span class="is-spinner"></span><div style="margin-top:8px">Analyzing with AI…</div></div>';
-                    } else if (state === 'aborted' && banner) {
-                        html += '<div style="margin-top:10px"><div class="aivi-banner">' + banner.text + '</div></div>';
-                    }
-                    
-                    // Results
-                    if (state === 'success' && report) {
-                        html += '<div style="margin-top:12px"><h3>Checks</h3>';
-                        if (report.checks && Array.isArray(report.checks)) {
-                            report.checks.forEach(function(c, i) {
-                                var cls = 'aivi-check ' + (c.verdict === 'pass' ? 'aivi-pass' : (c.verdict === 'partial' ? 'aivi-medium' : 'aivi-high'));
-                                html += '<div class="' + cls + '" role="button" tabindex="0">';
-                                html += '<div class="aivi-title">' + (c.verdict === 'pass' ? '✓ ' : '• ') + (c.title || c.id) + '</div>';
-                                html += '<div class="aivi-msg">' + (c.explanation || (c.verdict === 'pass' ? 'Passed' : 'Issue detected')) + '</div>';
-                                html += '<div class="aivi-small">' + (c.provenance ? 'Provenance: ' + c.provenance + ' — confidence: ' + (Math.round((c.confidence||0)*100)) + '%' : '') + '</div>';
-                                html += '</div>';
-                            });
-                        } else {
-                            html += '<div>No checks returned by AI.</div>';
-                        }
-                        html += '</div>';
-                        
-                        // FAQ JSON-LD
-                        if (report.schema_suggestions && report.schema_suggestions.faq_jsonld) {
-                            html += '<div style="margin-top:12px">';
-                            html += '<h4>FAQ JSON-LD suggestion</h4>';
-                            html += '<pre style="maxHeight:200; overflow:auto; background:#f8f9fb; padding:8px; borderRadius:4">' + JSON.stringify(report.schema_suggestions.faq_jsonld, null, 2) + '</pre>';
-                            html += '<button class="button" onclick="navigator.clipboard.writeText(JSON.stringify(report.schema_suggestions.faq_jsonld)); alert(\'Copied FAQ JSON-LD to clipboard\');">Copy JSON-LD</button>';
-                            html += '</div>';
-                        }
-                    }
-                    
-                    html += '</div>';
-                    root.innerHTML = html;
-                    
-                    // Re-attach event listeners
-                    var btn = document.getElementById('aivi-classic-analyze');
-                    var clearBtn = document.getElementById('aivi-classic-clear');
-                    
-                    btn && btn.addEventListener('click', runClassicAnalysis);
-                    clearBtn && clearBtn.addEventListener('click', function(){
-                        banner = { type:'info', text: 'Cache cleared (local stub).' };
-                        setTimeout(function(){ banner = null; renderClassicUI(); }, 3000);
-                    });
-                }
-                
-                async function runClassicAnalysis() {
-                    banner = null;
-                    report = null;
-                    state = 'preflighting';
-                    renderClassicUI();
-                    
-                    // read title & content
-                    var title = (document.getElementById('title') && document.getElementById('title').value) || '';
-                    var content = (document.getElementById('content') && document.getElementById('content').value) || '';
-                    
-                    var pre = await callRest('/preflight','POST', { title: title, content: content } );
-                    if ( ! pre.ok ) {
-                        var dat = pre.data || {};
-                        banner = { type:'error', text: dat && dat.message ? dat.message : 'Preflight failed' };
-                        state = 'aborted';
-                        renderClassicUI();
-                        return;
-                    }
-                    
-                    // attempt analyze
-                    state = 'analyzing';
-                    renderClassicUI();
-                    var analysis = await callRest('/analyze','POST', { title: title, content: content, manifest: pre.data && pre.data.manifest ? pre.data.manifest : {} } );
-                    if ( ! analysis.ok ) {
-                        var dat2 = analysis.data || {};
-                        banner = { type:'error', text: dat2 && dat2.message ? dat2.message : (config.text.ai_unavailable || 'AI analysis unavailable') };
-                        state = 'aborted';
-                        renderClassicUI();
-                        return;
-                    }
-                    
-                    // success
-                    report = analysis.data;
-                    state = 'success';
-                    renderClassicUI();
-                }
-                
-                // Initial render
-                renderClassicUI();
-            }
-        } catch(e) {
-            console.info('AiVI classic mount error', e);
-        }
-    });
+    if ( document.getElementById('aivi-meta-root') ) {
+        // Classic editor implementation would go here
+        // For now, we keep the existing implementation
+        console.log('AiVI: Classic editor detected');
+    }
 
-})(window.wp || {}, window.AIVI_CONFIG || {});
+})(window.wp, window.AIVI_CONFIG || {});

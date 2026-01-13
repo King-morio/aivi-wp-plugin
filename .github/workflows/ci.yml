@@ -25,6 +25,12 @@ jobs:
       run: |
         find . -type f -name "*.php" -not -path "./vendor/*" -not -path "./tests/*" -exec php -l {} \;
     
+    - name: Run unit tests
+      run: |
+        vendor/bin/phpunit tests/unit/Test-CategoryWeights.php --verbose
+        vendor/bin/phpunit tests/preflight/Test-Preflight.php --verbose
+        vendor/bin/phpunit tests/test-settings.php --verbose
+    
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
@@ -56,12 +62,19 @@ jobs:
         php -l ai-visibility-inspector.php
         php -l includes/class-plugin.php
         php -l includes/class-admin-menu.php
+        php -l includes/class-admin-settings.php
         php -l includes/class-assets.php
         php -l includes/class-editor-sidebar.php
         php -l includes/class-rest-preflight.php
         php -l includes/class-rest-analyze.php
         php -l includes/class-rest-rewrite.php
         php -l includes/class-rest-ping.php
+        php -l includes/class-rest-backend-proxy.php
+        php -l includes/config.php
+        php -l includes/preflight/class-sanitizer.php
+        php -l includes/preflight/class-serializer.php
+        php -l includes/preflight/class-token-estimator.php
+        php -l includes/preflight/class-link-queue.php
         php -l includes/helpers/functions.php
     
     - name: Verify plugin structure

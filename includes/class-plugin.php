@@ -79,6 +79,8 @@ class Plugin {
      */
     private function load_dependencies() {
         require_once AIVI_PLUGIN_DIR . 'includes/helpers/functions.php';
+        require_once AIVI_PLUGIN_DIR . 'includes/config.php';
+        require_once AIVI_PLUGIN_DIR . 'includes/class-admin-settings.php';
         require_once AIVI_PLUGIN_DIR . 'includes/class-admin-menu.php';
         require_once AIVI_PLUGIN_DIR . 'includes/class-assets.php';
         require_once AIVI_PLUGIN_DIR . 'includes/class-editor-sidebar.php';
@@ -86,6 +88,13 @@ class Plugin {
         require_once AIVI_PLUGIN_DIR . 'includes/class-rest-analyze.php';
         require_once AIVI_PLUGIN_DIR . 'includes/class-rest-rewrite.php';
         require_once AIVI_PLUGIN_DIR . 'includes/class-rest-ping.php';
+        require_once AIVI_PLUGIN_DIR . 'includes/class-rest-backend-proxy.php';
+        
+        // Preflight classes
+        require_once AIVI_PLUGIN_DIR . 'includes/preflight/class-sanitizer.php';
+        require_once AIVI_PLUGIN_DIR . 'includes/preflight/class-serializer.php';
+        require_once AIVI_PLUGIN_DIR . 'includes/preflight/class-token-estimator.php';
+        require_once AIVI_PLUGIN_DIR . 'includes/preflight/class-link-queue.php';
     }
 
     /**
@@ -106,6 +115,7 @@ class Plugin {
         new REST_Analyze();
         new REST_Rewrite();
         new REST_Ping();
+        new REST_Backend_Proxy();
     }
 
     /**

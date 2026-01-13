@@ -100,7 +100,44 @@ ai-visibility-inspector/
 
 ## Configuration
 
-The plugin requires an AI orchestrator backend to be configured for full functionality. In the skeleton version, AI endpoints return appropriate "unavailable" responses.
+### Admin Settings
+
+1. Navigate to **Settings → AiVI** in your WordPress admin
+2. Configure the following settings:
+
+#### Backend Configuration
+- **AiVI Backend Base URL**: The root URL of your AiVI backend API (e.g., `https://api.aivi.example.com`)
+- **Enable Web Lookups**: Allow semantic checks to perform external web requests
+- **Token Cutoff Override**: Maximum tokens per analysis (default: 200,000)
+- **Enable AiVI**: Master switch to disable all features if needed
+
+#### Testing
+- Use the **Test Connection** button to verify your backend is accessible
+- Check for success/failure messages after testing
+
+### Troubleshooting
+
+1. **Backend Not Available**
+   - Verify the backend URL is correct and accessible
+   - Check network connectivity and firewall settings
+   - Ensure SSL certificate is valid
+
+2. **Analysis Fails**
+   - Check that backend is configured and responding
+   - Verify content is within token limits
+   - Check error logs for detailed messages
+
+3. **Plugin Disabled**
+   - Go to Settings → AiVI
+   - Ensure "Enable AiVI" checkbox is checked
+   - Save settings
+
+### Security Notes
+
+- No API keys or secrets are stored in WordPress
+- All external API calls are proxied through the plugin
+- All REST endpoints require proper capabilities and nonces
+- Content is sanitized before processing
 
 ## Development
 

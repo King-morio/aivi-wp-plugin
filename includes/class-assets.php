@@ -98,21 +98,28 @@ class Assets {
     private function localize_script() {
         $plugin = Plugin::get_instance();
         $core   = get_option( 'aivi_core', array( 'site_id' => '' ) );
+        $aivi_settings = AiVI_Admin_Settings::get_settings();
 
         $settings = array(
             'siteId'        => isset( $core['site_id'] ) ? $core['site_id'] : '',
             'pluginVersion' => isset( $core['version'] ) ? $core['version'] : AIVI_VERSION,
             'restBase'      => esc_url_raw( rest_url( 'aivi/v1' ) ),
             'nonce'         => wp_create_nonce( 'wp_rest' ),
+            'backendUrl'    => isset( $aivi_settings['backend_url'] ) ? $aivi_settings['backend_url'] : '',
+            'isEnabled'     => AiVI_Admin_Settings::is_enabled(),
+            'webLookupsEnabled' => AiVI_Admin_Settings::are_web_lookups_enabled(),
+            'tokenCutoff'   => AiVI_Admin_Settings::get_token_cutoff(),
             'text'          => array(
                 'title'             => 'AiVI — AI Visibility Inspector',
                 'analyze'           => 'Analyze Content',
                 'clear_cache'       => 'Clear Cache',
-                'ai_unavailable'    => 'AI analysis unavailable. Please try again.',
+                'ai_unavailable'    => 'AI analysis unavailable. Please check your backend configuration.',
                 'preflight_too_long' => 'Article too long for single-pass analysis. Please analyze a section or split the article.',
                 'preflight_ok'      => 'Preflight OK. Attempting AI analysis...',
                 'no_editor'         => 'Editor APIs not available in this context.',
                 'awaiting'          => 'Awaiting analysis',
+                'backend_not_configured' => 'Backend URL not configured. Please configure in Settings > AiVI.',
+                'plugin_disabled'   => 'AiVI plugin is disabled. Please enable in Settings > AiVI.',
             ),
         );
 
