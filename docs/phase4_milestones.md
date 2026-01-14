@@ -25,9 +25,9 @@ Phase 4 implements the AI Orchestrator and Agents that power the semantic analys
 ### Deliverables
 1. **Infrastructure as Code** (Terraform/CDK)
    - Lambda functions for orchestrator
-   - API Gateway configuration
-   - DynamoDB tables (PLACEHOLDER: need table names)
-   - S3 buckets (PLACEHOLDER: need bucket names)
+   - API Gateway configuration (reuse existing `avi-orchestrator-api`)
+   - DynamoDB tables (`aivi-runs-dev`, `aivi-highlights-dev`, `aivi-suggestions-dev`)
+   - S3 buckets (`aivi-prompts-aivi-dev`, `aivi-artifacts-aivi-dev`)
    - IAM roles and policies
 
 2. **Core Orchestrator Service**
@@ -35,11 +35,12 @@ Phase 4 implements the AI Orchestrator and Agents that power the semantic analys
    - `/ping` endpoint (health check)
    - Request validation and routing
    - Error handling framework
+   - Uses existing `avi-orchestrator-api` or creates new gateway
 
 3. **Database Schema**
-   - `AiVI_Runs` table (PLACEHOLDER: confirm name)
-   - `AiVI_Highlights` table (PLACEHOLDER: confirm name)
-   - `AiVI_Suggestions` table (PLACEHOLDER: confirm name)
+   - `aivi-runs-dev` table
+   - `aivi-highlights-dev` table
+   - `aivi-suggestions-dev` table
 
 4. **Initial Tests**
    - Unit tests for core logic
@@ -86,13 +87,13 @@ Phase 4 implements the AI Orchestrator and Agents that power the semantic analys
    - Error handling for API failures
 
 2. **Prompt Management**
-   - S3 prompt templates (`s3://PLACEHOLDER-prompts/prompts/`)
+   - S3 prompt templates (`s3://aivi-prompts-aivi-dev/prompts/`)
    - Prompt versioning in DynamoDB
    - Template rendering engine
    - A/B testing framework for prompts
 
 3. **Secrets Management**
-   - Anthropic API key in Secrets Manager (PLACEHOLDER: path)
+   - Anthropic API key in Secrets Manager (`AVI_CLAUDE_API_KEY`)
    - Rotation policy implementation
    - Access logging for secret access
 
@@ -234,7 +235,7 @@ Phase 4 implements the AI Orchestrator and Agents that power the semantic analys
 ### Database Operations
 ```javascript
 // Create run
-DynamoDB.put(AiVI_Runs, {
+DynamoDB.put(aivi-runs-dev, {
   run_id: uuid,
   site_id: string,
   post_id: number,
@@ -244,7 +245,7 @@ DynamoDB.put(AiVI_Runs, {
 });
 
 // Store highlights
-DynamoDB.batchWrite(AiVI_Highlights, [{
+DynamoDB.batchWrite(aivi-highlights-dev, [{
   run_id: uuid,
   check_id: string,
   node_ref: string,
@@ -253,7 +254,7 @@ DynamoDB.batchWrite(AiVI_Highlights, [{
 }]);
 
 // Store suggestions
-DynamoDB.put(AiVI_Suggestions, {
+DynamoDB.put(aivi-suggestions-dev, {
   run_id: uuid,
   type: "rewrite|schema|content",
   content: object,
@@ -269,8 +270,8 @@ DynamoDB.put(AiVI_Suggestions, {
 
 ### Deliverables
 1. **SQS Integration**
-   - Rewrite queue (PLACEHOLDER: queue name)
-   - Long-running task queue
+   - Rewrite queue (`aivi-rewrite-queue-dev`)
+   - Long-running task queue (`aivi-tasks-queue-dev`)
    - Dead letter queue configuration
    - Visibility timeout handling
 
@@ -319,7 +320,7 @@ DynamoDB.put(AiVI_Suggestions, {
 
 ### S3 Structure
 ```
-s3://PLACEHOLDER-artifacts/
+s3://aivi-artifacts-aivi-dev/
 ├── runs/
 │   └── {run_id}/
 │       ├── input.json
@@ -554,29 +555,28 @@ aws logs tail /aws/lambda/aivi-orchestrator --follow
 
 ---
 
-## ⚠️ BLOCKERS - Missing AWS Configuration
+## Implementation Decision Notes
 
-The following must be provided before implementation:
+### API Gateway Strategy
+- Test both existing `avi-orchestrator-api` gateways
+- Identify working gateway and reuse it
+- Delete non-functional gateway if possible
+- Create new gateway only if necessary
 
-1. **S3 Buckets**
-   - Prompts bucket: `PLACEHOLDER`
-   - Artifacts bucket: `PLACEHOLDER`
+### Lambda Functions
+- Existing: `avi-orchestrator-test` (can be reused or replaced)
+- New naming: `aivi-<component>-<action>-<env>`
+- Examples: `aivi-orchestrator-run-dev`, `aivi-analyzer-agent-dev`
 
-2. **DynamoDB Tables**
-   - Runs table: `PLACEHOLDER`
-   - Highlights table: `PLACEHOLDER`
-   - Suggestions table: `PLACEHOLDER`
+### Security Considerations
+- All resources in eu-north-1 region
+- Use existing KMS keys for S3
+- Reuse existing secret: `AVI_CLAUDE_API_KEY`
+- No custom domain needed for Phase 4
 
-3. **Secrets Manager**
-   - Anthropic key path: `PLACEHOLDER`
+## Ready for Implementation
 
-4. **SQS Queues**
-   - Rewrite queue: `PLACEHOLDER`
-   - Tasks queue: `PLACEHOLDER`
-
-5. **Infrastructure**
-   - AWS Account ID: `PLACEHOLDER`
-   - Region: `PLACEHOLDER`
-   - API Gateway domain: `PLACEHOLDER`
-
-**DO NOT PROCEED** with actual infrastructure deployment until these values are provided by the product owner. Use placeholders for development and testing only.
+All required AWS resources have been identified. The Phase 4 implementation can proceed with:
+- Account: 173471018175
+- Region: eu-north-1
+- All resource names confirmed above
