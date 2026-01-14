@@ -1,0 +1,25 @@
+{
+  "name": "aivi-orchestrator",
+  "version": "1.0.0",
+  "description": "AiVI Orchestrator Lambda Function",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "lint": "eslint .",
+    "build": "npm run lint && npm test"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.456.0",
+    "@aws-sdk/lib-dynamodb": "^3.456.0",
+    "@aws-sdk/client-s3": "^3.456.0",
+    "@aws-sdk/client-sqs": "^3.456.0",
+    "@aws-sdk/client-secrets-manager": "^3.456.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.8",
+    "@types/node": "^20.9.0",
+    "eslint": "^8.53.0",
+    "jest": "^29.7.0",
+    "typescript": "^5.2.2"
+  }
+}
