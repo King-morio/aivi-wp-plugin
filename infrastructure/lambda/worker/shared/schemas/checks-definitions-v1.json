@@ -1,0 +1,897 @@
+{
+    "version": "1.4.3",
+    "last_updated": "2026-02-23",
+    "description": "51 checks total: 34 semantic + 17 deterministic; deterministic checks run in preflight",
+    "total_checks": 51,
+    "categories": {
+        "intro_focus_factuality": {
+            "name": "Intro Focus & Factuality (AEO)",
+            "description": "Intro focus clarity, readability, and factual support signals",
+            "checks": {
+                "intro_focus_and_factuality.v1": {
+                    "id": "intro_focus_and_factuality.v1",
+                    "name": "Intro Focus & Factuality Composite",
+                    "type": "hybrid",
+                    "description": "Weighted composite score across intro focus and factuality subchecks.",
+                    "evaluation": "Compute composite_score using weighted subscores. Verdict: pass >= 0.9, partial 0.7-0.899, fail < 0.7.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "confidence": "number",
+                        "score": "0-1",
+                        "explanation": "string",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ],
+                        "suggestions": [
+                            {
+                                "text": "string"
+                            }
+                        ]
+                    },
+                    "thresholds": "Composite score-based"
+                },
+                "intro_first_sentence_topic": {
+                    "id": "intro_first_sentence_topic",
+                    "name": "Intro First Sentence Topic",
+                    "type": "semantic",
+                    "description": "First sentence matches canonical focus token.",
+                    "evaluation": "Stem-match or synonym match against canonical focus token.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "confidence": "number",
+                        "score": "0-1",
+                        "explanation": "string",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ],
+                        "suggestions": [
+                            {
+                                "text": "string"
+                            }
+                        ]
+                    },
+                    "thresholds": "Pass if focus token matches first sentence topic"
+                },
+                "intro_wordcount": {
+                    "id": "intro_wordcount",
+                    "name": "Intro Word Count",
+                    "type": "hybrid",
+                    "description": "Intro word count bucket for optimal snippet length.",
+                    "evaluation": "Count intro words. Buckets: 40–60 optimal, 61–120 acceptable, >120 too_long, <10 too_short.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "confidence": "number",
+                        "score": "0-1",
+                        "word_count": {
+                            "value": "number",
+                            "deterministic_only": true
+                        },
+                        "bucket": {
+                            "value": "snippet_optimal|acceptable|too_long|too_short",
+                            "deterministic_only": true
+                        },
+                        "explanation": "string",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ],
+                        "suggestions": [
+                            {
+                                "text": "string"
+                            }
+                        ]
+                    },
+                    "thresholds": "Optimal 40–60 words"
+                },
+                "intro_readability": {
+                    "id": "intro_readability",
+                    "name": "Intro Readability",
+                    "type": "hybrid",
+                    "description": "Intro readability metrics and normalized subscore.",
+                    "evaluation": "Compute avg_sentence_length, passive_voice_pct, flesch_score. Normalize with equal weights.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "confidence": "number",
+                        "score": "0-1",
+                        "avg_sentence_length": {
+                            "value": "number",
+                            "deterministic_only": true
+                        },
+                        "passive_voice_pct": {
+                            "value": "number",
+                            "deterministic_only": true
+                        },
+                        "flesch_score": {
+                            "value": "number",
+                            "deterministic_only": true
+                        },
+                        "explanation": "string",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ],
+                        "suggestions": [
+                            {
+                                "text": "string"
+                            }
+                        ]
+                    },
+                    "thresholds": "Prefer ≤22 words, passive ≤20%, Flesch ≥50"
+                },
+                "intro_factual_entities": {
+                    "id": "intro_factual_entities",
+                    "name": "Intro Factual Entities",
+                    "type": "hybrid",
+                    "description": "Factual spans and supporting links within first 3 paragraphs.",
+                    "evaluation": "Detect factual spans (years, percentages, numbers, statistical phrases). Penalize unsupported spans.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "confidence": "number",
+                        "score": "0-1",
+                        "spans": {
+                            "value": "array",
+                            "deterministic_only": true
+                        },
+                        "unsupported_count": {
+                            "value": "number",
+                            "deterministic_only": true
+                        },
+                        "explanation": "string",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ],
+                        "suggestions": [
+                            {
+                                "text": "string"
+                            }
+                        ]
+                    },
+                    "thresholds": "Fail if unsupported factual spans exceed threshold"
+                },
+                "intro_schema_suggestion": {
+                    "id": "intro_schema_suggestion",
+                    "name": "Intro Schema Suggestion",
+                    "type": "hybrid",
+                    "description": "Schema presence and suggestion for intro intent.",
+                    "evaluation": "Detect schema presence and provide minimal JSON-LD suggestion if missing.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "confidence": "number",
+                        "score": "0-1",
+                        "has_schema": {
+                            "value": "boolean",
+                            "deterministic_only": true
+                        },
+                        "explanation": "string",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ],
+                        "suggestions": [
+                            {
+                                "text": "string"
+                            }
+                        ]
+                    },
+                    "thresholds": "Advisory"
+                }
+            }
+        },
+        "answer_extractability": {
+            "name": "Answer Extractability (AEO)",
+            "description": "Measures how easily LLM-based answer engines can extract direct answers",
+            "checks": {
+                "direct_answer_first_120": {
+                    "id": "direct_answer_first_120",
+                    "name": "Direct Answer in First 120 Words",
+                    "type": "semantic",
+                    "description": "Direct answer must appear within first 120 words after a strict question anchor (explicit question heading/sentence).",
+                    "evaluation": "Use only strict question anchors (ends with '?' or starts with interrogative + auxiliary verb). Do not treat topical headings like 'Speed Optimization' or 'How to ...' as question anchors. If no strict question anchor exists, return pass with explanation.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ]
+                    },
+                    "thresholds": "Pass if answer appears within first 120 words, Partial if 121-150 words, Fail if >150 words."
+                },
+                "answer_sentence_concise": {
+                    "id": "answer_sentence_concise",
+                    "name": "Answer Snippet Concise",
+                    "type": "semantic",
+                    "description": "For strict question anchors, the primary answer snippet (1-3 sentences) should be 40-60 words.",
+                    "evaluation": "Count words in the first answer segment tied to a strict question anchor; ignore secondary explanations. If no strict question anchor exists, return pass with explanation.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "first_sentence_word_count": "number",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ]
+                    },
+                    "thresholds": "Pass: 40-60 words, Partial: 30-39 or 61-80 words, Fail: otherwise."
+                },
+                "question_answer_alignment": {
+                    "id": "question_answer_alignment",
+                    "name": "Question-Answer Alignment",
+                    "type": "semantic",
+                    "description": "Answer must semantically address an explicit question anchor.",
+                    "evaluation": "Evaluate semantic similarity only between strict question anchors and their answer segments. If no strict question anchor exists, return pass with explanation.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "alignment_score": "0-1",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ]
+                    },
+                    "thresholds": "Pass if score >= 0.75"
+                },
+                "clear_answer_formatting": {
+                    "id": "clear_answer_formatting",
+                    "name": "Clear Answer Formatting",
+                    "type": "semantic",
+                    "description": "Checks whether answer formatting is clear for strict question-anchored responses.",
+                    "evaluation": "Assess answer structure only when a strict question anchor exists (steps for how-to questions, bullets for listable question answers). If no strict question anchor exists, return pass with explanation.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "recommended_format": "string",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ]
+                    },
+                    "thresholds": "Advisory"
+                },
+                "faq_structure_opportunity": {
+                    "id": "faq_structure_opportunity",
+                    "name": "FAQ Structure Opportunity",
+                    "type": "semantic",
+                    "description": "Detects 3+ strict Q&A pairs that could be converted to FAQ schema.",
+                    "evaluation": "Scan for strict question anchors and associated answer text; suggest FAQ pairs for schema. Do not infer Q&A from topical headings. If no strict question anchors exist, return pass with explanation.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "faq_candidates": [
+                            "array of node references"
+                        ]
+                    },
+                    "thresholds": "Pass if ≥3 pairs detected and not already marked up"
+                }
+            }
+        },
+        "structure_readability": {
+            "name": "Structure & Readability",
+            "description": "Logical hierarchy and scannability",
+            "checks": {
+                "single_h1": {
+                    "id": "single_h1",
+                    "name": "Single H1",
+                    "type": "deterministic",
+                    "description": "Content should contain exactly one H1 tag.",
+                    "evaluation": "Count H1 tags in the parsed HTML.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ]
+                    },
+                    "thresholds": "Pass if exactly one H1, Partial if more than one, Fail if none."
+                },
+                "logical_heading_hierarchy": {
+                    "id": "logical_heading_hierarchy",
+                    "name": "Logical Heading Hierarchy",
+                    "type": "deterministic",
+                    "description": "Heading levels should not skip levels (e.g., H2 to H4).",
+                    "evaluation": "Scan heading levels in order and flag skips.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ],
+                        "skipped_levels": "array"
+                    },
+                    "thresholds": "Fail if any skipped heading levels are detected."
+                },
+                "orphan_headings": {
+                    "id": "orphan_headings",
+                    "name": "Orphan Headings",
+                    "type": "semantic",
+                    "description": "Headings should be supported by meaningful content that fulfills the heading promise and stays integrated with the article narrative.",
+                    "evaluation": "Assess whether each heading is semantically supported by the section beneath it. Flag headings with thin support, unmet topical promise, or disconnected narrative continuity. Return instance-level findings: one failing heading per finding (up to 3), scope=span, with text_quote_selector.exact equal to the heading text itself (not the whole paragraph). Avoid aggregate phrasing such as 'multiple headings' or 'all headings' unless no specific heading can be isolated.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ],
+                        "orphans": "array"
+                    },
+                    "thresholds": "Fail when one or more headings lack meaningful semantic support or topical fulfillment."
+                },
+                "heading_fragmentation": {
+                    "id": "heading_fragmentation",
+                    "name": "Heading Fragmentation",
+                    "type": "deterministic",
+                    "description": "Too many short H2 sections (not FAQ).",
+                    "evaluation": "Counts H2 sections and average word count.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ]
+                    },
+                    "thresholds": "Fail if >6 H2s AND avg content <50 words"
+                },
+                "lists_tables_presence": {
+                    "id": "lists_tables_presence",
+                    "name": "Lists & Tables Presence",
+                    "type": "semantic",
+                    "description": "Detect opportunities for lists/tables.",
+                    "evaluation": "Scan for listable content.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "opportunities": [
+                            "array"
+                        ],
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ]
+                    },
+                    "thresholds": "Advisory"
+                },
+                "readability_adaptivity": {
+                    "id": "readability_adaptivity",
+                    "name": "Readability Adaptivity",
+                    "type": "semantic",
+                    "description": "Reading level assessment",
+                    "evaluation": "Flesch or similar scoring",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "score": "number",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ]
+                    },
+                    "thresholds": "Advisory"
+                },
+                "appropriate_paragraph_length": {
+                    "id": "appropriate_paragraph_length",
+                    "name": "Appropriate Paragraph Length",
+                    "type": "deterministic",
+                    "description": "Paragraphs should stay under 150 words for readability.",
+                    "evaluation": "Count words in each paragraph block.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ],
+                        "long_paragraphs": "array"
+                    },
+                    "thresholds": "Fail if any paragraph exceeds 150 words."
+                }
+            }
+        },
+        "schema_structured_data": {
+            "name": "Schema & Structured Data",
+            "description": "Schema validation and suggestions",
+            "checks": {
+                "valid_jsonld_schema": {
+                    "id": "valid_jsonld_schema",
+                    "name": "Valid JSON-LD Schema",
+                    "type": "deterministic",
+                    "description": "JSON-LD blocks should be valid JSON.",
+                    "evaluation": "Parse JSON-LD blocks and flag syntax errors.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ]
+                    },
+                    "thresholds": "Fail if any JSON-LD block is invalid."
+                },
+                "schema_matches_content": {
+                    "id": "schema_matches_content",
+                    "name": "Schema Matches Content",
+                    "type": "deterministic",
+                    "description": "Schema types should align with the content type.",
+                    "evaluation": "Compare schema @type to content type metadata.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "details": "object"
+                    },
+                    "thresholds": "Fail if schema types do not match content type."
+                },
+                "semantic_html_usage": {
+                    "id": "semantic_html_usage",
+                    "name": "Semantic HTML Usage",
+                    "type": "deterministic",
+                    "description": "Use semantic HTML tags for structure.",
+                    "evaluation": "Detect semantic tags such as <article>, <section>, <header>.",
+                    "output": {
+                        "verdict": "pass|partial|fail"
+                    },
+                    "thresholds": "Pass if multiple semantic tags are present."
+                },
+                "supported_schema_types_validation": {
+                    "id": "supported_schema_types_validation",
+                    "name": "Supported Schema Types Validation",
+                    "type": "deterministic",
+                    "description": "Schema types should be supported and correctly structured.",
+                    "evaluation": "Validate JSON-LD types against supported schemas.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "details": "object"
+                    },
+                    "thresholds": "Fail if unsupported schema types are detected."
+                },
+                "faq_jsonld_presence_and_completeness": {
+                    "id": "faq_jsonld_presence_and_completeness",
+                    "name": "FAQ JSON-LD Presence & Completeness",
+                    "type": "deterministic",
+                    "description": "If FAQ-style content is detected, ensure FAQPage schema exists with question-answer pairs.",
+                    "evaluation": "Detect FAQ-style headings and verify FAQPage mainEntity entries with acceptedAnswer.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "details": "object"
+                    },
+                    "thresholds": "Pass when FAQ-style content is not detected; otherwise evaluate completeness."
+                },
+                "howto_jsonld_presence_and_completeness": {
+                    "id": "howto_jsonld_presence_and_completeness",
+                    "name": "HowTo JSON-LD Presence & Completeness",
+                    "type": "deterministic",
+                    "description": "If HowTo-style content is detected, ensure HowTo schema exists with required fields.",
+                    "evaluation": "Detect step-like content and verify HowTo schema has name and step data.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "details": "object"
+                    },
+                    "thresholds": "Pass when HowTo-style content is not detected; otherwise evaluate completeness."
+                },
+                "faq_jsonld_generation_suggestion": {
+                    "id": "faq_jsonld_generation_suggestion",
+                    "name": "FAQ JSON-LD Generation",
+                    "type": "semantic",
+                    "description": "Generate FAQ JSON-LD only for strict FAQ-style Q&A candidates.",
+                    "evaluation": "Convert strict question-anchor candidates to FAQ JSON-LD. If no strict question anchors exist, return pass with explanation.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "generated_schema": "object"
+                    },
+                    "thresholds": "Advisory"
+                },
+                "howto_schema_presence_and_completeness": {
+                    "id": "howto_schema_presence_and_completeness",
+                    "name": "HowTo Schema Completeness",
+                    "type": "semantic",
+                    "description": "Validate HowTo schema structure.",
+                    "evaluation": "Check name, steps, supplies.",
+                    "output": {
+                        "verdict": "pass|partial|fail"
+                    },
+                    "thresholds": "Pass if complete"
+                }
+            }
+        },
+        "freshness_temporal": {
+            "name": "Freshness & Temporal Validity",
+            "description": "Timeliness checks",
+            "checks": {
+                "content_updated_12_months": {
+                    "id": "content_updated_12_months",
+                    "name": "Content Updated in 12 Months",
+                    "type": "deterministic",
+                    "description": "Content should show a recent update date.",
+                    "evaluation": "Extract update timestamp from HTML/time elements.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ],
+                        "details": "object"
+                    },
+                    "thresholds": "Fail if no update in the last 12 months."
+                },
+                "no_broken_internal_links": {
+                    "id": "no_broken_internal_links",
+                    "name": "No Broken Internal Links",
+                    "type": "deterministic",
+                    "description": "Internal links should resolve successfully.",
+                    "evaluation": "Validate internal link status codes.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "details": "object"
+                    },
+                    "thresholds": "Fail if any internal links return errors."
+                },
+                "temporal_claim_check": {
+                    "id": "temporal_claim_check",
+                    "name": "Temporal Claim Check",
+                    "type": "semantic",
+                    "description": "Flag time-sensitive words like 'recently'.",
+                    "evaluation": "Scan text for temporal markers.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "claims": "array"
+                    },
+                    "thresholds": "Flag if conflicts with publish date"
+                }
+            }
+        },
+        "entities_semantic": {
+            "name": "Entities & Semantic Clarity",
+            "description": "Entity relevance and clarity",
+            "checks": {
+                "named_entities_detected": {
+                    "id": "named_entities_detected",
+                    "name": "Named Entities Detected",
+                    "type": "semantic",
+                    "description": "Detect entity candidates.",
+                    "evaluation": "NER scan.",
+                    "output": {
+                        "verdict": "pass|partial|fail"
+                    },
+                    "thresholds": "Info only"
+                },
+                "entities_contextually_relevant": {
+                    "id": "entities_contextually_relevant",
+                    "name": "Entities Contextually Relevant",
+                    "type": "semantic",
+                    "description": "Are entities relevant to topic?",
+                    "evaluation": "Relevance scoring.",
+                    "output": {
+                        "verdict": "pass|partial|fail"
+                    },
+                    "thresholds": "Pass if score >= 0.75"
+                },
+                "entity_relationships_clear": {
+                    "id": "entity_relationships_clear",
+                    "name": "Entity Relationships Clear",
+                    "type": "semantic",
+                    "description": "Are relationships explained?",
+                    "evaluation": "Semantic check.",
+                    "output": {
+                        "verdict": "pass|partial|fail"
+                    },
+                    "thresholds": "Advisory"
+                },
+                "entity_disambiguation": {
+                    "id": "entity_disambiguation",
+                    "name": "Entity Disambiguation",
+                    "type": "semantic",
+                    "description": "Suggest disambiguations for ambiguous terms.",
+                    "evaluation": "Ambiguity check.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "suggestions": "array"
+                    },
+                    "thresholds": "Advisory"
+                },
+                "terminology_consistency": {
+                    "id": "terminology_consistency",
+                    "name": "Terminology Consistency",
+                    "type": "semantic",
+                    "description": "Consistent use of terms (API vs A.P.I.).",
+                    "evaluation": "Variance check.",
+                    "output": {
+                        "verdict": "pass|partial|fail"
+                    },
+                    "thresholds": "Fail if inconsistent usage found"
+                },
+                "howto_semantic_validity": {
+                    "id": "howto_semantic_validity",
+                    "name": "HowTo Semantic Validity",
+                    "type": "semantic",
+                    "description": "Does structure match HowTo intent?",
+                    "evaluation": "Logical flow check.",
+                    "output": {
+                        "verdict": "pass|partial|fail"
+                    },
+                    "thresholds": "Pass if logical steps found"
+                }
+            }
+        },
+        "trust_neutrality": {
+            "name": "Trust, Neutrality & Safety",
+            "description": "Credibility and safety",
+            "checks": {
+                "author_identified": {
+                    "id": "author_identified",
+                    "name": "Author Identified",
+                    "type": "deterministic",
+                    "description": "Author attribution should be present.",
+                    "evaluation": "Detect author byline or meta tag.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ],
+                        "details": "object"
+                    },
+                    "thresholds": "Fail if no author information is detected."
+                },
+                "author_bio_present": {
+                    "id": "author_bio_present",
+                    "name": "Author Bio Present",
+                    "type": "deterministic",
+                    "description": "Author bio should be present in content or markup.",
+                    "evaluation": "Detect bio section or markers in HTML.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ],
+                        "details": "object"
+                    },
+                    "thresholds": "Fail if no author bio is detected."
+                },
+                "metadata_checks": {
+                    "id": "metadata_checks",
+                    "name": "Metadata Checks",
+                    "type": "deterministic",
+                    "description": "Title, meta description, canonical, and lang tags should be present.",
+                    "evaluation": "Check for required metadata tags in HTML.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "details": "object"
+                    },
+                    "thresholds": "Fail if all metadata elements are missing."
+                },
+                "accessibility_basics": {
+                    "id": "accessibility_basics",
+                    "name": "Accessibility Basics",
+                    "type": "deterministic",
+                    "description": "Images should include alt text.",
+                    "evaluation": "Count images missing alt attributes.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "details": "object"
+                    },
+                    "thresholds": "Fail if any images are missing alt text."
+                },
+                "external_authoritative_sources": {
+                    "id": "external_authoritative_sources",
+                    "name": "External Authoritative Sources",
+                    "type": "semantic",
+                    "description": "Outbound link authority check.",
+                    "evaluation": "Domain authority estimate.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "authority_level": "high|medium|low"
+                    },
+                    "thresholds": "Advisory"
+                },
+                "claim_provenance_and_evidence": {
+                    "id": "claim_provenance_and_evidence",
+                    "name": "Claim Provenance & Evidence",
+                    "type": "semantic",
+                    "description": "Evidence strength for claims.",
+                    "evaluation": "Source mapping.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "evidence_level": "high|medium|low"
+                    },
+                    "thresholds": "Fail if web lookups are disabled or evidence cannot be verified."
+                },
+                "numeric_claim_consistency": {
+                    "id": "numeric_claim_consistency",
+                    "name": "Numeric Claim Consistency",
+                    "type": "semantic",
+                    "description": "Consistent numbers within text.",
+                    "evaluation": "Numeric comparison.",
+                    "output": {
+                        "verdict": "pass|partial|fail"
+                    },
+                    "thresholds": "Pass if all numbers consistent"
+                },
+                "contradictions_and_coherence": {
+                    "id": "contradictions_and_coherence",
+                    "name": "Contradictions & Coherence",
+                    "type": "semantic",
+                    "description": "Internal contradictions.",
+                    "evaluation": "Logic check.",
+                    "output": {
+                        "verdict": "pass|partial|fail"
+                    },
+                    "thresholds": "Fail if contradictions found"
+                },
+                "no_exaggerated_claims": {
+                    "id": "no_exaggerated_claims",
+                    "name": "No Exaggerated Claims",
+                    "type": "semantic",
+                    "description": "Sensationalist language.",
+                    "evaluation": "Tone check.",
+                    "output": {
+                        "verdict": "pass|partial|fail"
+                    },
+                    "thresholds": "Fail if exaggerated language used"
+                },
+                "promotional_or_commercial_intent": {
+                    "id": "promotional_or_commercial_intent",
+                    "name": "Promotional Intent",
+                    "type": "semantic",
+                    "description": "Promotional tone.",
+                    "evaluation": "Bias check.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "score": "0-1"
+                    },
+                    "thresholds": "Advisory"
+                },
+                "pii_sensitive_content_detector": {
+                    "id": "pii_sensitive_content_detector",
+                    "name": "PII Detector",
+                    "type": "semantic",
+                    "description": "Sensitive data (email, SSN).",
+                    "evaluation": "PII scan.",
+                    "output": {
+                        "verdict": "pass|partial|fail"
+                    },
+                    "thresholds": "Fail if PII detected"
+                }
+            }
+        },
+        "citability_verifiability": {
+            "name": "Citability & Verifiability",
+            "description": "Extractable and verifiable claims",
+            "checks": {
+                "claim_pattern_detection": {
+                    "id": "claim_pattern_detection",
+                    "name": "Claim Pattern Detection",
+                    "type": "semantic",
+                    "description": "Identify claims.",
+                    "evaluation": "Pattern matching.",
+                    "output": {
+                        "verdict": "pass|partial|fail"
+                    },
+                    "thresholds": "Info only"
+                },
+                "factual_statements_well_formed": {
+                    "id": "factual_statements_well_formed",
+                    "name": "Factual Statements Well Formed",
+                    "type": "semantic",
+                    "description": "Claims are clear and standalone.",
+                    "evaluation": "Clarity check.",
+                    "output": {
+                        "verdict": "pass|partial|fail"
+                    },
+                    "thresholds": "Pass if well-formed"
+                },
+                "internal_link_context_relevance": {
+                    "id": "internal_link_context_relevance",
+                    "name": "Internal Link Relevance",
+                    "type": "semantic",
+                    "description": "Internal links are relevant.",
+                    "evaluation": "Context scoring.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "score": "0-1"
+                    },
+                    "thresholds": "Pass if score >= 0.7"
+                },
+                "duplicate_or_near_duplicate_detection": {
+                    "id": "duplicate_or_near_duplicate_detection",
+                    "name": "Duplicate Detection",
+                    "type": "semantic",
+                    "description": "Duplication check.",
+                    "evaluation": "Similarity check.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "overlap": "0-100"
+                    },
+                    "thresholds": "flag if > 60%"
+                },
+                "citation_format_and_context": {
+                    "id": "citation_format_and_context",
+                    "name": "Citation Format and Context",
+                    "type": "semantic",
+                    "description": "Citations support claims.",
+                    "evaluation": "Contextual verification.",
+                    "output": {
+                        "verdict": "pass|partial|fail"
+                    },
+                    "thresholds": "Pass if citations contextually support claims"
+                }
+            }
+        }
+    },
+    "output_format": {
+        "checks": {
+            "<check_id>": {
+                "verdict": "pass|partial|fail",
+                "confidence": "number",
+                "explanation": "string",
+                "highlights": [
+                    {
+                        "node_ref": "string",
+                        "scope": "span|block",
+                        "start": "number",
+                        "end": "number"
+                    }
+                ],
+                "suggestions": [
+                    {
+                        "text": "string"
+                    }
+                ]
+            }
+        }
+    }
+}

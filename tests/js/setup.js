@@ -1,5 +1,5 @@
 // Jest DOM setup
-import { TextEncoder, TextDecoder } from 'util';
+const { TextEncoder, TextDecoder } = require('util');
 
 // Polyfill for TextEncoder/TextDecoder for Jest
 global.TextEncoder = TextEncoder;

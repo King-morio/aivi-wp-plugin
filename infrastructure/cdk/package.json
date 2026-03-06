@@ -13,7 +13,7 @@
     "diff": "cdk diff",
     "synth": "cdk synth",
     "bootstrap": "cdk bootstrap",
-    "lint": "eslint . --ext .ts,.js"
+    "lint": "eslint . --ext .ts,.js --ignore-pattern cdk.out"
   },
   "dependencies": {
     "aws-cdk-lib": "^2.100.0",

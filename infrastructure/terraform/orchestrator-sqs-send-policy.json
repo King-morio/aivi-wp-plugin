@@ -1,0 +1,12 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "sqs:SendMessage"
+            ],
+            "Resource": "arn:aws:sqs:eu-north-1:173471018175:aivi-tasks-queue-dev"
+        }
+    ]
+}

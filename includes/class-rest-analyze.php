@@ -77,7 +77,8 @@ class REST_Analyze {
         }
 
         $sanitized = array();
-        $allowed_keys = array( 'title', 'content_snippet', 'wordEstimate', 'tokenEstimate' );
+        // Support both camelCase and snake_case for backward compatibility
+        $allowed_keys = array( 'title', 'content_snippet', 'wordEstimate', 'word_count', 'tokenEstimate', 'token_estimate' );
 
         foreach ( $allowed_keys as $key ) {
             if ( isset( $manifest[ $key ] ) ) {

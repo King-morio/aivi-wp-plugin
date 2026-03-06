@@ -1,11 +1,34 @@
-const { handler } = require('./index');
+const mockDdbDoc = { send: jest.fn() };
+const mockS3 = { send: jest.fn() };
+const mockSqs = { send: jest.fn() };
+const mockSecrets = { send: jest.fn() };
 
-// Mock AWS SDK
-jest.mock('@aws-sdk/client-dynamodb');
-jest.mock('@aws-sdk/lib-dynamodb');
-jest.mock('@aws-sdk/client-s3');
-jest.mock('@aws-sdk/client-sqs');
-jest.mock('@aws-sdk/client-secrets-manager');
+jest.mock('@aws-sdk/client-dynamodb', () => ({
+  DynamoDBClient: jest.fn()
+}));
+jest.mock('@aws-sdk/lib-dynamodb', () => ({
+  DynamoDBDocumentClient: {
+    from: jest.fn(() => mockDdbDoc)
+  },
+  GetCommand: jest.fn(),
+  PutCommand: jest.fn(),
+  UpdateCommand: jest.fn()
+}));
+jest.mock('@aws-sdk/client-s3', () => ({
+  S3Client: jest.fn(() => mockS3),
+  GetObjectCommand: jest.fn(),
+  PutObjectCommand: jest.fn()
+}));
+jest.mock('@aws-sdk/client-sqs', () => ({
+  SQSClient: jest.fn(() => mockSqs),
+  SendMessageCommand: jest.fn()
+}));
+jest.mock('@aws-sdk/client-secrets-manager', () => ({
+  SecretsManagerClient: jest.fn(() => mockSecrets),
+  GetSecretValueCommand: jest.fn()
+}));
+
+const { handler } = require('./index');
 
 describe('Orchestrator Lambda', () => {
   const mockEvent = {
@@ -35,12 +58,17 @@ describe('Orchestrator Lambda', () => {
     process.env.REWRITE_QUEUE_URL = 'https://sqs.eu-north-1.amazonaws.com/123456789/test-queue';
     process.env.SECRET_NAME = 'AVI_CLAUDE_API_KEY';
     process.env.ENABLE_ANALYSIS = 'false';
-    
+
     // Clear console.log mocks
     jest.clearAllMocks();
-    
+
     // Mock console.log to capture logs
     console.log = jest.fn();
+
+    mockDdbDoc.send.mockResolvedValue({});
+    mockS3.send.mockResolvedValue({});
+    mockSqs.send.mockResolvedValue({});
+    mockSecrets.send.mockResolvedValue({ SecretString: JSON.stringify({ ANTHROPIC_API_KEY: 'test' }) });
   });
 
   describe('Ping Handler', () => {
@@ -49,10 +77,8 @@ describe('Orchestrator Lambda', () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.headers['Content-Type']).toBe('application/json');
-      
+
       const body = JSON.parse(response.body);
-      console.log('Actual response body:', body); // Debug log
-      
       expect(body).toMatchObject({
         ok: true,
         service: 'aivi-orchestrator',
@@ -86,15 +112,15 @@ describe('Orchestrator Lambda', () => {
       })
     };
 
-    test('should return 503 when analysis is disabled', async () => {
+    test('should return 202 for queued analysis requests', async () => {
       const response = await handler(mockAnalyzeEvent, mockContext);
 
-      expect(response.statusCode).toBe(503);
-      
+      expect(response.statusCode).toBe(202);
+
       const body = JSON.parse(response.body);
       expect(body).toMatchObject({
-        ok: false,
-        error: 'Analysis temporarily disabled'
+        ok: true,
+        status: 'queued'
       });
     });
 
@@ -110,9 +136,9 @@ describe('Orchestrator Lambda', () => {
       const response = await handler(invalidEvent, mockContext);
 
       expect(response.statusCode).toBe(400);
-      
+
       const body = JSON.parse(response.body);
-      expect(body.error).toContain('Missing required fields');
+      expect(body.error).toBe('missing_site_id');
     });
 
     test('should return 404 for unknown routes', async () => {
@@ -124,7 +150,7 @@ describe('Orchestrator Lambda', () => {
       const response = await handler(unknownEvent, mockContext);
 
       expect(response.statusCode).toBe(404);
-      
+
       const body = JSON.parse(response.body);
       expect(body.error).toBe('Not found');
     });
@@ -140,7 +166,7 @@ describe('Orchestrator Lambda', () => {
 
       const response = await handler(invalidEvent, mockContext);
 
-      expect(response.statusCode).toBe(500);
+      expect(response.statusCode).toBe(400);
       expect(response.headers['Content-Type']).toBe('application/json');
     });
 

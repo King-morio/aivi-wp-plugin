@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AiVI Overlay Smooth UI Options (Editable)</title>
+  <style>
+    :root{
+      --bg:#edf2f8;
+      --panel:#ffffff;
+      --line:#d5deec;
+      --ink:#152742;
+      --muted:#5f718d;
+      --brand:#1f4fa3;
+      --brand-2:#163a76;
+      --warn:#b55d00;
+      --fail:#c43f3f;
+      --ok:#0e8a60;
+      --shadow:0 18px 40px rgba(12,28,58,.14);
+      --shadow-soft:0 8px 18px rgba(12,28,58,.08);
+      --radius:14px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      background:linear-gradient(180deg,#f6f9fe 0%, var(--bg) 100%);
+      font-family:"Plus Jakarta Sans","IBM Plex Sans","Segoe UI Variable","Segoe UI",sans-serif;
+      color:var(--ink);
+      line-height:1.45;
+      padding:22px;
+    }
+    .wrap{max-width:1250px;margin:0 auto;display:grid;gap:14px}
+    .intro{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow-soft);
+      padding:14px 16px;
+    }
+    .intro h1{font-size:20px;margin:0 0 4px}
+    .intro p{margin:0;color:var(--muted);font-size:14px}
+
+    .option{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow-soft);
+      overflow:hidden;
+    }
+    .head{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      padding:12px 14px;
+      border-bottom:1px solid var(--line);
+      background:linear-gradient(180deg,#ffffff 0%,#f7faff 100%);
+    }
+    .head h2{
+      margin:0;
+      font-size:16px;
+      letter-spacing:.01em;
+    }
+    .pill{
+      border:1px solid #c8d6ed;
+      background:#f2f7ff;
+      color:#214d95;
+      padding:4px 10px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.05em;
+    }
+
+    .toolbar{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      padding:10px 12px;
+      border-bottom:1px solid var(--line);
+      background:#f7fbff;
+    }
+    .tool{
+      border:1px solid #c5d4ea;
+      background:#fff;
+      color:#13407f;
+      border-radius:9px;
+      padding:6px 9px;
+      font-size:12px;
+      font-weight:700;
+      line-height:1;
+      cursor:pointer;
+    }
+    .tool.primary{
+      border-color:var(--brand);
+      background:linear-gradient(180deg,#2559b0 0%,#1c468d 100%);
+      color:#fff;
+    }
+    .tool:hover{background:#edf4ff}
+    .tool.primary:hover{background:linear-gradient(180deg,#1f4fa3 0%,#163a76 100%)}
+
+    .stage{
+      padding:12px;
+      background:#f6f9fe;
+    }
+    .editor-shell{
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#fff;
+      min-height:270px;
+      position:relative;
+      overflow:hidden;
+    }
+    .editor{
+      min-height:268px;
+      padding:18px 18px 20px;
+      font-size:15px;
+      color:#1d2f49;
+      outline:none;
+    }
+    .editor h2{
+      margin:0 0 10px;
+      font-size:22px;
+      color:#12356a;
+    }
+    .editor p{margin:0 0 14px}
+    .editor ul{margin:8px 0 14px;padding-left:22px}
+
+    /* shared highlight tokens */
+    .hl-fail{
+      text-decoration:underline 2px var(--fail);
+      text-underline-offset:3px;
+      background:rgba(196,63,63,.10);
+      border-radius:3px;
+      padding:0 1px;
+    }
+    .hl-partial{
+      text-decoration:underline 2px var(--warn);
+      text-decoration-style:dashed;
+      text-underline-offset:3px;
+      background:rgba(181,93,0,.10);
+      border-radius:3px;
+      padding:0 1px;
+    }
+    .hl-pass{
+      text-decoration:underline 2px var(--ok);
+      text-underline-offset:3px;
+      background:rgba(14,138,96,.08);
+      border-radius:3px;
+      padding:0 1px;
+    }
+
+    /* Option A - Grammarly-style, minimal cards */
+    .opt-a .editor-shell{border-color:#dce4f2;box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
+    .opt-a .side-card{
+      position:absolute;
+      right:12px;
+      bottom:12px;
+      max-width:300px;
+      border:1px solid #d3deef;
+      background:#fff;
+      border-radius:12px;
+      box-shadow:0 10px 24px rgba(11,35,70,.12);
+      padding:10px 11px;
+      font-size:12px;
+      color:#27466f;
+    }
+
+    /* Option B - Surfer-style gutter markers + soft strip */
+    .opt-b .editor-shell{background:linear-gradient(90deg,#f3f7ff 0 34px,#fff 34px)}
+    .opt-b .editor{
+      padding-left:48px;
+      background:
+        linear-gradient(transparent 0 100%),
+        repeating-linear-gradient(
+          180deg,
+          rgba(22,58,118,.04) 0,
+          rgba(22,58,118,.04) 32px,
+          transparent 32px,
+          transparent 64px
+        );
+    }
+    .opt-b .marker{
+      position:absolute;
+      left:10px;
+      width:12px;height:12px;
+      border-radius:999px;
+      box-shadow:0 0 0 3px rgba(255,255,255,.9);
+    }
+    .opt-b .marker.fail{background:var(--fail)}
+    .opt-b .marker.partial{background:var(--warn)}
+    .opt-b .marker.one{top:76px}
+    .opt-b .marker.two{top:144px}
+    .opt-b .marker.three{top:204px}
+
+    /* Option C - Hybrid: hover/focus reveal cards, no aggressive block borders */
+    .opt-c .editor-shell{border-color:#dbe5f3}
+    .opt-c .editor{padding:16px 18px 24px}
+    .opt-c .editor p{
+      border:1px solid transparent;
+      border-radius:10px;
+      padding:6px 8px;
+      margin-left:-8px;
+      margin-right:-8px;
+      transition:all .16s ease;
+    }
+    .opt-c .editor p:hover,
+    .opt-c .editor p:focus-within{
+      border-color:#d7e2f3;
+      background:#f8fbff;
+    }
+    .opt-c .hint{
+      position:absolute;
+      right:12px;
+      top:12px;
+      border:1px solid #cbd9ee;
+      background:#f6f9ff;
+      border-radius:999px;
+      padding:5px 10px;
+      font-size:11px;
+      font-weight:700;
+      color:#355885;
+    }
+
+    .footer{
+      margin-top:4px;
+      display:grid;
+      gap:8px;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+    }
+    .note{
+      border:1px solid #cfdced;
+      background:#f8fbff;
+      border-radius:10px;
+      padding:8px 10px;
+      font-size:12px;
+      color:#33517d;
+    }
+    .note strong{display:block;color:#15386a;margin-bottom:2px}
+
+    @media (max-width: 980px){
+      .footer{grid-template-columns:1fr}
+      .head{flex-direction:column;align-items:flex-start}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="intro">
+      <h1>AiVI Overlay Editor — Smooth UI Candidates (Editable)</h1>
+      <p>Each editor below is <strong>contenteditable</strong> so you can type and feel interaction density. Goal: less aggressive block framing, cleaner issue guidance.</p>
+    </section>
+
+    <section class="option opt-a">
+      <div class="head">
+        <h2>Option A — Grammarly-Like Minimal Surface</h2>
+        <span class="pill">Low Cognitive Load</span>
+      </div>
+      <div class="toolbar">
+        <button class="tool">B</button><button class="tool">I</button><button class="tool">H2</button><button class="tool">•</button><button class="tool">1.</button>
+        <button class="tool">Link</button><button class="tool">Quote</button>
+        <span style="flex:1"></span>
+        <button class="tool primary">Apply Changes</button><button class="tool">Copy</button>
+      </div>
+      <div class="stage">
+        <div class="editor-shell">
+          <div class="editor" contenteditable="true">
+            <h2>How to Improve Website Performance Fast</h2>
+            <p><span class="hl-partial">Website performance is important for user trust</span> and for answer engines that prefer concise, verifiable claims.</p>
+            <p><span class="hl-fail">Some sections describe many tactics in one long sentence without clear step order.</span> Break the section into claim-level lines and use a list where sequence matters.</p>
+            <p>Faster pages improve engagement, crawling efficiency, and AI extractability for key answers.</p>
+          </div>
+          <div class="side-card">
+            <strong style="display:block;color:#163a74;margin-bottom:4px;">Lists &amp; Tables Presence</strong>
+            Convert this comparison paragraph into a list so each action is scannable.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="option opt-b">
+      <div class="head">
+        <h2>Option B — Surfer-Like Gutter Guidance</h2>
+        <span class="pill">Strong Issue Wayfinding</span>
+      </div>
+      <div class="toolbar">
+        <button class="tool">B</button><button class="tool">I</button><button class="tool">H2</button><button class="tool">•</button><button class="tool">1.</button>
+        <button class="tool">Link</button><button class="tool">Quote</button>
+        <span style="flex:1"></span>
+        <button class="tool primary">Apply Changes</button><button class="tool">Copy</button>
+      </div>
+      <div class="stage">
+        <div class="editor-shell">
+          <span class="marker fail one"></span>
+          <span class="marker partial two"></span>
+          <span class="marker partial three"></span>
+          <div class="editor" contenteditable="true">
+            <h2>Performance Optimization Strategy</h2>
+            <p><span class="hl-fail">The opening claim mentions impact but does not include one concrete benchmark.</span> Add one measurable result and source.</p>
+            <p><span class="hl-partial">Image compression, caching, and script minification are listed inline.</span> Convert to a bullet list with one action per bullet.</p>
+            <p><span class="hl-partial">The CDN-to-speed relationship is implied.</span> State cause and expected outcome in one explicit sentence.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="option opt-c">
+      <div class="head">
+        <h2>Option C — Hybrid Calm Editing (Hover-Reveal)</h2>
+        <span class="pill">Best Balance</span>
+      </div>
+      <div class="toolbar">
+        <button class="tool">B</button><button class="tool">I</button><button class="tool">H2</button><button class="tool">•</button><button class="tool">1.</button>
+        <button class="tool">Link</button><button class="tool">Quote</button>
+        <span style="flex:1"></span>
+        <button class="tool primary">Apply Changes</button><button class="tool">Copy</button>
+      </div>
+      <div class="stage">
+        <div class="editor-shell">
+          <span class="hint">Hover paragraphs to focus</span>
+          <div class="editor" contenteditable="true">
+            <h2>What Makes Product Pages Citable</h2>
+            <p><span class="hl-pass">Clear entity naming and claim framing</span> improves retrieval quality and citation trust.</p>
+            <p><span class="hl-fail">A heading promises proof but the section below gives only generic claims.</span> Add one fact and one source-backed sentence under the heading.</p>
+            <p><span class="hl-partial">The section can be split into steps</span> so both readers and models parse the sequence quickly.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <div class="note"><strong>Option A</strong>Best if you want editing to feel light and writing-first.</div>
+      <div class="note"><strong>Option B</strong>Best if you want clear issue navigation and stronger “optimization workspace” feel.</div>
+      <div class="note"><strong>Option C</strong>Best mixed mode: calm default, structure appears on interaction.</div>
+    </div>
+  </div>
+</body>
+</html>

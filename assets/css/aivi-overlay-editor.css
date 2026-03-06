@@ -1,0 +1,379 @@
+.aivi-overlay-root {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 999999;
+}
+
+.aivi-overlay-root[data-open="true"] {
+    pointer-events: auto;
+}
+
+.aivi-overlay-backdrop {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: stretch;
+    justify-content: center;
+    padding: 16px;
+    box-sizing: border-box;
+    background: rgba(15, 23, 42, 0.32);
+}
+
+.aivi-overlay-root[data-open="true"] .aivi-overlay-backdrop {
+    display: flex;
+}
+
+.aivi-overlay-panel {
+    background: #fffefb;
+    border-radius: 16px;
+    box-shadow: 0 24px 56px rgba(15, 23, 42, 0.22);
+    width: min(940px, 100%);
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #d7deea;
+}
+
+.aivi-overlay-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid #d7deea;
+    background: linear-gradient(180deg, #fefdfa 0%, #f7faff 100%);
+    font-family: "Manrope", "Segoe UI", -apple-system, system-ui, sans-serif;
+}
+
+.aivi-overlay-title {
+    font-size: 21px;
+    font-weight: 700;
+    line-height: 1.1;
+    color: #0f172a;
+    font-family: "Newsreader", "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+}
+
+.aivi-overlay-close {
+    border: 1px solid #ccd7eb;
+    background: #fff;
+    color: #102a57;
+    padding: 7px 13px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: "Manrope", "Segoe UI", -apple-system, system-ui, sans-serif;
+}
+
+.aivi-overlay-close:hover {
+    background: #f6f9ff;
+}
+
+.aivi-overlay-content {
+    padding: 18px;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    font-family: "Manrope", "Segoe UI", -apple-system, system-ui, sans-serif;
+    color: #15233a;
+    background: #f5f8fd;
+}
+
+.aivi-overlay-content h1,
+.aivi-overlay-content h2,
+.aivi-overlay-content h3 {
+    font-family: "Newsreader", "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    color: #13233d;
+    line-height: 1.2;
+}
+
+.aivi-overlay-content p,
+.aivi-overlay-content li {
+    font-size: 15px;
+    line-height: 1.75;
+    color: #1b2940;
+}
+
+.aivi-overlay-block {
+    border: 1px solid #d7dfec;
+    border-radius: 12px;
+    padding: 13px 14px;
+    background: #fff;
+    box-shadow: 0 6px 14px rgba(17, 35, 66, 0.05);
+}
+
+.aivi-overlay-block-nested {
+    margin-left: 12px;
+    border-style: dashed;
+}
+
+.aivi-overlay-block-body {
+    font-size: 15px;
+    line-height: 1.75;
+    color: #1b2940;
+}
+
+.aivi-overlay-block-body img {
+    max-width: 100%;
+    border-radius: 10px;
+    display: block;
+    margin-bottom: 10px;
+}
+
+.aivi-overlay-block-body figcaption {
+    font-size: 12px;
+    color: #5e6f86;
+}
+
+.aivi-overlay-inline-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 12px;
+    border: 1px solid #d7dfec;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
+.aivi-overlay-highlight {
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 0 1px;
+    text-decoration-line: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+    text-decoration-skip-ink: none;
+    transition: background-color 0.18s ease, text-decoration-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.aivi-overlay-highlight:hover {
+    background: rgba(21, 35, 58, 0.08);
+}
+
+.aivi-overlay-highlight[data-severity="fail"],
+.aivi-overlay-highlight-fail {
+    text-decoration-style: solid;
+    text-decoration-color: #d14343;
+    background: rgba(209, 67, 67, 0.1);
+}
+
+.aivi-overlay-highlight[data-severity="partial"],
+.aivi-overlay-highlight-partial {
+    text-decoration-style: dashed;
+    text-decoration-color: #b56a07;
+    background: rgba(181, 106, 7, 0.11);
+}
+
+.aivi-overlay-highlight[data-severity="pass"],
+.aivi-overlay-highlight-pass {
+    text-decoration-style: solid;
+    text-decoration-color: #0f8b5f;
+    background: rgba(15, 139, 95, 0.08);
+}
+
+.aivi-overlay-highlight-ai {
+    font-weight: 600;
+}
+
+.aivi-overlay-highlight.v2-rect {
+    text-decoration: none;
+    padding: 0;
+    border-radius: 8px;
+    box-shadow: none;
+}
+
+.aivi-overlay-empty {
+    padding: 24px;
+    text-align: center;
+    font-size: 14px;
+    color: #5e6f86;
+    border: 1px dashed #ccd7eb;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.aivi-overlay-unhighlightable {
+    border: 1px solid #cfdcf0;
+    border-radius: 14px;
+    padding: 14px;
+    background: linear-gradient(180deg, #fbfdff 0%, #f4f8ff 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.aivi-overlay-recommendations-title {
+    font-size: 19px;
+    font-weight: 700;
+    color: #13233d;
+    font-family: "Newsreader", "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+}
+
+.aivi-overlay-recommendations-subtitle {
+    font-size: 12px;
+    color: #5e6f86;
+    font-weight: 600;
+}
+
+.aivi-overlay-recommendation-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: #fff;
+    border: 1px solid #d4deef;
+    border-radius: 12px;
+}
+
+.aivi-overlay-recommendation-check {
+    font-size: 18px;
+    font-weight: 700;
+    color: #14253f;
+    line-height: 1.2;
+    font-family: "Newsreader", "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+}
+
+.aivi-overlay-recommendation-rationale {
+    font-size: 14px;
+    color: #1d2c43;
+}
+
+.aivi-overlay-recommendation-snippet {
+    font-size: 13px;
+    color: #4b607d;
+    background: #fbfdff;
+    border-radius: 10px;
+    padding: 9px 10px;
+    border: 1px solid #e2e8f3;
+    line-height: 1.5;
+}
+
+.aivi-overlay-recommendation-action {
+    font-size: 13px;
+    color: #1d4ed8;
+}
+
+.aivi-overlay-recommendation-reason {
+    font-size: 11px;
+    color: #5e6f86;
+}
+
+.aivi-overlay-recommendation-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.aivi-overlay-recommendation-btn {
+    border: 1px solid #c7d7ef;
+    background: #fff;
+    color: #13346f;
+    padding: 6px 11px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: "Manrope", "Segoe UI", -apple-system, system-ui, sans-serif;
+}
+
+.aivi-overlay-recommendation-btn:hover {
+    background: #f6f9ff;
+}
+
+.aivi-overlay-recommendation-btn[disabled] {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.aivi-overlay-guidance {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 11px;
+    border: 1px solid #cfdbef;
+    border-radius: 11px;
+    background: #f8fbff;
+}
+
+.aivi-overlay-guidance-inline {
+    border-color: #d7dfec;
+    background: #f8fafd;
+}
+
+.aivi-overlay-guidance-recommendation {
+    border-color: #cfdbef;
+    background: #f6faff;
+}
+
+.aivi-overlay-guidance-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.aivi-overlay-guidance-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #1f4f9c;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.aivi-overlay-guidance-text {
+    font-size: 14px;
+    color: #172740;
+    line-height: 1.6;
+}
+
+.aivi-overlay-guidance-steps {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    color: #172740;
+    line-height: 1.55;
+}
+
+@keyframes aiviOverlayJumpPulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(34, 113, 177, 0.34);
+    }
+    70% {
+        box-shadow: 0 0 0 14px rgba(34, 113, 177, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(34, 113, 177, 0);
+    }
+}
+
+.aivi-overlay-block-jump-focus {
+    position: relative;
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(222, 235, 255, 0.66) 0%, rgba(222, 235, 255, 0.2) 100%);
+    box-shadow: inset 0 0 0 2px rgba(34, 113, 177, 0.62), 0 10px 24px rgba(16, 42, 87, 0.16);
+    transition: box-shadow 0.25s ease, background 0.25s ease;
+}
+
+.aivi-overlay-block-jump-focus .aivi-overlay-block-body {
+    padding: 6px 8px;
+    margin: -6px -8px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.62);
+}
+
+.aivi-overlay-block-jump-flash {
+    animation: aiviOverlayJumpPulse 1.2s ease-out 1;
+}
+
+.aivi-overlay-block-focus {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+    border-radius: 10px;
+}

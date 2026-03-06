@@ -10,7 +10,7 @@ terraform {
 
 provider "aws" {
   region = "eu-north-1"
-  
+
   default_tags {
     tags = {
       Project     = "AiVI"
@@ -23,7 +23,7 @@ provider "aws" {
 # S3 Buckets
 resource "aws_s3_bucket" "prompts" {
   bucket = "aivi-prompts-aivi-dev"
-  
+
   tags = {
     Prompts = "AiVI"
   }
@@ -31,7 +31,7 @@ resource "aws_s3_bucket" "prompts" {
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "prompts" {
   bucket = aws_s3_bucket.prompts.id
-  
+
   rule {
     apply_server_side_encryption_by_default {
       kms_master_key_id = "alias/aivi-prompts-aivi-dev"
@@ -49,7 +49,7 @@ resource "aws_s3_bucket_versioning" "prompts" {
 
 resource "aws_s3_bucket" "artifacts" {
   bucket = "aivi-artifacts-aivi-dev"
-  
+
   tags = {
     Artifacts = "AiVI"
   }
@@ -57,7 +57,7 @@ resource "aws_s3_bucket" "artifacts" {
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "artifacts" {
   bucket = aws_s3_bucket.artifacts.id
-  
+
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm = "aws:kms"
@@ -72,38 +72,50 @@ resource "aws_s3_bucket_versioning" "artifacts" {
   }
 }
 
+resource "aws_s3_bucket_cors_configuration" "artifacts" {
+  bucket = aws_s3_bucket.artifacts.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "HEAD"]
+    allowed_origins = ["*"]
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3000
+  }
+}
+
 # DynamoDB Tables
 resource "aws_dynamodb_table" "runs" {
   name           = "aivi-runs-dev"
   billing_mode   = "PAY_PER_REQUEST"
   hash_key       = "run_id"
-  
+
   attribute {
     name = "run_id"
     type = "S"
   }
-  
+
   attribute {
     name = "site_id"
     type = "S"
   }
-  
+
   attribute {
     name = "created_at"
     type = "N"
   }
-  
+
   global_secondary_index {
     name     = "SiteIndex"
     hash_key = "site_id"
     range_key = "created_at"
     projection_type = "ALL"
   }
-  
+
   point_in_time_recovery {
     enabled = true
   }
-  
+
   ttl {
     attribute_name = "ttl"
     expiration_attribute_name = "ttl"
@@ -114,23 +126,23 @@ resource "aws_dynamodb_table" "highlights" {
   name           = "aivi-highlights-dev"
   billing_mode   = "PAY_PER_REQUEST"
   hash_key       = "highlight_id"
-  
+
   attribute {
     name = "highlight_id"
     type = "S"
   }
-  
+
   attribute {
     name = "run_id"
     type = "S"
   }
-  
+
   global_secondary_index {
     name     = "RunIndex"
     hash_key = "run_id"
     projection_type = "ALL"
   }
-  
+
   point_in_time_recovery {
     enabled = true
   }
@@ -140,29 +152,29 @@ resource "aws_dynamodb_table" "suggestions" {
   name           = "aivi-suggestions-dev"
   billing_mode   = "PAY_PER_REQUEST"
   hash_key       = "suggestion_id"
-  
+
   attribute {
     name = "suggestion_id"
     type = "S"
   }
-  
+
   attribute {
     name = "run_id"
     type = "S"
   }
-  
+
   attribute {
     name = "created_at"
     type = "N"
   }
-  
+
   global_secondary_index {
     name     = "RunIndex"
     hash_key = "run_id"
     range_key = "created_at"
     projection_type = "ALL"
   }
-  
+
   point_in_time_recovery {
     enabled = true
   }
@@ -175,7 +187,7 @@ resource "aws_sqs_queue" "rewrite_queue" {
   visibility_timeout_seconds = 1800   # 30 minutes
   delay_seconds             = 0
   receive_wait_time_seconds = 20      # Long polling
-  
+
   tags = {
     Purpose = "rewrite-processing"
   }
@@ -184,7 +196,7 @@ resource "aws_sqs_queue" "rewrite_queue" {
 resource "aws_sqs_queue" "rewrite_dlq" {
   name                      = "aivi-rewrite-dlq-dev"
   message_retention_seconds = 1209600 # 14 days
-  
+
   tags = {
     Purpose = "rewrite-dead-letter"
   }
@@ -192,7 +204,7 @@ resource "aws_sqs_queue" "rewrite_dlq" {
 
 resource "aws_sqs_queue_redrive_allow_policy" "rewrite_queue" {
   queue_url = aws_sqs_queue.rewrite_queue.id
-  
+
   redrive_allow_policy = jsonencode({
     redrivePermission = "byQueue",
     sourceQueueArns   = [aws_sqs_queue.rewrite_dlq.arn]
@@ -205,7 +217,7 @@ resource "aws_sqs_queue" "tasks_queue" {
   visibility_timeout_seconds = 1800   # 30 minutes
   delay_seconds             = 0
   receive_wait_time_seconds = 20      # Long polling
-  
+
   tags = {
     Purpose = "task-processing"
   }
@@ -214,7 +226,7 @@ resource "aws_sqs_queue" "tasks_queue" {
 resource "aws_sqs_queue" "tasks_dlq" {
   name                      = "aivi-tasks-dlq-dev"
   message_retention_seconds = 1209600 # 14 days
-  
+
   tags = {
     Purpose = "task-dead-letter"
   }
@@ -222,7 +234,7 @@ resource "aws_sqs_queue" "tasks_dlq" {
 
 resource "aws_sqs_queue_redrive_allow_policy" "tasks_queue" {
   queue_url = aws_sqs_queue.tasks_queue.id
-  
+
   redrive_allow_policy = jsonencode({
     redrivePermission = "byQueue",
     sourceQueueArns   = [aws_sqs_queue.tasks_dlq.arn]
@@ -234,7 +246,7 @@ resource "aws_apigatewayv2_api" "main" {
   name          = "aivi-orchestrator-api"
   protocol_type = "HTTP"
   description   = "AiVI Orchestrator API"
-  
+
   tags = {
     Service = "aivi-orchestrator"
   }
@@ -244,9 +256,9 @@ resource "aws_apigatewayv2_api" "main" {
 resource "aws_apigatewayv2_stage" "dev" {
   api_id = aws_apigatewayv2_api.main.id
   name   = "dev"
-  
+
   auto_deploy = true
-  
+
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.api_gateway.arn
     format = jsonencode({
@@ -262,7 +274,7 @@ resource "aws_apigatewayv2_stage" "dev" {
       responseLength = "$context.responseLength"
     })
   }
-  
+
   default_route_settings {
     detailed_metrics_enabled = true
     throttling_burst_limit = 100
@@ -279,7 +291,7 @@ resource "aws_cloudwatch_log_group" "api_gateway" {
 # Lambda IAM Role
 resource "aws_iam_role" "orchestrator" {
   name = "aivi-orchestrator-role-dev"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -292,7 +304,7 @@ resource "aws_iam_role" "orchestrator" {
       }
     ]
   })
-  
+
   tags = {
     Purpose = "orchestrator-lambda"
   }
@@ -301,7 +313,7 @@ resource "aws_iam_role" "orchestrator" {
 resource "aws_iam_role_policy" "orchestrator" {
   name = "aivi-orchestrator-policy-dev"
   role = aws_iam_role.orchestrator.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -363,7 +375,14 @@ resource "aws_iam_role_policy" "orchestrator" {
         Action = [
           "secretsmanager:GetSecretValue"
         ]
-        Resource = "arn:aws:secretsmanager:eu-north-1:173471018175:secret:AVI_CLAUDE_API_KEY*"
+        Resource = "arn:aws:secretsmanager:eu-north-1:173471018175:secret:AVI_MISTRAL_API_KEY*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:ListEventSourceMappings"
+        ]
+        Resource = "*"
       }
     ]
   })

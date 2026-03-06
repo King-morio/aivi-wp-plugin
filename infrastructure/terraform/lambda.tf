@@ -13,7 +13,7 @@ resource "aws_lambda_function" "orchestrator" {
   runtime         = "nodejs20.x"
   handler         = "index.handler"
   timeout         = 30
-  
+
   environment {
     variables = {
       ENVIRONMENT = "dev"
@@ -23,11 +23,13 @@ resource "aws_lambda_function" "orchestrator" {
       ARTIFACTS_BUCKET = aws_s3_bucket.artifacts.bucket
       PROMPTS_BUCKET = aws_s3_bucket.prompts.bucket
       REWRITE_QUEUE_URL = aws_sqs_queue.rewrite_queue.id
-      SECRET_NAME = "AVI_CLAUDE_API_KEY"
+      TASKS_QUEUE_URL = aws_sqs_queue.tasks_queue.id
+      WORKER_FUNCTION_NAME = "aivi-analyzer-worker-dev"
+      SECRET_NAME = "AVI_MISTRAL_API_KEY"
       ENABLE_ANALYSIS = "false" # Feature flag - start disabled
     }
   }
-  
+
   tags = {
     Service = "aivi-orchestrator"
   }
@@ -43,12 +45,12 @@ resource "aws_cloudwatch_log_group" "orchestrator" {
 resource "aws_apigatewayv2_integration" "orchestrator" {
   api_id           = aws_apigatewayv2_api.main.id
   integration_type = "AWS_PROXY"
-  
+
   connection_type           = "INTERNET"
   description              = "Integration with orchestrator Lambda"
   integration_uri          = aws_lambda_function.orchestrator.arn
   payload_format_version   = "2.0"
-  
+
   timeout_milliseconds = 29000 # 29 seconds, less than Lambda timeout
 }
 
@@ -62,6 +64,36 @@ resource "aws_apigatewayv2_route" "ping" {
 resource "aws_apigatewayv2_route" "analyze" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "POST /analyze"
+  target    = "integrations/${aws_apigatewayv2_integration.orchestrator.id}"
+}
+
+resource "aws_apigatewayv2_route" "analyze_run" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "POST /aivi/v1/analyze/run"
+  target    = "integrations/${aws_apigatewayv2_integration.orchestrator.id}"
+}
+
+resource "aws_apigatewayv2_route" "analyze_run_status" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "GET /aivi/v1/analyze/run/{run_id}"
+  target    = "integrations/${aws_apigatewayv2_integration.orchestrator.id}"
+}
+
+resource "aws_apigatewayv2_route" "analysis_details" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "GET /aivi/v1/analysis/{run_id}/details"
+  target    = "integrations/${aws_apigatewayv2_integration.orchestrator.id}"
+}
+
+resource "aws_apigatewayv2_route" "analysis_raw" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "GET /aivi/v1/analysis/{run_id}/raw"
+  target    = "integrations/${aws_apigatewayv2_integration.orchestrator.id}"
+}
+
+resource "aws_apigatewayv2_route" "worker_health" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "GET /aivi/v1/worker/health"
   target    = "integrations/${aws_apigatewayv2_integration.orchestrator.id}"
 }
 

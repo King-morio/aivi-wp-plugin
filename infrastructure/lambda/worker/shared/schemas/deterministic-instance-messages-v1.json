@@ -1,0 +1,70 @@
+{
+  "version": "1.0.0",
+  "description": "Instance-level deterministic overlay messaging templates",
+  "checks": {
+    "single_h1": {
+      "lead": "This heading is one of multiple H1 headings on the page.",
+      "variants": [
+        "Multiple top-level headings dilute document focus for LLM-based answer engines.",
+        "A single primary H1 improves section intent clarity for generative retrieval systems.",
+        "Consolidating H1 structure strengthens citation confidence for answer extraction."
+      ]
+    },
+    "accessibility_basics": {
+      "lead": "This image reference is missing alt text.",
+      "variants": [
+        "Missing alt text weakens semantic cues that retrieval models use for grounded interpretation.",
+        "Descriptive alt text improves verifiable context for LLM-based answer engines.",
+        "Adding alt text reduces ambiguity and improves content citability for multimodal retrieval."
+      ]
+    },
+    "content_updated_12_months": {
+      "lead": "This visible date indicates stale content ({{age_days}} days old).",
+      "variants": [
+        "Stale timestamps lower trust for freshness-sensitive answer retrieval.",
+        "Recent updates improve temporal reliability for LLM-based answer engines.",
+        "Refreshing dated claims helps maintain citation quality in generative search."
+      ]
+    },
+    "no_broken_internal_links": {
+      "lead": "This internal link points to a broken destination (status {{status_code}}).",
+      "variants": [
+        "Broken references reduce evidence continuity for LLM-based answer engines.",
+        "Fixing dead links improves verifiable claim trails for generative retrieval systems.",
+        "Stable internal sources improve extractability and citation reliability."
+      ]
+    },
+    "orphan_headings": {
+      "lead": "This heading has {{word_count}} supporting words (minimum {{min_words}}).",
+      "variants": [
+        "Thin section context can weaken extractability for LLM-based answer engines.",
+        "Short support text reduces claim grounding and citation confidence in generative retrieval.",
+        "Expanding this section with concrete evidence improves semantic clarity for answer extraction."
+      ]
+    },
+    "heading_fragmentation": {
+      "lead": "This heading sits in a fragmented section with only {{word_count}} supporting words.",
+      "variants": [
+        "Fragmented structure can dilute topical coherence for LLM-based answer engines.",
+        "Denser supporting context improves section-level retrievability and citation confidence.",
+        "Adding complete supporting detail helps answer engines form well-grounded summaries."
+      ]
+    },
+    "appropriate_paragraph_length": {
+      "lead": "This paragraph has {{word_count}} words (recommended {{max_words}} or fewer).",
+      "variants": [
+        "Long blocks reduce scannability and can degrade extractability for LLM-based answer engines.",
+        "Shorter claim units improve evidence isolation for generative retrieval systems.",
+        "Splitting this paragraph can improve citation precision and answer alignment."
+      ]
+    },
+    "logical_heading_hierarchy": {
+      "lead": "This heading jumps from {{from_level}} to {{to_level}}, skipping a level.",
+      "variants": [
+        "Hierarchy gaps reduce structural cues used by LLM-based answer engines.",
+        "Sequential heading levels improve topical flow for generative retrieval systems.",
+        "Consistent heading depth strengthens section traceability and citation quality."
+      ]
+    }
+  }
+}

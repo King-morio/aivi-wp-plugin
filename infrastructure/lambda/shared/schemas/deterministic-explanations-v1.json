@@ -1,0 +1,574 @@
+{
+  "version": "1.0.0",
+  "description": "Deterministic explanation variants for overlay guidance narratives",
+  "checks": {
+    "single_h1": {
+      "variants": [
+        {
+          "what_failed": "This page uses multiple H1 headings instead of a single primary H1.",
+          "why_it_matters": "Competing top-level headings can blur document intent and weaken retrieval focus for LLM-based answer engines.",
+          "how_to_fix_steps": [
+            "Keep one primary H1 that matches the main page intent.",
+            "Demote secondary H1 lines to H2 or H3 based on structure.",
+            "Re-run analysis and confirm only one H1 remains."
+          ],
+          "example_pattern": "One H1 for page intent, then H2 sections for supporting topics."
+        },
+        {
+          "what_failed": "Heading hierarchy starts with more than one top-level H1.",
+          "why_it_matters": "When top-level headings compete, extraction systems have weaker cues for which claim set is primary.",
+          "how_to_fix_steps": [
+            "Select the strongest H1 and keep it as the single document headline.",
+            "Convert extra H1 headings into lower levels that match section depth.",
+            "Verify structure consistency after editing."
+          ],
+          "example_pattern": "Primary H1, then ordered H2 and H3 sections."
+        }
+      ],
+      "variants_by_reason": {
+        "missing_required_h1": [
+          {
+            "what_failed": "No primary H1 was found for this article.",
+            "why_it_matters": "Answer engines use the H1 as the strongest page-intent cue; when it is missing, topical focus and citation confidence can drop.",
+            "how_to_fix_steps": [
+              "Add one H1 that states the main topic in plain language.",
+              "Keep major sections as H2 and use H3/H4 only for nested subsections.",
+              "Re-run analysis and confirm exactly one H1 is detected."
+            ],
+            "example_pattern": "One clear H1 for the article promise, followed by H2 sections for main subtopics."
+          }
+        ],
+        "multiple_h1_anchor_unavailable": [
+          {
+            "what_failed": "More than one top-level H1 is competing for primary page intent.",
+            "why_it_matters": "Competing H1 headings weaken structural focus, making retrieval systems less certain about the main claim set.",
+            "how_to_fix_steps": [
+              "Keep a single strongest H1 as the page headline.",
+              "Convert additional H1 lines to H2 or H3 based on section depth.",
+              "Re-run analysis and verify one H1 remains."
+            ],
+            "example_pattern": "Single H1 headline, then H2 for major sections and H3 for nested points."
+          }
+        ]
+      }
+    },
+    "accessibility_basics": {
+      "variants": [
+        {
+          "what_failed": "At least one image reference is missing descriptive alt text.",
+          "why_it_matters": "Missing alternative text removes semantic context that improves grounded interpretation in retrieval systems.",
+          "how_to_fix_steps": [
+            "Add concise alt text that describes the image purpose in context.",
+            "Avoid filler text like image or photo unless needed.",
+            "Re-run analysis to confirm accessibility basics pass."
+          ],
+          "example_pattern": "Describe what the image shows and why it matters to the paragraph."
+        },
+        {
+          "what_failed": "Image accessibility metadata is incomplete for one or more visual elements.",
+          "why_it_matters": "Content with weak image semantics is harder to interpret and cite reliably in multimodal answer generation.",
+          "how_to_fix_steps": [
+            "Review each flagged image and add meaningful alt text.",
+            "Align wording with nearby claims rather than generic labels.",
+            "Validate the updated markup in a fresh run."
+          ],
+          "example_pattern": "Alt text should capture subject plus relevance to the adjacent claim."
+        }
+      ]
+    },
+    "author_identified": {
+      "variants": [
+        {
+          "what_failed": "The article does not clearly identify an author byline.",
+          "why_it_matters": "Missing authorship weakens trust signals used by LLM-based answer engines when ranking citation candidates.",
+          "how_to_fix_steps": [
+            "Add a visible author name near the title or intro.",
+            "Keep author identity consistent with site-level profile details.",
+            "Re-run analysis to verify author attribution is detected."
+          ],
+          "example_pattern": "By Jane Smith, Technical Editor."
+        },
+        {
+          "what_failed": "Author attribution is absent or not machine-readable in visible content.",
+          "why_it_matters": "Clear authorship improves accountability and helps retrieval systems trust and cite your material.",
+          "how_to_fix_steps": [
+            "Insert a byline in a stable location near top content.",
+            "Use one canonical author naming format across posts.",
+            "Confirm the check passes after publishing updates."
+          ],
+          "example_pattern": "Author byline plus role under the headline."
+        }
+      ]
+    },
+    "author_bio_present": {
+      "variants": [
+        {
+          "what_failed": "The content lacks an accessible author bio section.",
+          "why_it_matters": "Without author context, answer engines have less evidence for expertise and source reliability.",
+          "how_to_fix_steps": [
+            "Add a short author bio near the article footer or intro area.",
+            "Include role, domain expertise, and relevant credentials.",
+            "Re-run analysis to confirm author bio detection."
+          ],
+          "example_pattern": "Two to three sentences: role, experience, and focus area."
+        },
+        {
+          "what_failed": "Author profile context is missing from the article body or metadata surface.",
+          "why_it_matters": "Expertise context improves citation confidence for factual and advisory content.",
+          "how_to_fix_steps": [
+            "Publish a concise bio tied to the article author.",
+            "Reference specific expertise relevant to this topic.",
+            "Validate the page after updating author information."
+          ],
+          "example_pattern": "Author expertise statement aligned with article theme."
+        }
+      ]
+    },
+    "content_updated_12_months": {
+      "variants": [
+        {
+          "what_failed": "The visible update signal indicates the content may be older than the freshness threshold.",
+          "why_it_matters": "Stale timestamps reduce trust for time-sensitive retrieval and can lower citation preference.",
+          "how_to_fix_steps": [
+            "Review outdated facts, dates, and references in flagged sections.",
+            "Update claims and publish a clear last-updated marker.",
+            "Re-run analysis to verify freshness passes."
+          ],
+          "example_pattern": "Updated on YYYY-MM-DD with revised evidence and current references."
+        },
+        {
+          "what_failed": "The article does not show a recent enough update footprint.",
+          "why_it_matters": "Temporal reliability is a ranking signal for engines selecting current, citable answers.",
+          "how_to_fix_steps": [
+            "Refresh stale sections with current facts and sources.",
+            "Expose a visible updated date near the title or metadata area.",
+            "Confirm freshness status in a new analysis run."
+          ],
+          "example_pattern": "Recent update note plus refreshed supporting evidence."
+        }
+      ]
+    },
+    "faq_jsonld_presence_and_completeness": {
+      "variants": [
+        {
+          "what_failed": "FAQ schema markup is missing or incomplete for FAQ-style content.",
+          "why_it_matters": "Structured FAQ signals improve retrieval clarity for direct question-answer extraction.",
+          "how_to_fix_steps": [
+            "Add complete FAQPage JSON-LD with paired question and answer entries.",
+            "Ensure FAQ schema mirrors visible content exactly.",
+            "Validate schema syntax and rerun analysis."
+          ],
+          "example_pattern": "FAQPage JSON-LD with mainEntity question and acceptedAnswer pairs."
+        },
+        {
+          "what_failed": "The page has FAQ intent but lacks a fully valid FAQ structured-data footprint.",
+          "why_it_matters": "Incomplete schema weakens machine interpretation for answer-centric retrieval surfaces.",
+          "how_to_fix_steps": [
+            "Generate FAQ JSON-LD from visible FAQ blocks.",
+            "Keep every schema answer aligned with on-page text.",
+            "Validate and retest the page after deployment."
+          ],
+          "example_pattern": "Visible FAQ section plus synchronized FAQPage schema."
+        }
+      ]
+    },
+    "howto_jsonld_presence_and_completeness": {
+      "variants": [
+        {
+          "what_failed": "HowTo schema markup is missing or incomplete for procedural content.",
+          "why_it_matters": "Procedural answers are easier to extract when structured steps are explicitly encoded.",
+          "how_to_fix_steps": [
+            "Create HowTo JSON-LD with required fields and ordered steps.",
+            "Match each schema step to visible procedural text.",
+            "Validate schema and rerun analysis."
+          ],
+          "example_pattern": "HowTo with name, totalTime, and step list mapped to page content."
+        },
+        {
+          "what_failed": "The article reads as a how-to but lacks a complete HowTo structured-data representation.",
+          "why_it_matters": "Missing step-level schema lowers procedural citability in generative retrieval systems.",
+          "how_to_fix_steps": [
+            "Add explicit numbered steps in both content and schema.",
+            "Include required properties for HowTo validity.",
+            "Retest after schema deployment."
+          ],
+          "example_pattern": "Ordered step blocks mirrored in HowTo JSON-LD."
+        }
+      ]
+    },
+    "intro_first_sentence_topic": {
+      "variants": [
+        {
+          "what_failed": "The opening sentence does not clearly establish the article topic.",
+          "why_it_matters": "Weak opening-topic alignment reduces immediate extractability for answer engines.",
+          "how_to_fix_steps": [
+            "Rewrite the first sentence to state the core topic directly.",
+            "Remove vague lead-ins and filler phrasing.",
+            "Re-run analysis to confirm intro topic alignment."
+          ],
+          "example_pattern": "Topic-first opening sentence with one clear claim."
+        },
+        {
+          "what_failed": "Intro lead sentence misses direct topical focus.",
+          "why_it_matters": "Answer systems prioritize clear early-topic cues when selecting citation-ready passages.",
+          "how_to_fix_steps": [
+            "Place the primary topic term in the first sentence.",
+            "Follow with one concise, supporting qualifier.",
+            "Validate intro focus in the next run."
+          ],
+          "example_pattern": "Define the topic immediately, then specify scope."
+        }
+      ]
+    },
+    "intro_wordcount": {
+      "variants": [
+        {
+          "what_failed": "The intro length is outside the recommended word-count range.",
+          "why_it_matters": "Overlong or too-thin intros can reduce early answer clarity and extraction precision.",
+          "how_to_fix_steps": [
+            "Trim low-value filler or add missing context to hit the target range.",
+            "Keep one direct claim and one supporting fact in the intro.",
+            "Re-run analysis to verify intro length compliance."
+          ],
+          "example_pattern": "Compact intro with direct claim plus one proof point."
+        },
+        {
+          "what_failed": "Intro size does not meet the configured readability and focus window.",
+          "why_it_matters": "Balanced intros improve comprehension and increase citation reliability for answer systems.",
+          "how_to_fix_steps": [
+            "Adjust intro length toward the recommended range.",
+            "Preserve only essential context and avoid repetitive setup lines.",
+            "Retest intro checks after editing."
+          ],
+          "example_pattern": "Two to four concise intro sentences with no filler."
+        }
+      ]
+    },
+    "intro_readability": {
+      "variants": [
+        {
+          "what_failed": "The intro readability profile is too dense for fast extraction.",
+          "why_it_matters": "Dense sentence structures lower answer recall and can reduce citation confidence.",
+          "how_to_fix_steps": [
+            "Split long sentences and reduce nested clauses.",
+            "Prefer direct wording over abstract transitions.",
+            "Re-run analysis to confirm readability improvement."
+          ],
+          "example_pattern": "Short declarative sentences with clear subject and action."
+        },
+        {
+          "what_failed": "Intro language complexity exceeds the recommended readability threshold.",
+          "why_it_matters": "Simpler phrasing improves machine extraction and human scanning for answer snippets.",
+          "how_to_fix_steps": [
+            "Shorten sentence length and remove redundant modifiers.",
+            "Replace ambiguous phrasing with concrete wording.",
+            "Validate readability metrics in a follow-up run."
+          ],
+          "example_pattern": "Direct claim, plain wording, and one concrete detail."
+        }
+      ]
+    },
+    "intro_factual_entities": {
+      "variants": [
+        {
+          "what_failed": "The intro contains factual entities without enough supporting context.",
+          "why_it_matters": "Unsupported factual mentions reduce trust when engines evaluate evidence strength.",
+          "how_to_fix_steps": [
+            "Add one verifiable support detail near each key factual entity.",
+            "Avoid vague attribution phrases in the opening.",
+            "Re-run analysis to confirm factual support."
+          ],
+          "example_pattern": "Entity mention plus source-backed qualifier in the same opening block."
+        },
+        {
+          "what_failed": "Entity-level claims in the intro are present but under-supported.",
+          "why_it_matters": "Entity grounding improves citability and lowers hallucination risk in generated summaries.",
+          "how_to_fix_steps": [
+            "Pair key entities with concrete supporting facts.",
+            "Use precise wording and remove speculative phrasing.",
+            "Validate intro factual quality after revision."
+          ],
+          "example_pattern": "Named entity, specific fact, and direct implication."
+        }
+      ],
+      "variants_by_reason": {
+        "absence_non_inline": [
+          {
+            "what_failed": "The intro does not include concrete factual entities or source-grounded statements.",
+            "why_it_matters": "Without concrete factual anchors, opening claims are harder to trust, extract, and cite in answer engines.",
+            "how_to_fix_steps": [
+              "Add one specific fact in the intro (number, date, named source, or verifiable metric).",
+              "Place the fact next to the core opening claim so the support is explicit.",
+              "Re-run analysis and confirm intro factual entities are detected."
+            ],
+            "example_pattern": "Direct intro claim + one named source or metric in the same opening block."
+          }
+        ]
+      }
+    },
+    "intro_schema_suggestion": {
+      "variants": [
+        {
+          "what_failed": "The intro suggests structured answer intent but schema support is missing.",
+          "why_it_matters": "Schema alignment improves machine understanding of intent and boosts retrieval precision.",
+          "how_to_fix_steps": [
+            "Add schema type that best matches intro intent and page structure.",
+            "Keep structured fields consistent with visible intro content.",
+            "Re-run analysis and validate structured-data checks."
+          ],
+          "example_pattern": "Visible intro claim mirrored by matching schema fields."
+        },
+        {
+          "what_failed": "Intro context indicates schema opportunity that is currently unimplemented.",
+          "why_it_matters": "Missing schema can limit eligibility for high-confidence answer extraction paths.",
+          "how_to_fix_steps": [
+            "Select the most relevant schema type for this page intent.",
+            "Populate required properties using on-page facts only.",
+            "Retest for schema and intro alignment."
+          ],
+          "example_pattern": "Intro promise plus schema that encodes the same promise."
+        }
+      ]
+    },
+    "intro_focus_and_factuality.v1": {
+      "variants": [
+        {
+          "what_failed": "The intro does not meet the combined focus and factual-support threshold.",
+          "why_it_matters": "Weak opening focus or unsupported facts reduce first-pass trust for answer engines.",
+          "how_to_fix_steps": [
+            "Lead with a direct topic statement in the first sentence.",
+            "Add one concrete support detail tied to the opening claim.",
+            "Re-run analysis to verify composite intro quality passes."
+          ],
+          "example_pattern": "Direct intro claim, supporting fact, and clear scope line."
+        },
+        {
+          "what_failed": "Intro composite quality is degraded by either weak focus or insufficient factual grounding.",
+          "why_it_matters": "Opening reliability influences downstream extraction quality and citation confidence.",
+          "how_to_fix_steps": [
+            "Tighten the intro to one clear focus point.",
+            "Support factual references with specific evidence.",
+            "Confirm the composite intro check passes in the next run."
+          ],
+          "example_pattern": "Focused opener with explicit evidence support."
+        }
+      ]
+    },
+    "metadata_checks": {
+      "variants": [
+        {
+          "what_failed": "Critical metadata fields are missing or incomplete.",
+          "why_it_matters": "Metadata helps retrieval systems classify page intent and relevance before deep parsing.",
+          "how_to_fix_steps": [
+            "Complete title and meta description with topic-aligned wording.",
+            "Ensure metadata accurately reflects the main claim in content.",
+            "Re-run analysis to confirm metadata checks pass."
+          ],
+          "example_pattern": "Title and meta description that mirror the article promise."
+        },
+        {
+          "what_failed": "Page metadata coverage is below the required baseline.",
+          "why_it_matters": "Incomplete metadata can weaken indexing quality and answer-surface matching.",
+          "how_to_fix_steps": [
+            "Populate missing metadata fields with concise intent-first language.",
+            "Keep metadata unique and aligned with on-page headings.",
+            "Validate metadata health in the next scan."
+          ],
+          "example_pattern": "Intent-focused title plus concise descriptive meta text."
+        }
+      ]
+    },
+    "no_broken_internal_links": {
+      "variants": [
+        {
+          "what_failed": "One or more internal links resolve to invalid destinations.",
+          "why_it_matters": "Broken evidence paths reduce claim verifiability and citation continuity for answer engines.",
+          "how_to_fix_steps": [
+            "Repair or replace each broken internal URL.",
+            "Prefer links to stable pages that directly support nearby claims.",
+            "Re-run analysis to verify link integrity."
+          ],
+          "example_pattern": "Contextual internal link to a live, relevant supporting page."
+        },
+        {
+          "what_failed": "Internal navigation includes dead references.",
+          "why_it_matters": "Unreliable internal references weaken retrieval trust and answer grounding.",
+          "how_to_fix_steps": [
+            "Audit flagged links and update targets to live resources.",
+            "Remove links that no longer have valid replacements.",
+            "Confirm the broken-link check passes."
+          ],
+          "example_pattern": "Link each claim to a verified internal source."
+        }
+      ]
+    },
+    "appropriate_paragraph_length": {
+      "variants": [
+        {
+          "what_failed": "At least one paragraph exceeds the recommended length threshold.",
+          "why_it_matters": "Very long paragraphs reduce scannability and make answer span extraction less precise.",
+          "how_to_fix_steps": [
+            "Split oversized paragraphs into shorter units by sub-idea.",
+            "Keep each paragraph focused on one claim and one support detail.",
+            "Re-run analysis to confirm paragraph sizing passes."
+          ],
+          "example_pattern": "One idea per paragraph with concise supporting sentence."
+        },
+        {
+          "what_failed": "Paragraph density is too high in flagged sections.",
+          "why_it_matters": "Dense blocks can hide key claims and reduce citation precision in generated answers.",
+          "how_to_fix_steps": [
+            "Break long blocks at natural transition points.",
+            "Use compact sentence structure and remove repetitive phrasing.",
+            "Validate paragraph length after revision."
+          ],
+          "example_pattern": "Short focused paragraphs that separate context from action."
+        }
+      ]
+    },
+    "heading_fragmentation": {
+      "variants": [
+        {
+          "what_failed": "Section headings are fragmented by very thin supporting blocks.",
+          "why_it_matters": "Over-splitting reduces topical coherence and can weaken section-level retrieval confidence.",
+          "how_to_fix_steps": [
+            "Merge adjacent thin sections where intent overlaps.",
+            "Expand each remaining heading with concrete support sentences.",
+            "Re-run analysis to confirm fragmentation is resolved."
+          ],
+          "example_pattern": "Heading followed by 2 to 3 cohesive support sentences."
+        },
+        {
+          "what_failed": "Heading structure is split into too many low-support segments.",
+          "why_it_matters": "Fragmented layout makes it harder for answer systems to build stable section summaries.",
+          "how_to_fix_steps": [
+            "Consolidate related headings into stronger thematic sections.",
+            "Increase supporting detail beneath each heading.",
+            "Retest after structural cleanup."
+          ],
+          "example_pattern": "Fewer headings with fuller context under each."
+        }
+      ]
+    },
+    "logical_heading_hierarchy": {
+      "variants": [
+        {
+          "what_failed": "Heading levels skip expected hierarchy order.",
+          "why_it_matters": "Hierarchy jumps weaken structural cues used for section segmentation in retrieval systems.",
+          "how_to_fix_steps": [
+            "Correct heading levels to follow sequential depth changes.",
+            "Avoid jumping from high-level to deep-level headings directly.",
+            "Re-run analysis to confirm hierarchy integrity."
+          ],
+          "example_pattern": "H2 section heading followed by H3 subsections when needed."
+        },
+        {
+          "what_failed": "Document heading depth is inconsistent in flagged transitions.",
+          "why_it_matters": "Consistent heading structure improves topical traceability and answer extraction quality.",
+          "how_to_fix_steps": [
+            "Normalize heading sequence from top-level to nested sections.",
+            "Update out-of-order headings to match surrounding structure.",
+            "Validate hierarchy in a new run."
+          ],
+          "example_pattern": "Ordered progression of heading levels with no skipped depth."
+        }
+      ]
+    },
+    "schema_matches_content": {
+      "variants": [
+        {
+          "what_failed": "Structured-data fields do not fully match visible page content.",
+          "why_it_matters": "Schema-content mismatch lowers trust and can reduce eligibility for citation-focused answer surfaces.",
+          "how_to_fix_steps": [
+            "Align structured fields with exact on-page wording and claims.",
+            "Remove schema properties not supported by visible text.",
+            "Re-run analysis to verify schema alignment."
+          ],
+          "example_pattern": "Schema values mirror visible headline, summary, and entity claims."
+        },
+        {
+          "what_failed": "Schema payload and article content are out of sync.",
+          "why_it_matters": "Inconsistent schema weakens machine confidence in factual grounding and indexing quality.",
+          "how_to_fix_steps": [
+            "Audit each schema property against current page copy.",
+            "Update or remove stale schema statements.",
+            "Retest for schema-content consistency."
+          ],
+          "example_pattern": "Keep structured claims synchronized with current article text."
+        }
+      ]
+    },
+    "semantic_html_usage": {
+      "variants": [
+        {
+          "what_failed": "Semantic HTML structure is insufficient in one or more content regions.",
+          "why_it_matters": "Weak semantic markup reduces machine understanding of section roles and evidence boundaries.",
+          "how_to_fix_steps": [
+            "Use semantic elements for headings, lists, sections, and supporting blocks.",
+            "Replace generic wrappers where structural tags are expected.",
+            "Re-run analysis to confirm semantic HTML compliance."
+          ],
+          "example_pattern": "Meaningful sectioning tags paired with clean heading and list markup."
+        },
+        {
+          "what_failed": "Content relies on non-semantic structure where semantic tags are expected.",
+          "why_it_matters": "Semantic markup improves parse quality for retrieval and citation extraction pipelines.",
+          "how_to_fix_steps": [
+            "Refactor flagged blocks to semantic section and heading elements.",
+            "Ensure list-like content uses list markup, not plain paragraphs.",
+            "Validate semantic usage in the next run."
+          ],
+          "example_pattern": "Use semantic tags to express structure, not just visual styling."
+        }
+      ]
+    },
+    "supported_schema_types_validation": {
+      "variants": [
+        {
+          "what_failed": "The page includes unsupported or invalid schema types for this content intent.",
+          "why_it_matters": "Unsupported schema reduces structured-data reliability for downstream answer retrieval.",
+          "how_to_fix_steps": [
+            "Keep only schema types that match the article purpose.",
+            "Remove deprecated or irrelevant schema blocks.",
+            "Re-run validation to confirm supported-type compliance."
+          ],
+          "example_pattern": "Use only content-appropriate schema types with valid properties."
+        },
+        {
+          "what_failed": "Schema type selection does not satisfy the supported-type policy.",
+          "why_it_matters": "Type-level schema errors can block high-confidence structured interpretation.",
+          "how_to_fix_steps": [
+            "Replace unsupported schema types with approved alternatives.",
+            "Retain only fields valid for the selected schema type.",
+            "Confirm type validation passes in the next scan."
+          ],
+          "example_pattern": "Minimal valid schema set aligned with article format."
+        }
+      ]
+    },
+    "valid_jsonld_schema": {
+      "variants": [
+        {
+          "what_failed": "JSON-LD markup is invalid or incomplete.",
+          "why_it_matters": "Invalid JSON-LD prevents reliable machine parsing and weakens structured citation paths.",
+          "how_to_fix_steps": [
+            "Validate JSON-LD syntax and required properties.",
+            "Fix malformed objects, arrays, and value types.",
+            "Re-run analysis to confirm JSON-LD validity."
+          ],
+          "example_pattern": "Syntactically valid JSON-LD with required context and type."
+        },
+        {
+          "what_failed": "Structured-data syntax errors were detected in JSON-LD blocks.",
+          "why_it_matters": "Parser failures reduce discoverability and answer-surface reliability.",
+          "how_to_fix_steps": [
+            "Run JSON-LD through a validator and fix reported errors.",
+            "Ensure values are correctly typed and complete.",
+            "Retest after publishing corrected markup."
+          ],
+          "example_pattern": "Clean JSON-LD object with valid schema fields."
+        }
+      ]
+    }
+  }
+}

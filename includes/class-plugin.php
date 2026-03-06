@@ -71,6 +71,7 @@ class Plugin {
         $this->load_dependencies();
 
         // Initialize components
+        add_action( 'plugins_loaded', array( $this, 'apply_local_http_hardening' ), 0 );
         add_action( 'plugins_loaded', array( $this, 'init_components' ) );
     }
 
@@ -89,12 +90,6 @@ class Plugin {
         require_once AIVI_PLUGIN_DIR . 'includes/class-rest-rewrite.php';
         require_once AIVI_PLUGIN_DIR . 'includes/class-rest-ping.php';
         require_once AIVI_PLUGIN_DIR . 'includes/class-rest-backend-proxy.php';
-        
-        // Preflight classes
-        require_once AIVI_PLUGIN_DIR . 'includes/preflight/class-sanitizer.php';
-        require_once AIVI_PLUGIN_DIR . 'includes/preflight/class-serializer.php';
-        require_once AIVI_PLUGIN_DIR . 'includes/preflight/class-token-estimator.php';
-        require_once AIVI_PLUGIN_DIR . 'includes/preflight/class-link-queue.php';
     }
 
     /**
@@ -116,6 +111,86 @@ class Plugin {
         new REST_Rewrite();
         new REST_Ping();
         new REST_Backend_Proxy();
+    }
+
+    public function apply_local_http_hardening() {
+        if ( defined( 'AIVI_DISABLE_LOCAL_HTTP_HARDENING' ) && AIVI_DISABLE_LOCAL_HTTP_HARDENING ) {
+            return;
+        }
+        if ( ! $this->is_local_environment() ) {
+            return;
+        }
+
+        add_filter( 'automatic_updater_disabled', '__return_true', 9999 );
+        add_filter( 'auto_update_core', '__return_false', 9999 );
+
+        add_filter( 'pre_site_transient_update_core', array( $this, 'disable_wp_updates_transient' ), 9999 );
+        add_filter( 'pre_site_transient_update_plugins', array( $this, 'disable_wp_updates_transient' ), 9999 );
+        add_filter( 'pre_site_transient_update_themes', array( $this, 'disable_wp_updates_transient' ), 9999 );
+        add_filter( 'pre_site_transient_update_translations', array( $this, 'disable_wp_updates_transient' ), 9999 );
+
+        add_filter( 'pre_http_request', array( $this, 'block_wordpress_org_http_requests' ), 9999, 3 );
+    }
+
+    public function disable_wp_updates_transient( $value ) {
+        $obj = new \stdClass();
+        $obj->updates = array();
+        $obj->version_checked = time();
+        return $obj;
+    }
+
+    public function block_wordpress_org_http_requests( $preempt, $parsed_args, $url ) {
+        $host = wp_parse_url( $url, PHP_URL_HOST );
+        if ( ! is_string( $host ) || $host === '' ) {
+            return $preempt;
+        }
+
+        $host_lower = strtolower( $host );
+        if ( $this->is_allowed_external_host( $host_lower ) ) {
+            return $preempt;
+        }
+
+        if ( $this->ends_with( $host_lower, 'wordpress.org' ) ) {
+            return new \WP_Error(
+                'aivi_local_http_blocked',
+                'Blocked external WordPress.org request in local environment.',
+                array( 'url' => $url, 'host' => $host_lower )
+            );
+        }
+
+        return $preempt;
+    }
+
+    private function is_allowed_external_host( $host_lower ) {
+        if ( $host_lower === 'localhost' || $host_lower === '127.0.0.1' ) {
+            return true;
+        }
+        if ( $this->ends_with( $host_lower, 'amazonaws.com' ) ) {
+            return true;
+        }
+        if ( $this->ends_with( $host_lower, 'execute-api.eu-north-1.amazonaws.com' ) ) {
+            return true;
+        }
+        return false;
+    }
+
+    private function is_local_environment() {
+        $http_host = isset( $_SERVER['HTTP_HOST'] ) ? (string) $_SERVER['HTTP_HOST'] : '';
+        $http_host_lower = strtolower( $http_host );
+        return ( strpos( $http_host_lower, 'localhost' ) !== false || strpos( $http_host_lower, '127.0.0.1' ) !== false );
+    }
+
+    private function ends_with( $value, $suffix ) {
+        $value = (string) $value;
+        $suffix = (string) $suffix;
+        $len = strlen( $suffix );
+        if ( $len === 0 ) {
+            return true;
+        }
+        if ( strlen( $value ) < $len ) {
+            return false;
+        }
+        return substr( $value, -$len ) === $suffix;
     }
 
     /**

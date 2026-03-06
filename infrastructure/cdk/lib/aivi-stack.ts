@@ -4,13 +4,12 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2';
-import * as apigatewayv2_integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import * as apigatewayv2Integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as kms from 'aws-cdk-lib/aws-kms';
 import { RemovalPolicy, Duration, CfnOutput } from 'aws-cdk-lib';
-import { HttpUrlIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 
 export class AiviStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -18,7 +17,6 @@ export class AiviStack extends cdk.Stack {
 
     // The code that defines your stack goes here
     const environment = this.node.tryGetContext('environment') || 'dev';
-    const project = this.node.tryGetContext('project') || 'AiVI';
 
     // S3 Buckets
     const promptsBucket = new s3.Bucket(this, 'PromptsBucket', {
@@ -130,13 +128,13 @@ export class AiviStack extends cdk.Stack {
     });
 
     // CloudWatch Log Group for API Gateway
-    const apiLogGroup = new logs.LogGroup(this, 'ApiLogGroup', {
+    new logs.LogGroup(this, 'ApiLogGroup', {
       logGroupName: '/aws/api-gateway/aivi-orchestrator',
       retention: logs.RetentionDays.ONE_MONTH,
     });
 
     // API Gateway Stage with logging
-    const stage = new apigatewayv2.HttpStage(this, 'ApiStage', {
+    new apigatewayv2.HttpStage(this, 'ApiStage', {
       httpApi: api,
       stageName: 'dev',
       autoDeploy: true,
@@ -209,8 +207,15 @@ export class AiviStack extends cdk.Stack {
         'secretsmanager:GetSecretValue',
       ],
       resources: [
-        'arn:aws:secretsmanager:eu-north-1:173471018175:secret:AVI_CLAUDE_API_KEY*',
+        'arn:aws:secretsmanager:eu-north-1:173471018175:secret:AVI_MISTRAL_API_KEY*',
       ],
+    }));
+
+    orchestratorRole.addToPolicy(new iam.PolicyStatement({
+      actions: [
+        'lambda:ListEventSourceMappings',
+      ],
+      resources: ['*'],
     }));
 
     // Lambda Function
@@ -229,7 +234,9 @@ export class AiviStack extends cdk.Stack {
         ARTIFACTS_BUCKET: artifactsBucket.bucketName,
         PROMPTS_BUCKET: promptsBucket.bucketName,
         REWRITE_QUEUE_URL: rewriteQueue.queueUrl,
-        SECRET_NAME: 'AVI_CLAUDE_API_KEY',
+        TASKS_QUEUE_URL: tasksQueue.queueUrl,
+        WORKER_FUNCTION_NAME: 'aivi-analyzer-worker-dev',
+        SECRET_NAME: 'AVI_MISTRAL_API_KEY',
         ENABLE_ANALYSIS: 'false', // Feature flag - start disabled
       },
       logRetention: logs.RetentionDays.ONE_MONTH,
@@ -243,7 +250,7 @@ export class AiviStack extends cdk.Stack {
     });
 
     // API Gateway Integration
-    const integration = new apigatewayv2_integrations.HttpLambdaIntegration(
+    const integration = new apigatewayv2Integrations.HttpLambdaIntegration(
       'OrchestratorIntegration',
       orchestratorFn,
       {
@@ -261,6 +268,12 @@ export class AiviStack extends cdk.Stack {
     api.addRoutes({
       path: '/analyze',
       methods: [apigatewayv2.HttpMethod.POST],
+      integration: integration,
+    });
+
+    api.addRoutes({
+      path: '/aivi/v1/worker/health',
+      methods: [apigatewayv2.HttpMethod.GET],
       integration: integration,
     });
 

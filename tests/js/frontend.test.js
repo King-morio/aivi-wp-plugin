@@ -5,8 +5,10 @@
 describe('AiVI Frontend', () => {
     let mockConfig;
     let mockFetch;
+    const flushPromises = () => new Promise(resolve => setTimeout(resolve, 0));
 
     beforeEach(() => {
+        jest.resetModules();
         // Mock fetch
         mockFetch = jest.fn();
         global.fetch = mockFetch;
@@ -32,7 +34,14 @@ describe('AiVI Frontend', () => {
                 TextControl: jest.fn(),
             },
             data: {
-                select: jest.fn(),
+                select: jest.fn(() => ({
+                    getCurrentPost: () => ({
+                        id: 1,
+                        title: 'Test Post',
+                        content: 'Test content',
+                        author: 1
+                    })
+                })),
             },
         };
 
@@ -106,7 +115,7 @@ describe('AiVI Frontend', () => {
         require('../../assets/js/aivi-sidebar.js');
 
         // Wait for async operations
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await flushPromises();
 
         // Check that registerPlugin was called
         expect(global.wp.plugins.registerPlugin).toHaveBeenCalled();
@@ -116,42 +125,54 @@ describe('AiVI Frontend', () => {
         // Mock successful ping response
         mockFetch.mockImplementation((url) => {
             if (url.includes('/backend/proxy_ping')) {
+                const payload = {
+                    ok: true,
+                    aiAvailable: true
+                };
                 return Promise.resolve({
                     ok: true,
-                    json: () => Promise.resolve({
-                        ok: true,
-                        aiAvailable: true
-                    })
+                    status: 200,
+                    text: () => Promise.resolve(JSON.stringify(payload))
                 });
             }
-            if (url.includes('/analyze/preflight')) {
+            if (url.includes('/preflight')) {
+                const payload = {
+                    ok: true,
+                    tokenEstimate: 1000,
+                    withinCutoff: true,
+                    manifest: {}
+                };
                 return Promise.resolve({
                     ok: true,
-                    json: () => Promise.resolve({
-                        ok: true,
-                        tokenEstimate: 1000,
-                        withinCutoff: true,
-                        manifest: {}
-                    })
+                    status: 200,
+                    text: () => Promise.resolve(JSON.stringify(payload))
                 });
             }
             if (url.includes('/backend/proxy_analyze')) {
+                const payload = {
+                    ok: true,
+                    scores: { AEO: 30, GEO: 25 },
+                    checks: []
+                };
                 return Promise.resolve({
                     ok: true,
-                    json: () => Promise.resolve({
-                        ok: true,
-                        scores: { AEO: 30, GEO: 25 },
-                        checks: []
-                    })
+                    status: 200,
+                    text: () => Promise.resolve(JSON.stringify(payload))
                 });
             }
         });
+
+        global.AIVI_CONFIG = {
+            ...mockConfig,
+            autoRunOnLoad: true
+        };
 
         // Load the sidebar script
         require('../../assets/js/aivi-sidebar.js');
 
         // Wait for async operations
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await flushPromises();
+        await flushPromises();
 
         // Verify ping was called
         expect(mockFetch).toHaveBeenCalledWith(
@@ -169,27 +190,34 @@ describe('AiVI Frontend', () => {
         // Mock successful ping
         mockFetch.mockResolvedValueOnce({
             ok: true,
-            json: () => Promise.resolve({
+            status: 200,
+            text: () => Promise.resolve(JSON.stringify({
                 ok: true,
                 aiAvailable: true
-            })
+            }))
         });
 
         // Mock preflight too long response
         mockFetch.mockResolvedValueOnce({
             ok: true,
-            json: () => Promise.resolve({
+            status: 200,
+            text: () => Promise.resolve(JSON.stringify({
                 ok: false,
                 reason: 'too_long',
                 message: 'Article exceeds token limit'
-            })
+            }))
         });
 
         // Load the sidebar script
+        global.AIVI_CONFIG = {
+            ...mockConfig,
+            autoRunOnLoad: true
+        };
         require('../../assets/js/aivi-sidebar.js');
 
         // Wait for async operations
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await flushPromises();
+        await flushPromises();
 
         // Verify both endpoints were called
         expect(mockFetch).toHaveBeenCalledTimes(2);
@@ -203,36 +231,43 @@ describe('AiVI Frontend', () => {
         // Mock successful ping and preflight
         mockFetch.mockResolvedValueOnce({
             ok: true,
-            json: () => Promise.resolve({
+            status: 200,
+            text: () => Promise.resolve(JSON.stringify({
                 ok: true,
                 aiAvailable: true
-            })
+            }))
         });
 
         mockFetch.mockResolvedValueOnce({
             ok: true,
-            json: () => Promise.resolve({
+            status: 200,
+            text: () => Promise.resolve(JSON.stringify({
                 ok: true,
                 tokenEstimate: 1000,
                 withinCutoff: true,
                 manifest: {}
-            })
+            }))
         });
 
         // Mock analyze failure
         mockFetch.mockResolvedValueOnce({
             ok: false,
             status: 503,
-            json: () => Promise.resolve({
+            text: () => Promise.resolve(JSON.stringify({
                 message: 'Backend temporarily unavailable'
-            })
+            }))
         });
 
         // Load the sidebar script
+        global.AIVI_CONFIG = {
+            ...mockConfig,
+            autoRunOnLoad: true
+        };
         require('../../assets/js/aivi-sidebar.js');
 
         // Wait for async operations
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await flushPromises();
+        await flushPromises();
 
         // Verify error handling
         expect(mockFetch).toHaveBeenCalledWith(

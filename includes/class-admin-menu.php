@@ -43,7 +43,7 @@ class Admin_Menu {
     }
 
     /**
-     * Add admin menu page
+     * Add admin menu page and settings submenu
      */
     public function add_menu_page() {
         add_menu_page(
@@ -55,6 +55,23 @@ class Admin_Menu {
             'dashicons-visibility',
             56
         );
+
+        // Add Settings submenu under AiVI Inspector
+        add_submenu_page(
+            'aivi-inspector',
+            __( 'AiVI Settings', 'ai-visibility-inspector' ),
+            __( 'Settings', 'ai-visibility-inspector' ),
+            'manage_options',
+            'aivi-settings',
+            array( $this, 'render_settings_page' )
+        );
+    }
+
+    /**
+     * Render settings page (delegates to Admin_Settings)
+     */
+    public function render_settings_page() {
+        Admin_Settings::render_settings_page_static();
     }
 
     /**
