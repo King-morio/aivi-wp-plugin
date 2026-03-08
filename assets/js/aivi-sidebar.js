@@ -439,8 +439,10 @@
         return config.isEnabled !== false;
     }
 
-    function normalizeAccountState() {
-        const raw = (config && typeof config.accountState === 'object' && config.accountState) ? config.accountState : {};
+    function normalizeAccountState(rawOverride) {
+        const raw = (rawOverride && typeof rawOverride === 'object')
+            ? rawOverride
+            : ((config && typeof config.accountState === 'object' && config.accountState) ? config.accountState : {});
         const credits = (raw.credits && typeof raw.credits === 'object') ? raw.credits : {};
         const entitlements = (raw.entitlements && typeof raw.entitlements === 'object') ? raw.entitlements : {};
         const site = (raw.site && typeof raw.site === 'object') ? raw.site : {};
@@ -536,8 +538,8 @@
         };
     }
 
-    function buildAccountStatusSummary(rawBillingSummary) {
-        const accountState = normalizeAccountState();
+    function buildAccountStatusSummary(rawBillingSummary, accountStateOverride) {
+        const accountState = normalizeAccountState(accountStateOverride);
         const billingSummary = normalizeBillingSummary(rawBillingSummary);
         const isConnected = accountState.connected && accountState.connectionStatus === 'connected';
         const computedBalance = [accountState.credits.includedRemaining, accountState.credits.topupRemaining]
@@ -633,60 +635,6 @@
         };
     }
 
-    function buildPostRunDebitSummary(raw) {
-        const billing = normalizeBillingSummary(raw);
-        if (!billing) return null;
-        if (!['settled', 'zero_charge', 'refunded'].includes(billing.billingStatus)) return null;
-
-        if (billing.billingStatus === 'settled') {
-            return {
-                badge: 'Credits',
-                title: `Last analysis debit: ${formatCreditCount(billing.creditsUsed || 0)} credits`,
-                message: 'This completed analysis has been settled against your account balance.',
-                metrics: [
-                    Number.isFinite(billing.previousBalance) && Number.isFinite(billing.currentBalance)
-                        ? {
-                            label: 'Balance',
-                            value: `${formatCreditCount(billing.previousBalance)} -> ${formatCreditCount(billing.currentBalance)}`
-                        }
-                        : null,
-                    Number.isFinite(billing.refundedCredits) && billing.refundedCredits > 0
-                        ? {
-                            label: 'Released',
-                            value: `${formatCreditCount(billing.refundedCredits)}`
-                        }
-                        : null
-                ].filter(Boolean)
-            };
-        }
-
-        const restoredBalance = Number.isFinite(billing.currentBalance)
-            ? formatCreditCount(billing.currentBalance)
-            : '';
-
-        return {
-            badge: 'Credits',
-            title: 'Last analysis debit: 0 credits',
-            message: billing.billingStatus === 'refunded'
-                ? 'This run did not complete successfully, so the reserved credits were returned to your balance.'
-                : 'This run completed without billable AI usage, so no credits were charged.',
-            metrics: [
-                restoredBalance
-                    ? {
-                        label: 'Balance',
-                        value: restoredBalance
-                    }
-                    : null,
-                Number.isFinite(billing.refundedCredits) && billing.refundedCredits > 0
-                    ? {
-                        label: 'Returned',
-                        value: `${formatCreditCount(billing.refundedCredits)}`
-                    }
-                    : null
-            ].filter(Boolean)
-        };
-    }
-
     function getCallRestTimeoutMs(path, method) {
         const p = String(path || '');
         const m = String(method || 'GET').toUpperCase();
@@ -756,6 +704,14 @@
         } catch (e) {
             return false;
         }
+    }
+
+    async function fetchLatestAccountSummary() {
+        const result = await callRest('/backend/account_summary', 'GET');
+        if (result.ok && result.data && typeof result.data.account_state === 'object') {
+            return result.data.account_state;
+        }
+        return null;
     }
 
     function simpleHashContent(str) {
@@ -2050,95 +2006,6 @@
         );
     }
 
-    function CreditDebitCard(props) {
-        if (!props || !props.summary) return null;
-        const summary = props.summary;
-
-        return createElement('div', {
-            style: {
-                background: COLORS.primaryLight,
-                border: '1px solid #BFDBFE',
-                borderRadius: 10,
-                padding: '12px 14px',
-                marginBottom: 16
-            }
-        },
-            createElement('div', {
-                style: {
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: 8,
-                    marginBottom: 8
-                }
-            },
-                createElement('span', {
-                    style: {
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        padding: '4px 10px',
-                        borderRadius: 999,
-                        background: '#DBEAFE',
-                        color: '#1D4ED8',
-                        fontSize: 11,
-                        fontWeight: 700,
-                        letterSpacing: '0.02em'
-                    }
-                }, summary.badge || 'Credits')
-            ),
-            createElement('div', {
-                style: {
-                    fontSize: 14,
-                    fontWeight: 700,
-                    color: COLORS.scoreText,
-                    marginBottom: 4
-                }
-            }, summary.title),
-            createElement('div', {
-                style: {
-                    fontSize: 12,
-                    color: COLORS.subtext,
-                    lineHeight: 1.55
-                }
-            }, summary.message),
-            Array.isArray(summary.metrics) && summary.metrics.length > 0 && createElement('div', {
-                style: {
-                    display: 'grid',
-                    gridTemplateColumns: summary.metrics.length > 1 ? '1fr 1fr' : '1fr',
-                    gap: 8,
-                    marginTop: 10
-                }
-            },
-                summary.metrics.map((metric, index) => createElement('div', {
-                    key: `billing-metric-${index}`,
-                    style: {
-                        background: COLORS.white,
-                        border: '1px solid #DBEAFE',
-                        borderRadius: 8,
-                        padding: '8px 10px'
-                    }
-                },
-                    createElement('div', {
-                        style: {
-                            fontSize: 11,
-                            color: COLORS.subtext,
-                            marginBottom: 2
-                        }
-                    }, metric.label),
-                    createElement('div', {
-                        style: {
-                            fontSize: 13,
-                            fontWeight: 700,
-                            color: COLORS.scoreText
-                        }
-                    }, metric.value)
-                ))
-            )
-        );
-    }
-
-
-
     // ============================================
     // MAIN SIDEBAR COMPONENT
     // ============================================
@@ -2161,13 +2028,15 @@
         const [overlayContent, setOverlayContent] = useState(null); // NEW: Store highlighted HTML
         const [analysisPhase, setAnalysisPhase] = useState('idle');
         const [analysisSplashUntil, setAnalysisSplashUntil] = useState(0);
+        const [liveAccountState, setLiveAccountState] = useState(() => (
+            (config && typeof config.accountState === 'object' && config.accountState) ? config.accountState : {}
+        ));
         const activeRunIdRef = useRef('');
         const rawFetchRequestRef = useRef(0);
         const staleEventRunRef = useRef('');
         const detailsDrawer = useAiviDetailsDrawer();
         const [isStaleBanner] = useStaleBanner();
-        const billingSummary = buildPostRunDebitSummary(report && report.billing_summary);
-        const accountStatusSummary = buildAccountStatusSummary(report && report.billing_summary);
+        const accountStatusSummary = buildAccountStatusSummary(report && report.billing_summary, liveAccountState);
         const analysisBlocked = accountStatusSummary.shouldBlockAnalysis === true;
 
         useEffect(() => {
@@ -2191,6 +2060,24 @@
                 return null;
             });
         }, [report?.run_id]);
+
+        async function refreshLiveAccountState() {
+            try {
+                const nextAccountState = await fetchLatestAccountSummary();
+                if (nextAccountState && typeof nextAccountState === 'object') {
+                    setLiveAccountState(nextAccountState);
+                    if (config && typeof config === 'object') {
+                        config.accountState = nextAccountState;
+                    }
+                    return true;
+                }
+            } catch (e) {
+                debugLog('warn', 'AiVI: Failed to refresh account summary after analysis', {
+                    error: e && e.message ? e.message : String(e || '')
+                });
+            }
+            return false;
+        }
 
         // STALE-RUN DETECTION: Monitor editor content changes
         useEffect(() => {
@@ -2682,6 +2569,10 @@
 
             if (data && data.run_id && NavigationController) {
                 NavigationController.init(data.run_id, () => setIsStale(true));
+            }
+
+            if (data && data.billing_summary) {
+                void refreshLiveAccountState();
             }
         }
 
@@ -3232,7 +3123,6 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                         lastRun: getTimeAgo(),
                         animate: showSuccessAnim
                     }),
-                    billingSummary && createElement(CreditDebitCard, { summary: billingSummary }),
                     createElement('div', { style: { display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 16 } },
                         createElement(ScoreCircle, { value: getScores().aeo, max: 55, color: COLORS.aeoRing, label: 'AEO Score' }),
                         createElement(ScoreCircle, { value: getScores().geo, max: 45, color: COLORS.geoRing, label: 'GEO Score' })

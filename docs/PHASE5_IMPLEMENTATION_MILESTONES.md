@@ -12,8 +12,8 @@ Implement commercial AiVI in a controlled sequence without destabilizing the wor
 - Milestone 2: completed
 - Milestone 3: completed
 - Milestone 4: completed
-- Milestone 5: completed at code and sandbox-validation level
-- Milestone 6: in closeout
+- Milestone 5: formally closed
+- Milestone 6: rollout polish and infrastructure hardening
 
 Latest validated outcomes:
 
@@ -32,8 +32,24 @@ Latest validated outcomes:
   - entitled analysis admitted
   - run status polling repaired
   - completed analysis consumes credits correctly
+- Customer credit displays now stay coherent after completed runs:
+  - sidebar account state refreshes from authoritative backend summary
+  - WordPress settings/dashboard no longer remain stuck on stale balances
+  - duplicate post-run debit card removed from the sidebar
 - Live API Gateway drift was resolved by adding the missing route:
   - `GET /aivi/v1/analyze/run/{run_id}`
+
+## Phase 5 Closeout Decision
+
+Phase 5 is complete.
+
+Why:
+
+- customer billing and dashboard flows are validated in sandbox
+- subscription and top-up lifecycles are both proven
+- analysis admission, completion, and credit settlement coexist correctly
+- WordPress customer UI and backend account state now stay aligned after live runs
+- the remaining tasks are deployment/runtime polish, not Phase 5 feature correctness
 
 This plan assumes the decisions in:
 

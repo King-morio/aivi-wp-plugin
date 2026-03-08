@@ -24,6 +24,7 @@ describe('Account dashboard rollup safety', () => {
         const proxy = read('includes/class-rest-backend-proxy.php');
 
         expect(proxy).toContain('Admin_Settings::record_run_usage_summary(');
+        expect(proxy).toContain('$this->sync_remote_account_summary_cache();');
         expect(proxy).toContain("isset($data['billing_summary']) &&");
         expect(proxy).toContain("in_array($data['status'], array('success', 'success_partial', 'failed', 'failed_schema', 'failed_too_long', 'aborted'), true)");
     });

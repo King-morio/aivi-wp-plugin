@@ -35,6 +35,8 @@ This closeout covers the customer billing/dashboard path introduced in Phase 5:
   - `subscription_pending`
   - `topup_capture_pending_credit`
   - `topup_capture_received`
+- Completed-run account refresh now updates the local WordPress account/dashboard cache from authoritative backend summary.
+- Sidebar no longer renders a separate post-run debit card that duplicated balance messaging.
 
 ## Operational notes
 - Cloudflare quick tunnels were sufficient for sandbox validation, but they are not stable enough for staging UX.

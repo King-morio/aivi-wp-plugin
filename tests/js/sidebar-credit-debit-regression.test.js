@@ -2,17 +2,18 @@ const fs = require('fs');
 const path = require('path');
 
 describe('sidebar credit debit regression', () => {
-    test('renders a post-run credit debit card and does not expose estimate copy', () => {
+    test('refreshes authoritative account state after a run and does not render a separate debit card', () => {
         const sidebarPath = path.resolve(__dirname, '../../assets/js/aivi-sidebar.js');
         const source = fs.readFileSync(sidebarPath, 'utf8');
 
         expect(source).toContain('function normalizeBillingSummary(raw)');
-        expect(source).toContain('function buildPostRunDebitSummary(raw)');
-        expect(source).toContain('function CreditDebitCard(props)');
-        expect(source).toContain("const billingSummary = buildPostRunDebitSummary(report && report.billing_summary);");
-        expect(source).toContain("billingSummary && createElement(CreditDebitCard, { summary: billingSummary })");
-        expect(source).toContain('Last analysis debit: ${formatCreditCount(billing.creditsUsed || 0)} credits');
-        expect(source).toContain("title: 'Last analysis debit: 0 credits'");
+        expect(source).toContain('async function fetchLatestAccountSummary()');
+        expect(source).toContain('const [liveAccountState, setLiveAccountState] = useState(() => (');
+        expect(source).toContain("const accountStatusSummary = buildAccountStatusSummary(report && report.billing_summary, liveAccountState);");
+        expect(source).toContain('void refreshLiveAccountState();');
+        expect(source).not.toContain('function buildPostRunDebitSummary(raw)');
+        expect(source).not.toContain('function CreditDebitCard(props)');
+        expect(source).not.toContain('Last analysis debit: ${formatCreditCount(billing.creditsUsed || 0)} credits');
         expect(source).not.toContain('Estimated credits');
         expect(source).not.toContain('Estimated cost');
     });

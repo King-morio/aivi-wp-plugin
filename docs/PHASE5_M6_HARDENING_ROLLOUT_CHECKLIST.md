@@ -205,11 +205,16 @@ Harden the commercial AiVI product for staging and production rollout without we
   - enable sandbox only
   - promote to production
 
-### Step 6 status
+### Step 6 result
 
-- in progress
-- current closeout state:
+- completed for Phase 5 closeout
+- final closeout state:
   - billing component validated end to end
   - subscription and top-up flows validated in sandbox
   - analysis plus credit settlement validated after live route repair
-  - remaining work is final checkpointing and rollout decision, not core product correctness
+  - customer dashboard and sidebar credit displays now refresh from authoritative backend state after completed runs
+  - duplicate post-run debit card removed from the sidebar to keep the account status view singular and clean
+- remaining work is now Phase 6 rollout polish:
+  - stable staging hostnames
+  - Cognito/JWT hosting hardening
+  - final admin diagnostics polish

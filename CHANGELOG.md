@@ -2,6 +2,22 @@
 
 All notable changes to the AiVI WordPress Plugin will be documented in this file.
 
+## [Unreleased]
+
+### Phase 5 Closeout
+
+- formally closed the Phase 5 commerce rollout work after validating:
+  - sandbox top-up grant
+  - sandbox subscription activation
+  - analysis admission and credit settlement
+- updated closeout and rollout docs to move the remaining work into a dedicated Phase 6 polish track
+
+### Billing UI and State Sync
+
+- refreshed local WordPress account/dashboard state from authoritative backend summary after completed runs
+- removed the duplicate post-run credit/debit card from the analysis sidebar
+- kept sidebar and settings credit balances aligned after live credit consumption
+
 ## [1.0.8] - 2026-03-06
 
 ### Phase 4 Closeout

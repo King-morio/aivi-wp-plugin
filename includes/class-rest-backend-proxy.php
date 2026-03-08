@@ -1179,6 +1179,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 					$data['billing_summary'],
 					(string) ($data['completed_at'] ?? '')
 				);
+				$this->sync_remote_account_summary_cache();
 			}
 
 			$this->log_event('backend_status_check', array('run_id' => $run_id, 'status' => $data['status'] ?? 'unknown'));
@@ -1794,6 +1795,84 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			'dashboard_summary' => Admin_Settings::get_public_account_dashboard_state($dashboard_state),
 			'site' => Admin_Settings::get_site_identity_payload(),
 		);
+	}
+
+	/**
+	 * Refresh local account/dashboard cache from the authoritative backend summary.
+	 *
+	 * @return bool
+	 */
+	private function sync_remote_account_summary_cache()
+	{
+		$backend_url = Admin_Settings::get_backend_url( 'account_summary' );
+		if ( empty( $backend_url ) ) {
+			return false;
+		}
+
+		$local_state = Admin_Settings::get_account_state();
+		$site_identity = Admin_Settings::get_site_identity_payload();
+		$summary_url = trailingslashit( $backend_url ) . 'aivi/v1/account/summary';
+		$summary_url = add_query_arg(
+			array(
+				'account_id' => $local_state['account_id'],
+				'site_id'    => $site_identity['site_id'],
+				'blog_id'    => $site_identity['blog_id'],
+				'home_url'   => $site_identity['home_url'],
+			),
+			$summary_url
+		);
+
+		$headers = Admin_Settings::get_api_headers();
+		$headers['X-AIVI-Account-Id'] = (string) $local_state['account_id'];
+		$headers['X-AIVI-Site-Id'] = (string) $site_identity['site_id'];
+		$headers['X-AIVI-Blog-Id'] = (string) $site_identity['blog_id'];
+		$headers['X-AIVI-Home-Url'] = (string) $site_identity['home_url'];
+		$headers['X-AIVI-Plugin-Version'] = (string) $site_identity['plugin_version'];
+
+		$response = $this->wp_remote_get_with_retries(
+			$summary_url,
+			array(
+				'timeout'     => 12,
+				'sslverify'   => true,
+				'httpversion' => '1.1',
+				'headers'     => $headers,
+			),
+			2
+		);
+
+		if ( is_wp_error( $response ) ) {
+			$this->log_event(
+				'account_summary_cache_refresh_failed',
+				array(
+					'error' => $response->get_error_message(),
+				)
+			);
+			return false;
+		}
+
+		$status_code = wp_remote_retrieve_response_code( $response );
+		$body = wp_remote_retrieve_body( $response );
+		$data = json_decode( $body, true );
+
+		if ( $status_code >= 200 && $status_code < 300 && is_array( $data ) ) {
+			$remote_state = $this->extract_remote_account_state( $data );
+			$remote_dashboard = $this->extract_remote_dashboard_summary( $data );
+			if ( is_array( $remote_state ) || is_array( $remote_dashboard ) ) {
+				Admin_Settings::sync_remote_account_snapshot(
+					is_array( $remote_state ) ? $remote_state : array(),
+					is_array( $remote_dashboard ) ? $remote_dashboard : array()
+				);
+				return true;
+			}
+		}
+
+		$this->log_event(
+			'account_summary_cache_refresh_skipped',
+			array(
+				'status' => $status_code,
+			)
+		);
+		return false;
 	}
 
 	/**
