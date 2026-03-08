@@ -131,8 +131,13 @@ class Assets
     {
         $settings = array(
             'restBase' => esc_url_raw(rest_url('aivi/v1')),
+            'adminDashboardUrl' => esc_url_raw(admin_url('admin.php?page=aivi-inspector')),
+            'apiEndpoints' => AIVI_API_ENDPOINTS,
             'nonce' => wp_create_nonce('wp_rest'),
             'backendConfigured' => Admin_Settings::get_backend_url() !== '',
+            'accountState' => Admin_Settings::get_public_account_state(),
+            'billingProvider' => AIVI_BILLING_PROVIDER,
+            'billingReady' => (bool) AIVI_BILLING_READY,
             'isEnabled' => Admin_Settings::is_enabled(),
             'webLookupsEnabled' => Admin_Settings::are_web_lookups_enabled(),
             'featureFlags' => Admin_Settings::get_feature_flags(),
@@ -146,13 +151,13 @@ class Assets
                 'title' => 'AiVI — AI Visibility Inspector',
                 'analyze' => 'Analyze Content',
                 'clear_cache' => 'Clear Cache',
-                'ai_unavailable' => 'AI analysis unavailable. Please check your backend configuration.',
+                'ai_unavailable' => 'AI analysis is temporarily unavailable. Please try again later or contact support if the problem persists.',
                 'preflight_too_long' => 'Article too long for single-pass analysis. Please analyze a section or split the article.',
                 'preflight_ok' => 'Preflight OK. Attempting AI analysis...',
                 'no_editor' => 'Editor APIs not available in this context.',
                 'awaiting' => 'Awaiting analysis',
-                'backend_not_configured' => 'Backend URL not configured. Please configure in Settings > AiVI.',
-                'plugin_disabled' => 'AiVI plugin is disabled. Please enable in Settings > AiVI.',
+                'backend_not_configured' => 'AiVI is not ready on this site yet. Connect your AiVI account or contact support.',
+                'plugin_disabled' => 'AiVI is currently disabled for this site. Contact support if this was unexpected.',
             ),
         );
 

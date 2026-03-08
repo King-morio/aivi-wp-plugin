@@ -9,6 +9,16 @@ const OpenAI = require("openai");
 const Ajv = require("ajv");
 const { buildHighlightedHtml } = require('./analysis-serializer');
 const { performDeterministicChecks } = require('./preflight-handler');
+const requireSharedRuntime = (modulePath) => {
+    try {
+        return require(`./shared/${modulePath}`);
+    } catch (error) {
+        return require(`../shared/${modulePath}`);
+    }
+};
+const { buildUsageSettlementPreview } = requireSharedRuntime('credit-pricing');
+const { createSettlementEvent, createRefundEvent, persistLedgerEvent } = requireSharedRuntime('credit-ledger');
+const { createAccountBillingStateStore, applyLedgerEventToState } = requireSharedRuntime('billing-account-state');
 
 // Initialize AWS clients
 const ddbClient = new DynamoDBClient({});
@@ -24,6 +34,19 @@ const getEnv = (key, defaultValue = undefined) => process.env[key] || defaultVal
 
 const parseBooleanFlag = (value) => {
     return value === true || value === 'true' || value === 1 || value === '1';
+};
+
+const normalizeNonNegativeInt = (value) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+    return Math.floor(parsed);
+};
+
+const normalizeNullableInt = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    return Math.floor(parsed);
 };
 
 const readJsonFile = (filePath) => {
@@ -2622,6 +2645,146 @@ const updateRunStatus = async (runId, status, additionalFields = {}) => {
     log('INFO', 'Updated run status', { run_id: runId, status });
 };
 
+const getRunRecord = async (runId) => {
+    const response = await ddbDoc.send(new GetCommand({
+        TableName: getEnv('RUNS_TABLE', 'aivi-runs-dev'),
+        Key: { run_id: runId }
+    }));
+    return response?.Item || null;
+};
+
+const normalizeCreditReservation = (candidate = {}, fallbackSiteId = '') => {
+    if (!candidate || typeof candidate !== 'object') return null;
+    const accountId = String(candidate.account_id || candidate.accountId || '').trim();
+    if (!accountId) return null;
+    return {
+        reservation_status: String(candidate.reservation_status || candidate.reservationStatus || '').trim() || 'reserved',
+        event_id: String(candidate.event_id || candidate.eventId || '').trim(),
+        idempotency_key: String(candidate.idempotency_key || candidate.idempotencyKey || '').trim(),
+        account_id: accountId,
+        site_id: String(candidate.site_id || candidate.siteId || fallbackSiteId || '').trim(),
+        reserved_credits: normalizeNonNegativeInt(candidate.reserved_credits ?? candidate.reservedCredits),
+        balance_before: normalizeNullableInt(candidate.balance_before ?? candidate.balanceBefore),
+        balance_after: normalizeNullableInt(candidate.balance_after ?? candidate.balanceAfter),
+        token_estimate: normalizeNonNegativeInt(candidate.token_estimate ?? candidate.tokenEstimate),
+        pricing_snapshot: candidate.pricing_snapshot && typeof candidate.pricing_snapshot === 'object'
+            ? candidate.pricing_snapshot
+            : (candidate.pricingSnapshot && typeof candidate.pricingSnapshot === 'object' ? candidate.pricingSnapshot : null),
+        created_at: String(candidate.created_at || candidate.createdAt || '').trim()
+    };
+};
+
+const finalizeCreditSettlement = async ({
+    runId,
+    siteId,
+    finalStatus,
+    reservation,
+    usage,
+    model,
+    reasonCode
+} = {}) => {
+    const normalizedReservation = normalizeCreditReservation(reservation, siteId);
+    if (!normalizedReservation || normalizedReservation.reservation_status !== 'reserved') {
+        return null;
+    }
+
+    const reservationBalanceBefore = normalizedReservation.balance_before;
+    const reservationBalanceAfter = normalizedReservation.balance_after;
+    const reservedCredits = normalizedReservation.reserved_credits;
+
+    if (['failed', 'failed_schema', 'failed_too_long', 'aborted'].includes(finalStatus)) {
+        const refundEvent = await persistLedgerEvent(createRefundEvent({
+            account_id: normalizedReservation.account_id,
+            site_id: normalizedReservation.site_id || siteId || 'unknown',
+            run_id: runId,
+            reason_code: reasonCode || 'analysis_failed',
+            external_ref: finalStatus,
+            pricing_snapshot: normalizedReservation.pricing_snapshot || {},
+            amounts: {
+                reserved_credits: reservedCredits,
+                refunded_credits: reservedCredits,
+                balance_before: reservationBalanceAfter,
+                balance_after: reservationBalanceBefore
+            }
+        }));
+
+        try {
+            const accountStateStore = createAccountBillingStateStore();
+            const existingState = await accountStateStore.getAccountState(normalizedReservation.account_id);
+            if (existingState) {
+                await accountStateStore.putAccountState(applyLedgerEventToState(existingState, refundEvent));
+            }
+        } catch (error) {
+            log('WARN', 'Failed to apply refund to authoritative billing state', {
+                account_id: normalizedReservation.account_id,
+                run_id: runId,
+                error: error.message
+            });
+        }
+
+        return {
+            billing_status: 'refunded',
+            credits_used: 0,
+            reserved_credits: reservedCredits,
+            refunded_credits: reservedCredits,
+            previous_balance: refundEvent.amounts.balance_before,
+            current_balance: refundEvent.amounts.balance_after
+        };
+    }
+
+    const preview = buildUsageSettlementPreview({
+        model: model || normalizedReservation.pricing_snapshot?.requested_model || normalizedReservation.pricing_snapshot?.billable_model || getEnv('MISTRAL_MODEL', 'mistral-large-latest'),
+        usage: usage || { input_tokens: 0, output_tokens: 0 },
+        creditMultiplier: normalizedReservation.pricing_snapshot?.credit_multiplier
+    });
+    const settledCredits = preview.usage_snapshot.credits_used;
+    const refundedCredits = Math.max(reservedCredits - settledCredits, 0);
+    const balanceAfter = reservationBalanceBefore === null
+        ? null
+        : Math.max(reservationBalanceBefore - settledCredits, 0);
+
+    const settlementEvent = await persistLedgerEvent(createSettlementEvent({
+        account_id: normalizedReservation.account_id,
+        site_id: normalizedReservation.site_id || siteId || 'unknown',
+        run_id: runId,
+        reason_code: reasonCode || (finalStatus === 'success_partial' ? 'analysis_completed_partial' : 'analysis_completed'),
+        external_ref: finalStatus,
+        pricing_snapshot: preview.pricing_snapshot,
+        usage_snapshot: preview.usage_snapshot,
+        amounts: {
+            reserved_credits: reservedCredits,
+            settled_credits: settledCredits,
+            refunded_credits: refundedCredits,
+            balance_before: reservationBalanceBefore,
+            balance_after: balanceAfter
+        }
+    }));
+
+    try {
+        const accountStateStore = createAccountBillingStateStore();
+        const existingState = await accountStateStore.getAccountState(normalizedReservation.account_id);
+        if (existingState) {
+            await accountStateStore.putAccountState(applyLedgerEventToState(existingState, settlementEvent));
+        }
+    } catch (error) {
+        log('WARN', 'Failed to apply settlement to authoritative billing state', {
+            account_id: normalizedReservation.account_id,
+            run_id: runId,
+            error: error.message
+        });
+    }
+
+    return {
+        billing_status: settledCredits === 0 && refundedCredits > 0 ? 'zero_charge' : 'settled',
+        credits_used: settledCredits,
+        reserved_credits: reservedCredits,
+        refunded_credits: refundedCredits,
+        previous_balance: settlementEvent.amounts.balance_before,
+        current_balance: settlementEvent.amounts.balance_after,
+        billable_model: settlementEvent.pricing_snapshot.billable_model || null
+    };
+};
+
 /**
  * Download manifest from S3
  */
@@ -4273,6 +4436,7 @@ const processJob = async (message, lambdaContext = null) => {
     const enableWebLookups = parseBooleanFlag(job.enable_web_lookups);
     let manifest = null;
     let deterministicChecks = null;
+    let creditReservation = normalizeCreditReservation(job.credit_reservation, siteId);
 
     log('INFO', 'Processing job', {
         run_id: runId,
@@ -4289,6 +4453,18 @@ const processJob = async (message, lambdaContext = null) => {
         if (!transitioned) {
             log('INFO', 'Skipping job - already running or complete', { run_id: runId });
             return { success: true, skipped: true, reason: 'already_processed' };
+        }
+
+        if (!creditReservation) {
+            try {
+                const runRecord = await getRunRecord(runId);
+                creditReservation = normalizeCreditReservation(runRecord?.credit_reservation, siteId);
+            } catch (reservationLookupError) {
+                log('WARN', 'Unable to load credit reservation from run record', {
+                    run_id: runId,
+                    error: reservationLookupError.message
+                });
+            }
         }
 
         // Support direct manifest injection for testing (bypassing S3)
@@ -4509,6 +4685,26 @@ const processJob = async (message, lambdaContext = null) => {
         }
 
         const runStatus = partialState.runStatus;
+        let billingSummary = null;
+        try {
+            billingSummary = await finalizeCreditSettlement({
+                runId,
+                siteId,
+                finalStatus: runStatus,
+                reservation: creditReservation,
+                usage,
+                model,
+                reasonCode: runStatus === 'success_partial' ? 'analysis_completed_partial' : 'analysis_completed'
+            });
+        } catch (billingError) {
+            log('WARN', 'Failed to finalize credit settlement for completed run', {
+                run_id: runId,
+                error: billingError.message
+            });
+        }
+        if (billingSummary) {
+            statusPayload.billing_summary = billingSummary;
+        }
         await updateRunStatus(runId, runStatus, statusPayload);
 
         log('INFO', 'Job completed successfully', {
@@ -4639,6 +4835,26 @@ const processJob = async (message, lambdaContext = null) => {
                         statusPayload.details_s3 = deferredDetailsS3Uri;
                     }
 
+                    let billingSummary = null;
+                    try {
+                        billingSummary = await finalizeCreditSettlement({
+                            runId,
+                            siteId,
+                            finalStatus: 'success_partial',
+                            reservation: creditReservation,
+                            usage: { input_tokens: 0, output_tokens: 0 },
+                            model: null,
+                            reasonCode: 'deterministic_fallback'
+                        });
+                    } catch (billingError) {
+                        log('WARN', 'Failed to finalize credit settlement for fallback partial run', {
+                            run_id: runId,
+                            error: billingError.message
+                        });
+                    }
+                    if (billingSummary) {
+                        statusPayload.billing_summary = billingSummary;
+                    }
                     await updateRunStatus(runId, 'success_partial', statusPayload);
 
                     log('WARN', 'Job recovered with deterministic-only partial result', {
@@ -4667,11 +4883,31 @@ const processJob = async (message, lambdaContext = null) => {
             await storeResult(runId, { error: error.message, stack: error.stack }, 'error.json');
         } catch (storeError) { }
 
-        await updateRunStatus(runId, isSchemaError ? 'failed_schema' : 'failed', {
+        const failureStatus = isSchemaError ? 'failed_schema' : 'failed';
+        let failureBillingSummary = null;
+        try {
+            failureBillingSummary = await finalizeCreditSettlement({
+                runId,
+                siteId,
+                finalStatus: failureStatus,
+                reservation: creditReservation,
+                usage: { input_tokens: 0, output_tokens: 0 },
+                model: null,
+                reasonCode: failureStatus
+            });
+        } catch (billingError) {
+            log('WARN', 'Failed to finalize credit settlement for failed run', {
+                run_id: runId,
+                error: billingError.message
+            });
+        }
+
+        await updateRunStatus(runId, failureStatus, {
             completed_at: new Date().toISOString(),
             error: errorType,
             error_message: error.message,
-            feature_flags: featureFlags
+            feature_flags: featureFlags,
+            billing_summary: failureBillingSummary
         });
 
         if (isSchemaError) {
@@ -4705,7 +4941,9 @@ exports.__testHooks = {
     convertFindingsToChecks,
     isStrictQuestionAnchorText,
     buildQuestionAnchorPayload,
-    evaluateQuestionAnchorGuardrail
+    evaluateQuestionAnchorGuardrail,
+    normalizeCreditReservation,
+    finalizeCreditSettlement
 };
 
 exports.handler = async (event, context) => {

@@ -43,6 +43,7 @@ Thumbs.db
 # Build
 /dist/
 /build/
+/control-plane/admin-console/dist/
 
 # Environment
 .env

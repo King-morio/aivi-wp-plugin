@@ -112,6 +112,7 @@ const ALLOWED_ROOT_FIELDS = [
     'scores',
     'analysis_summary',
     'overlay_content',
+    'billing_summary',
     'completed_at',
     'details_token',
     'prompt_provenance',
@@ -137,6 +138,20 @@ const stripPartial = (partial) => {
         }
     });
     return Object.keys(stripped).length ? stripped : null;
+};
+
+const stripBillingSummary = (billing) => {
+    if (!billing || typeof billing !== 'object') return null;
+    const stripped = {
+        billing_status: billing.billing_status ? String(billing.billing_status) : null,
+        credits_used: Number.isInteger(billing.credits_used) ? billing.credits_used : null,
+        reserved_credits: Number.isInteger(billing.reserved_credits) ? billing.reserved_credits : null,
+        refunded_credits: Number.isInteger(billing.refunded_credits) ? billing.refunded_credits : null,
+        previous_balance: Number.isInteger(billing.previous_balance) ? billing.previous_balance : null,
+        current_balance: Number.isInteger(billing.current_balance) ? billing.current_balance : null
+    };
+    const hasAny = Object.values(stripped).some((value) => value !== null && value !== '');
+    return hasAny ? stripped : null;
 };
 
 /**
@@ -376,6 +391,11 @@ const stripSidebarPayload = (payload, runId = 'unknown') => {
                 const partial = stripPartial(payload[field]);
                 if (partial) {
                     stripped[field] = partial;
+                }
+            } else if (field === 'billing_summary') {
+                const billingSummary = stripBillingSummary(payload[field]);
+                if (billingSummary) {
+                    stripped[field] = billingSummary;
                 }
             } else if (field === 'scores' && typeof payload[field] === 'object') {
                 // Only allow numeric score values

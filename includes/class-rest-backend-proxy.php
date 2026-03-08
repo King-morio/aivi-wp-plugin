@@ -110,6 +110,123 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			)
 		);
 
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/account_summary',
+			array(
+				array(
+					'methods' => \WP_REST_Server::READABLE,
+					'callback' => array($this, 'proxy_account_summary'),
+					'permission_callback' => array($this, 'check_permissions'),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/account_connect',
+			array(
+				array(
+					'methods' => \WP_REST_Server::CREATABLE,
+					'callback' => array($this, 'proxy_account_connect'),
+					'permission_callback' => array($this, 'check_manage_options_permissions'),
+					'args' => array(
+						'connection_token' => array(
+							'type' => 'string',
+							'required' => true,
+							'sanitize_callback' => 'sanitize_text_field',
+						),
+						'connection_label' => array(
+							'type' => 'string',
+							'required' => false,
+							'sanitize_callback' => 'sanitize_text_field',
+						),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/account_disconnect',
+			array(
+				array(
+					'methods' => \WP_REST_Server::CREATABLE,
+					'callback' => array($this, 'proxy_account_disconnect'),
+					'permission_callback' => array($this, 'check_manage_options_permissions'),
+					'args' => array(
+						'notify_backend' => array(
+							'type' => 'boolean',
+							'required' => false,
+							'default' => false,
+						),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/billing_subscribe',
+			array(
+				array(
+					'methods' => \WP_REST_Server::CREATABLE,
+					'callback' => array($this, 'proxy_billing_subscribe'),
+					'permission_callback' => array($this, 'check_manage_options_permissions'),
+					'args' => array(
+						'plan_code' => array(
+							'type' => 'string',
+							'required' => true,
+							'sanitize_callback' => 'sanitize_text_field',
+						),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/billing_topup',
+			array(
+				array(
+					'methods' => \WP_REST_Server::CREATABLE,
+					'callback' => array($this, 'proxy_billing_topup'),
+					'permission_callback' => array($this, 'check_manage_options_permissions'),
+					'args' => array(
+						'topup_pack_code' => array(
+							'type' => 'string',
+							'required' => true,
+							'sanitize_callback' => 'sanitize_text_field',
+						),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/billing_manage',
+			array(
+				array(
+					'methods' => \WP_REST_Server::CREATABLE,
+					'callback' => array($this, 'proxy_billing_manage'),
+					'permission_callback' => array($this, 'check_manage_options_permissions'),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/billing_return',
+			array(
+				array(
+					'methods' => \WP_REST_Server::READABLE,
+					'callback' => array($this, 'proxy_billing_return'),
+					'permission_callback' => '__return_true',
+				),
+			)
+		);
+
 		// Result Contract Lock: On-demand check details endpoint
 		register_rest_route(
 			$this->namespace,
@@ -179,6 +296,25 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 	public function check_permissions($request)
 	{
 		if (!current_user_can('edit_posts')) {
+			return new \WP_Error(
+				'rest_forbidden',
+				__('Sorry, you cannot perform this action.', 'ai-visibility-inspector'),
+				array('status' => rest_authorization_required_code())
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Check if user can perform site-level configuration actions.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return bool|WP_Error
+	 */
+	public function check_manage_options_permissions($request)
+	{
+		if (!current_user_can('manage_options')) {
 			return new \WP_Error(
 				'rest_forbidden',
 				__('Sorry, you cannot perform this action.', 'ai-visibility-inspector'),
@@ -327,6 +463,363 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 	}
 
 	/**
+	 * Proxy account summary request to backend when available.
+	 *
+	 * Falls back to the locally stored normalized account state if the backend
+	 * is not configured or the account endpoint is not available yet.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response
+	 */
+	public function proxy_account_summary($request)
+	{
+		$backend_url = Admin_Settings::get_backend_url( 'account_summary' );
+		$local_state = Admin_Settings::get_account_state();
+		$local_dashboard = Admin_Settings::get_account_dashboard_state();
+		if (empty($backend_url)) {
+			return rest_ensure_response($this->build_account_summary_response($local_state, false, 'local', 'backend_not_configured', $local_dashboard));
+		}
+
+		$site_identity = Admin_Settings::get_site_identity_payload();
+		$summary_url = trailingslashit($backend_url) . 'aivi/v1/account/summary';
+		$summary_url = add_query_arg(
+			array(
+				'account_id' => $local_state['account_id'],
+				'site_id' => $site_identity['site_id'],
+				'blog_id' => $site_identity['blog_id'],
+				'home_url' => $site_identity['home_url'],
+			),
+			$summary_url
+		);
+
+		$headers = Admin_Settings::get_api_headers();
+		$headers['X-AIVI-Account-Id'] = (string) $local_state['account_id'];
+		$headers['X-AIVI-Site-Id'] = (string) $site_identity['site_id'];
+		$headers['X-AIVI-Blog-Id'] = (string) $site_identity['blog_id'];
+		$headers['X-AIVI-Home-Url'] = (string) $site_identity['home_url'];
+		$headers['X-AIVI-Plugin-Version'] = (string) $site_identity['plugin_version'];
+
+		$response = $this->wp_remote_get_with_retries(
+			$summary_url,
+			array(
+				'timeout' => 12,
+				'sslverify' => true,
+				'httpversion' => '1.1',
+				'headers' => $headers,
+			),
+			2
+		);
+
+		if (is_wp_error($response)) {
+			$this->log_event('account_summary_fallback', array(
+				'error' => $response->get_error_message(),
+			));
+			return rest_ensure_response($this->build_account_summary_response($local_state, false, 'local', 'remote_unavailable', $local_dashboard));
+		}
+
+		$status_code = wp_remote_retrieve_response_code($response);
+		$body = wp_remote_retrieve_body($response);
+		$data = json_decode($body, true);
+
+		if ($status_code >= 200 && $status_code < 300 && is_array($data)) {
+			$remote_state = $this->extract_remote_account_state($data);
+			$remote_dashboard = $this->extract_remote_dashboard_summary($data);
+			if (is_array($remote_state)) {
+				Admin_Settings::sync_remote_account_snapshot($remote_state, is_array($remote_dashboard) ? $remote_dashboard : array());
+				return rest_ensure_response($this->build_account_summary_response(Admin_Settings::get_account_state(), true, 'remote', null, Admin_Settings::get_account_dashboard_state()));
+			}
+			if (is_array($remote_dashboard)) {
+				Admin_Settings::sync_remote_account_snapshot(array(), $remote_dashboard);
+				return rest_ensure_response($this->build_account_summary_response(Admin_Settings::get_account_state(), true, 'remote', null, Admin_Settings::get_account_dashboard_state()));
+			}
+		}
+
+		if ($this->should_fallback_account_summary($status_code, $body)) {
+			$this->log_event('account_summary_fallback', array(
+				'status' => $status_code,
+				'body' => is_string($body) ? substr($body, 0, 200) : '',
+			));
+			return rest_ensure_response($this->build_account_summary_response($local_state, false, 'local', 'remote_unavailable', $local_dashboard));
+		}
+
+		return rest_ensure_response($this->build_account_summary_response($local_state, false, 'local', 'invalid_remote_response', $local_dashboard));
+	}
+
+	/**
+	 * Proxy site connection handshake to backend.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function proxy_account_connect($request)
+	{
+		$backend_url = Admin_Settings::get_backend_url( 'account_connect' );
+		if (empty($backend_url)) {
+			return new \WP_Error(
+				'no_backend',
+				__('Backend URL not configured.', 'ai-visibility-inspector'),
+				array('status' => 503)
+			);
+		}
+
+		$connection_token = (string) $request->get_param('connection_token');
+		if ($connection_token === '') {
+			return new \WP_Error(
+				'missing_connection_token',
+				__('A connection token is required.', 'ai-visibility-inspector'),
+				array('status' => 400)
+			);
+		}
+
+		$connect_url = trailingslashit($backend_url) . 'aivi/v1/account/connect';
+		$site_identity = Admin_Settings::get_site_identity_payload();
+		$payload = array(
+			'connection_token' => $connection_token,
+			'connection_label' => (string) $request->get_param('connection_label'),
+			'site' => $site_identity,
+		);
+
+		$response = $this->wp_remote_post_with_retries(
+			$connect_url,
+			array(
+				'timeout' => 15,
+				'sslverify' => true,
+				'httpversion' => '1.1',
+				'headers' => Admin_Settings::get_api_headers(),
+				'body' => wp_json_encode($payload),
+			),
+			2
+		);
+
+		if (is_wp_error($response)) {
+			return new \WP_Error(
+				'backend_error',
+				__('Failed to connect this site to AiVI.', 'ai-visibility-inspector'),
+				array(
+					'status' => 503,
+					'diagnostics' => $this->build_http_diagnostics(
+						$response->get_error_code(),
+						$response->get_error_message(),
+						$response->get_error_data()
+					),
+				)
+			);
+		}
+
+		$status_code = wp_remote_retrieve_response_code($response);
+		$body = wp_remote_retrieve_body($response);
+		$data = json_decode($body, true);
+		if ($status_code >= 200 && $status_code < 300 && is_array($data)) {
+			$remote_state = $this->extract_remote_account_state($data);
+			$remote_dashboard = $this->extract_remote_dashboard_summary($data);
+			if (is_array($remote_state)) {
+				Admin_Settings::sync_remote_account_snapshot($remote_state, is_array($remote_dashboard) ? $remote_dashboard : array());
+			}
+			return rest_ensure_response(array(
+				'ok' => true,
+				'account_state' => Admin_Settings::get_public_account_state(),
+				'dashboard_summary' => Admin_Settings::get_public_account_dashboard_state(),
+				'message' => isset($data['message']) && is_string($data['message'])
+					? $data['message']
+					: __('Site connected successfully.', 'ai-visibility-inspector'),
+			));
+		}
+
+		return new \WP_Error(
+			'backend_error',
+			__('AiVI account connection failed.', 'ai-visibility-inspector'),
+			array(
+				'status' => $status_code > 0 ? $status_code : 502,
+				'body' => is_string($body) ? substr($body, 0, 300) : '',
+			)
+		);
+	}
+
+	/**
+	 * Disconnect the locally stored account state and optionally notify backend.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function proxy_account_disconnect($request)
+	{
+		$notify_backend = (bool) $request->get_param('notify_backend');
+		$backend_url = Admin_Settings::get_backend_url( 'account_disconnect' );
+		$previous_state = Admin_Settings::get_account_state();
+
+		if ($notify_backend && !empty($backend_url) && !empty($previous_state['account_id'])) {
+			$disconnect_url = trailingslashit($backend_url) . 'aivi/v1/account/disconnect';
+			$site_identity = Admin_Settings::get_site_identity_payload();
+			$this->wp_remote_post_with_retries(
+				$disconnect_url,
+				array(
+					'timeout' => 10,
+					'sslverify' => true,
+					'httpversion' => '1.1',
+					'headers' => Admin_Settings::get_api_headers(),
+					'body' => wp_json_encode(array(
+						'account_id' => $previous_state['account_id'],
+						'site' => $site_identity,
+					)),
+				),
+				1
+			);
+		}
+
+		Admin_Settings::clear_account_state();
+
+		return rest_ensure_response(array(
+			'ok' => true,
+			'account_state' => Admin_Settings::get_public_account_state(),
+			'message' => __('Site disconnected from AiVI account.', 'ai-visibility-inspector'),
+		));
+	}
+
+	/**
+	 * Proxy hosted subscription checkout creation.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function proxy_billing_subscribe($request)
+	{
+		$plan_code = sanitize_text_field((string) $request->get_param('plan_code'));
+		if (!in_array($plan_code, AIVI_PLAN_CODES, true)) {
+			return new \WP_Error(
+				'invalid_plan_code',
+				__('A valid billing plan is required.', 'ai-visibility-inspector'),
+				array('status' => 400)
+			);
+		}
+
+		return $this->proxy_billing_request(
+			'aivi/v1/billing/checkout/subscription',
+			array(
+				'plan_code' => $plan_code,
+			)
+		);
+	}
+
+	/**
+	 * Proxy hosted top-up checkout creation.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function proxy_billing_topup($request)
+	{
+		$pack_code = sanitize_text_field((string) $request->get_param('topup_pack_code'));
+		if (!in_array($pack_code, AIVI_TOPUP_PACK_CODES, true)) {
+			return new \WP_Error(
+				'invalid_topup_pack_code',
+				__('A valid credit pack is required.', 'ai-visibility-inspector'),
+				array('status' => 400)
+			);
+		}
+
+		return $this->proxy_billing_request(
+			'aivi/v1/billing/checkout/topup',
+			array(
+				'topup_pack_code' => $pack_code,
+			)
+		);
+	}
+
+	/**
+	 * Proxy manage billing redirect lookup.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function proxy_billing_manage($request)
+	{
+		return $this->proxy_billing_request('aivi/v1/billing/manage', array(), true);
+	}
+
+	/**
+	 * Proxy the public PayPal return callback to the backend and land users back on the local settings page.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response
+	 */
+	public function proxy_billing_return($request)
+	{
+		$backend_url = Admin_Settings::get_backend_url( 'billing_return' );
+		if (empty($backend_url)) {
+			return $this->build_redirect_rest_response(
+				$this->build_local_billing_status_url(array(
+					'aivi_billing_return' => 'backend_not_configured',
+				))
+			);
+		}
+
+		$query_params = array();
+		foreach (array('token', 'PayerID', 'payer_id', 'ba_token', 'baToken', 'subscription_id', 'subscriptionId') as $key) {
+			$value = $request->get_param($key);
+			if ($value !== null && $value !== '') {
+				$query_params[$key] = sanitize_text_field((string) $value);
+			}
+		}
+
+		$backend_return_url = add_query_arg(
+			$query_params,
+			trailingslashit($backend_url) . 'aivi/v1/billing/return/paypal'
+		);
+
+		$response = $this->wp_remote_get_with_retries(
+			$backend_return_url,
+			array(
+				'timeout' => 20,
+				'sslverify' => true,
+				'httpversion' => '1.1',
+				'headers' => Admin_Settings::get_api_headers(),
+				'redirection' => 0,
+			),
+			2
+		);
+
+		if (is_wp_error($response)) {
+			$this->log_event('billing_return_proxy_error', array(
+				'error' => $response->get_error_message(),
+			));
+			return $this->build_redirect_rest_response(
+				$this->build_local_billing_status_url(array(
+					'aivi_billing_return' => 'remote_unavailable',
+				))
+			);
+		}
+
+		$status_code = wp_remote_retrieve_response_code($response);
+		$location = wp_remote_retrieve_header($response, 'location');
+		$redirect_params = $this->extract_billing_redirect_params($location);
+
+		if ($status_code >= 300 && $status_code < 400) {
+			return $this->build_redirect_rest_response(
+				$this->build_local_billing_status_url($redirect_params)
+			);
+		}
+
+		if ($status_code >= 200 && $status_code < 300) {
+			return $this->build_redirect_rest_response(
+				$this->build_local_billing_status_url(array(
+					'aivi_billing_return' => 'processed',
+				))
+			);
+		}
+
+		$this->log_event('billing_return_proxy_http_error', array(
+			'status' => $status_code,
+			'body' => substr((string) wp_remote_retrieve_body($response), 0, 300),
+		));
+
+		return $this->build_redirect_rest_response(
+			$this->build_local_billing_status_url(array(
+				'aivi_billing_return' => 'backend_error',
+			))
+		);
+	}
+
+	/**
 	 * Proxy analyze request to backend (Phase 5: Async pattern)
 	 *
 	 * Calls POST /aivi/v1/analyze/run which returns 202 Accepted with run_id.
@@ -416,6 +909,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			// Pass generated run_id to backend
 			'run_id' => $run_id,
 			'manifest' => $manifest,
+			'token_estimate' => absint($request->get_param('token_estimate')),
 			'run_metadata' => array(
 				'site_id' => $site_id,
 				'user_id' => get_current_user_id(),
@@ -424,6 +918,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 				'source' => 'editor-sidebar',
 				'prompt_version' => 'v1',
 				'feature_flags' => Admin_Settings::get_feature_flags(),
+				'account_state' => Admin_Settings::get_account_state(),
 			),
 			'enable_web_lookups' => Admin_Settings::are_web_lookups_enabled(),
 			'feature_flags' => Admin_Settings::get_feature_flags(),
@@ -493,6 +988,9 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 		$status_code = wp_remote_retrieve_response_code($response);
 		if ($status_code < 200 || $status_code >= 300) {
 			$body_preview = wp_remote_retrieve_body($response);
+			$parsed_error = json_decode($body_preview, true);
+			$remote_error_code = (is_array($parsed_error) && !empty($parsed_error['error'])) ? sanitize_key($parsed_error['error']) : 'backend_error';
+			$remote_error_message = (is_array($parsed_error) && !empty($parsed_error['message'])) ? sanitize_text_field($parsed_error['message']) : __('Backend returned error.', 'ai-visibility-inspector');
 			$diagnostics = array(
 				'request' => $request_context,
 				'response' => array(
@@ -504,11 +1002,12 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			$this->log_event('backend_analyze_http_error', array(
 				'run_id' => $run_id,
 				'status' => $status_code,
+				'remote_error_code' => $remote_error_code,
 				'diagnostics' => $diagnostics
 			));
 			return new \WP_Error(
-				'backend_error',
-				__('Backend returned error.', 'ai-visibility-inspector'),
+				$remote_error_code,
+				$remote_error_message,
 				array(
 					'status' => $status_code,
 					'diagnostics' => $diagnostics
@@ -666,6 +1165,20 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 					$error = is_wp_error($s3_response) ? $s3_response->get_error_message() : 'HTTP ' . wp_remote_retrieve_response_code($s3_response);
 					$this->log_event('backend_s3_fetch_error', array('run_id' => $run_id, 'error' => $error));
 				}
+			}
+
+			if (
+				isset($data['status']) &&
+				in_array($data['status'], array('success', 'success_partial', 'failed', 'failed_schema', 'failed_too_long', 'aborted'), true) &&
+				isset($data['billing_summary']) &&
+				is_array($data['billing_summary'])
+			) {
+				Admin_Settings::record_run_usage_summary(
+					(string) $run_id,
+					(string) $data['status'],
+					$data['billing_summary'],
+					(string) ($data['completed_at'] ?? '')
+				);
 			}
 
 			$this->log_event('backend_status_check', array('run_id' => $run_id, 'status' => $data['status'] ?? 'unknown'));
@@ -1258,6 +1771,266 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			return true;
 		}
 
+		return false;
+	}
+
+	/**
+	 * Build a normalized account summary response payload.
+	 *
+	 * @param array       $account_state Normalized account state.
+	 * @param bool        $remote_available Whether remote summary is available.
+	 * @param string      $source local|remote.
+	 * @param string|null $sync_status Optional sync status.
+	 * @return array
+	 */
+	private function build_account_summary_response($account_state, $remote_available, $source, $sync_status, $dashboard_state = array())
+	{
+		return array(
+			'ok' => true,
+			'remote_available' => (bool) $remote_available,
+			'source' => sanitize_text_field((string) $source),
+			'sync_status' => $sync_status ? sanitize_text_field((string) $sync_status) : null,
+			'account_state' => Admin_Settings::get_public_account_state(),
+			'dashboard_summary' => Admin_Settings::get_public_account_dashboard_state($dashboard_state),
+			'site' => Admin_Settings::get_site_identity_payload(),
+		);
+	}
+
+	/**
+	 * Build a REST redirect response.
+	 *
+	 * @param string $location Redirect target.
+	 * @return WP_REST_Response
+	 */
+	private function build_redirect_rest_response($location)
+	{
+		$response = new \WP_REST_Response(null, 302);
+		$response->header('Location', esc_url_raw($location));
+		$response->header('Cache-Control', 'no-store');
+		return $response;
+	}
+
+	/**
+	 * Build the local AiVI billing status URL on the WordPress admin domain.
+	 *
+	 * @param array $params Optional query params.
+	 * @return string
+	 */
+	private function build_local_billing_status_url($params = array())
+	{
+		$base_url = add_query_arg(
+			array(
+				'page' => Admin_Settings::PAGE_SLUG,
+			),
+			admin_url('admin.php')
+		);
+
+		$allowed = array();
+		foreach (array('aivi_billing_return', 'provider_order_id', 'payer_id', 'subscription_ref') as $key) {
+			if (!empty($params[$key])) {
+				$allowed[$key] = sanitize_text_field((string) $params[$key]);
+			}
+		}
+
+		if (empty($allowed['aivi_billing_return'])) {
+			$allowed['aivi_billing_return'] = 'unknown';
+		}
+
+		return add_query_arg($allowed, $base_url) . '#aivi-billing-status';
+	}
+
+	/**
+	 * Extract the small billing status payload from a backend redirect location.
+	 *
+	 * @param string $location Backend redirect location.
+	 * @return array
+	 */
+	private function extract_billing_redirect_params($location)
+	{
+		$location = is_string($location) ? trim($location) : '';
+		if ($location === '') {
+			return array(
+				'aivi_billing_return' => 'unknown',
+			);
+		}
+
+		$query = wp_parse_url($location, PHP_URL_QUERY);
+		$params = array();
+		if (is_string($query) && $query !== '') {
+			parse_str($query, $params);
+		}
+
+		$filtered = array();
+		foreach (array('aivi_billing_return', 'provider_order_id', 'payer_id', 'subscription_ref') as $key) {
+			if (!empty($params[$key])) {
+				$filtered[$key] = sanitize_text_field((string) $params[$key]);
+			}
+		}
+
+		if (empty($filtered['aivi_billing_return'])) {
+			$filtered['aivi_billing_return'] = 'unknown';
+		}
+
+		return $filtered;
+	}
+
+	/**
+	 * Proxy a billing request to the backend with bound account and site context.
+	 *
+	 * @param string $backend_path Backend path relative to stage root.
+	 * @param array  $payload Additional request payload.
+	 * @param bool   $allow_not_supported Whether a 501 backend response should be relayed.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	private function proxy_billing_request($backend_path, $payload = array(), $allow_not_supported = false)
+	{
+		$backend_url = Admin_Settings::get_backend_url( 'billing' );
+		if (empty($backend_url)) {
+			return new \WP_Error(
+				'no_backend',
+				__('AiVI billing backend is not configured.', 'ai-visibility-inspector'),
+				array('status' => 503)
+			);
+		}
+
+		$account_state = Admin_Settings::get_account_state();
+		$account_id = sanitize_text_field((string) ($account_state['account_id'] ?? ''));
+		if ($account_id === '') {
+			return new \WP_Error(
+				'account_not_connected',
+				__('Connect this site to an AiVI account before using billing actions.', 'ai-visibility-inspector'),
+				array('status' => 409)
+			);
+		}
+
+		$site_identity = Admin_Settings::get_site_identity_payload();
+		$request_payload = array_merge(
+			array(
+				'account' => array(
+					'account_id' => $account_id,
+					'connection_status' => sanitize_text_field((string) ($account_state['connection_status'] ?? '')),
+					'plan_code' => sanitize_text_field((string) ($account_state['plan_code'] ?? '')),
+					'subscription_status' => sanitize_text_field((string) ($account_state['subscription_status'] ?? '')),
+				),
+				'site' => $site_identity,
+			),
+			is_array($payload) ? $payload : array()
+		);
+
+		$response = $this->wp_remote_post_with_retries(
+			trailingslashit($backend_url) . ltrim($backend_path, '/'),
+			array(
+				'timeout' => 20,
+				'sslverify' => true,
+				'httpversion' => '1.1',
+				'headers' => Admin_Settings::get_api_headers(),
+				'body' => wp_json_encode($request_payload),
+			),
+			2
+		);
+
+		if (is_wp_error($response)) {
+			return new \WP_Error(
+				'billing_backend_error',
+				__('AiVI billing service is currently unavailable.', 'ai-visibility-inspector'),
+				array(
+					'status' => 503,
+					'diagnostics' => $this->build_http_diagnostics(
+						$response->get_error_code(),
+						$response->get_error_message(),
+						$response->get_error_data()
+					),
+				)
+			);
+		}
+
+		$status_code = wp_remote_retrieve_response_code($response);
+		$body = wp_remote_retrieve_body($response);
+		$data = json_decode($body, true);
+
+		if ($status_code >= 200 && $status_code < 300 && is_array($data)) {
+			return rest_ensure_response($data);
+		}
+
+		if ($allow_not_supported && $status_code === 501 && is_array($data)) {
+			return rest_ensure_response($data);
+		}
+
+		return new \WP_Error(
+			'billing_backend_error',
+			__('AiVI billing request failed.', 'ai-visibility-inspector'),
+			array(
+				'status' => $status_code > 0 ? $status_code : 502,
+				'body' => is_string($body) ? substr($body, 0, 300) : '',
+			)
+		);
+	}
+
+	/**
+	 * Extract account state from a backend account response.
+	 *
+	 * @param mixed $data Backend response.
+	 * @return array|null
+	 */
+	private function extract_remote_account_state($data)
+	{
+		if (!is_array($data)) {
+			return null;
+		}
+
+		if (isset($data['account_state']) && is_array($data['account_state'])) {
+			return $data['account_state'];
+		}
+
+		if (isset($data['data']) && is_array($data['data']) && isset($data['data']['account_state']) && is_array($data['data']['account_state'])) {
+			return $data['data']['account_state'];
+		}
+
+		return null;
+	}
+
+	/**
+	 * Extract dashboard summary from a backend account response.
+	 *
+	 * @param mixed $data Backend response.
+	 * @return array|null
+	 */
+	private function extract_remote_dashboard_summary($data)
+	{
+		if (!is_array($data)) {
+			return null;
+		}
+
+		if (isset($data['dashboard_summary']) && is_array($data['dashboard_summary'])) {
+			return $data['dashboard_summary'];
+		}
+
+		if (isset($data['data']) && is_array($data['data']) && isset($data['data']['dashboard_summary']) && is_array($data['data']['dashboard_summary'])) {
+			return $data['data']['dashboard_summary'];
+		}
+
+		return null;
+	}
+
+	/**
+	 * Determine whether account summary should fall back to local state.
+	 *
+	 * @param int    $status_code HTTP status code.
+	 * @param string $body Raw body preview.
+	 * @return bool
+	 */
+	private function should_fallback_account_summary($status_code, $body)
+	{
+		$body = is_string($body) ? strtolower($body) : '';
+		if ($status_code === 404) {
+			return true;
+		}
+		if ($status_code === 403 && strpos($body, 'missing authentication token') !== false) {
+			return true;
+		}
+		if ($status_code === 501) {
+			return true;
+		}
 		return false;
 	}
 	/**

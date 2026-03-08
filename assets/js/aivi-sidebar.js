@@ -439,6 +439,254 @@
         return config.isEnabled !== false;
     }
 
+    function normalizeAccountState() {
+        const raw = (config && typeof config.accountState === 'object' && config.accountState) ? config.accountState : {};
+        const credits = (raw.credits && typeof raw.credits === 'object') ? raw.credits : {};
+        const entitlements = (raw.entitlements && typeof raw.entitlements === 'object') ? raw.entitlements : {};
+        const site = (raw.site && typeof raw.site === 'object') ? raw.site : {};
+        const normalizedStatus = ['disconnected', 'pending', 'connected', 'revoked', 'error'].includes(String(raw.connectionStatus || '').toLowerCase())
+            ? String(raw.connectionStatus || '').toLowerCase()
+            : 'disconnected';
+        const normalizeInt = (value) => {
+            if (value === null || value === undefined || value === '') return null;
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : null;
+        };
+
+        return {
+            connected: raw.connected === true,
+            connectionStatus: normalizedStatus,
+            accountLabel: String(raw.accountLabel || '').trim(),
+            planCode: String(raw.planCode || '').trim(),
+            planName: String(raw.planName || '').trim(),
+            subscriptionStatus: String(raw.subscriptionStatus || '').trim(),
+            trialStatus: String(raw.trialStatus || '').trim(),
+            siteBindingStatus: String(raw.siteBindingStatus || '').trim(),
+            updatedAt: String(raw.updatedAt || '').trim(),
+            credits: {
+                includedRemaining: normalizeInt(credits.includedRemaining),
+                topupRemaining: normalizeInt(credits.topupRemaining),
+                lastRunDebit: normalizeInt(credits.lastRunDebit)
+            },
+            entitlements: {
+                analysisAllowed: entitlements.analysisAllowed === true,
+                webLookupsAllowed: entitlements.webLookupsAllowed === true,
+                maxSites: normalizeInt(entitlements.maxSites),
+                siteLimitReached: entitlements.siteLimitReached === true
+            },
+            site: {
+                connectedDomain: String(site.connectedDomain || '').trim()
+            }
+        };
+    }
+
+    function formatCreditCount(value) {
+        if (!Number.isFinite(value)) return '';
+        try {
+            return new Intl.NumberFormat().format(value);
+        } catch (e) {
+            return String(value);
+        }
+    }
+
+    function normalizeBillingSummary(raw) {
+        if (!raw || typeof raw !== 'object') return null;
+        const normalizeInt = (value) => {
+            if (value === null || value === undefined || value === '') return null;
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? Math.floor(parsed) : null;
+        };
+
+        const billingStatus = String(raw.billing_status || '').trim();
+        if (!billingStatus) return null;
+
+        return {
+            billingStatus: billingStatus,
+            creditsUsed: normalizeInt(raw.credits_used),
+            reservedCredits: normalizeInt(raw.reserved_credits),
+            refundedCredits: normalizeInt(raw.refunded_credits),
+            previousBalance: normalizeInt(raw.previous_balance),
+            currentBalance: normalizeInt(raw.current_balance)
+        };
+    }
+
+    function formatAccountSyncLabel(value) {
+        const input = String(value || '').trim();
+        if (!input) return '';
+        const parsed = new Date(input);
+        if (Number.isNaN(parsed.getTime())) return '';
+        return `Last sync ${parsed.toLocaleString()}`;
+    }
+
+    function buildAdminDashboardUrl(anchor) {
+        const base = typeof config.adminDashboardUrl === 'string' ? config.adminDashboardUrl.trim() : '';
+        if (!base) return '';
+        if (!anchor) return base;
+        const safeAnchor = String(anchor).startsWith('#') ? String(anchor) : `#${String(anchor)}`;
+        return `${base}${safeAnchor}`;
+    }
+
+    function buildAccountAction(label, anchor, primary) {
+        const href = buildAdminDashboardUrl(anchor);
+        if (!href) return null;
+        return {
+            label: String(label || '').trim(),
+            href,
+            primary: primary === true
+        };
+    }
+
+    function buildAccountStatusSummary(rawBillingSummary) {
+        const accountState = normalizeAccountState();
+        const billingSummary = normalizeBillingSummary(rawBillingSummary);
+        const isConnected = accountState.connected && accountState.connectionStatus === 'connected';
+        const computedBalance = [accountState.credits.includedRemaining, accountState.credits.topupRemaining]
+            .filter((value) => Number.isFinite(value))
+            .reduce((sum, value) => sum + value, 0);
+        const hasComputedBalance = [accountState.credits.includedRemaining, accountState.credits.topupRemaining].some((value) => Number.isFinite(value));
+        const hasLiveBillingBalance = billingSummary && Number.isFinite(billingSummary.currentBalance);
+        const totalCredits = hasLiveBillingBalance ? billingSummary.currentBalance : computedBalance;
+        const hasCreditBalance = hasLiveBillingBalance || hasComputedBalance;
+        const creditLabel = hasCreditBalance
+            ? `${formatCreditCount(totalCredits)} credits remaining${hasLiveBillingBalance ? ' after this analysis' : ''}`
+            : '';
+        const planLabel = accountState.planName || accountState.planCode || 'Connected plan';
+        const accountLabel = accountState.accountLabel || 'AiVI account';
+        const syncLabel = formatAccountSyncLabel(accountState.updatedAt);
+        const activeMeta = [accountState.subscriptionStatus, accountState.trialStatus, syncLabel].filter(Boolean);
+
+        if (isConnected && accountState.entitlements.analysisAllowed !== true) {
+            let message = 'This site is connected, but analysis is not available for the current account state. Add credits or update the plan in your AiVI account.';
+            if (accountState.entitlements.siteLimitReached || accountState.siteBindingStatus === 'limit_reached') {
+                message = 'This site has reached the plan site limit. Remove another connected site or upgrade the plan in your AiVI account.';
+            } else if (hasCreditBalance && totalCredits <= 0) {
+                message = 'This connected account has no analysis credits remaining. Add credits or move to a plan with capacity before running analysis.';
+            }
+            return {
+                kind: 'blocked',
+                shouldBlockAnalysis: true,
+                badge: 'Access required',
+                title: 'Analysis unavailable for this site',
+                message,
+                detail: planLabel,
+                meta: [accountLabel, ...activeMeta].filter(Boolean),
+                actions: [
+                    buildAccountAction('Buy credits', '#aivi-billing-topups', true),
+                    buildAccountAction('Change plan', '#aivi-billing-plans', false)
+                ].filter(Boolean)
+            };
+        }
+
+        if (isConnected) {
+            return {
+                kind: 'connected',
+                shouldBlockAnalysis: false,
+                badge: accountState.trialStatus ? 'Trial active' : 'Plan active',
+                title: planLabel,
+                message: creditLabel || `${accountLabel} is connected and analysis is enabled for this site.`,
+                detail: accountState.site.connectedDomain || accountLabel,
+                meta: activeMeta,
+                actions: [
+                    buildAccountAction('Manage plan', '#aivi-billing-status', true),
+                    buildAccountAction('Buy credits', '#aivi-billing-topups', false)
+                ].filter(Boolean)
+            };
+        }
+
+        if (accountState.connectionStatus === 'pending') {
+            return {
+                kind: 'fallback',
+                shouldBlockAnalysis: false,
+                badge: 'Connection pending',
+                title: 'Account connection in progress',
+                message: 'Site connection is not complete yet. Analysis still uses the current AiVI service path while account linking rolls out.',
+                detail: config.backendConfigured === true ? 'AiVI service ready' : 'AiVI setup required',
+                meta: [syncLabel].filter(Boolean),
+                actions: [buildAccountAction('Open dashboard', '', false)].filter(Boolean)
+            };
+        }
+
+        if (accountState.connectionStatus === 'revoked' || accountState.connectionStatus === 'error') {
+            return {
+                kind: 'fallback',
+                shouldBlockAnalysis: false,
+                badge: 'Connection needs attention',
+                title: 'Account connection needs attention',
+                message: 'The stored account connection needs attention. Analysis continues through the current AiVI service path until account control is fully active.',
+                detail: config.backendConfigured === true ? 'AiVI service ready' : 'AiVI setup required',
+                meta: [syncLabel].filter(Boolean),
+                actions: [buildAccountAction('Open dashboard', '', false)].filter(Boolean)
+            };
+        }
+
+        return {
+            kind: 'fallback',
+            shouldBlockAnalysis: false,
+            badge: 'Local mode',
+            title: 'AiVI service migration mode',
+            message: config.backendConfigured === true
+                ? 'This site is not connected to an AiVI account yet. Analysis still runs through the current AiVI service path during migration.'
+                : 'AiVI is not ready on this site yet. Connect your AiVI account or contact support before running analysis.',
+            detail: config.backendConfigured === true ? 'AiVI service ready' : 'AiVI setup required',
+            meta: [syncLabel].filter(Boolean),
+            actions: [buildAccountAction('Open dashboard', '', false)].filter(Boolean)
+        };
+    }
+
+    function buildPostRunDebitSummary(raw) {
+        const billing = normalizeBillingSummary(raw);
+        if (!billing) return null;
+        if (!['settled', 'zero_charge', 'refunded'].includes(billing.billingStatus)) return null;
+
+        if (billing.billingStatus === 'settled') {
+            return {
+                badge: 'Credits',
+                title: `Last analysis debit: ${formatCreditCount(billing.creditsUsed || 0)} credits`,
+                message: 'This completed analysis has been settled against your account balance.',
+                metrics: [
+                    Number.isFinite(billing.previousBalance) && Number.isFinite(billing.currentBalance)
+                        ? {
+                            label: 'Balance',
+                            value: `${formatCreditCount(billing.previousBalance)} -> ${formatCreditCount(billing.currentBalance)}`
+                        }
+                        : null,
+                    Number.isFinite(billing.refundedCredits) && billing.refundedCredits > 0
+                        ? {
+                            label: 'Released',
+                            value: `${formatCreditCount(billing.refundedCredits)}`
+                        }
+                        : null
+                ].filter(Boolean)
+            };
+        }
+
+        const restoredBalance = Number.isFinite(billing.currentBalance)
+            ? formatCreditCount(billing.currentBalance)
+            : '';
+
+        return {
+            badge: 'Credits',
+            title: 'Last analysis debit: 0 credits',
+            message: billing.billingStatus === 'refunded'
+                ? 'This run did not complete successfully, so the reserved credits were returned to your balance.'
+                : 'This run completed without billable AI usage, so no credits were charged.',
+            metrics: [
+                restoredBalance
+                    ? {
+                        label: 'Balance',
+                        value: restoredBalance
+                    }
+                    : null,
+                Number.isFinite(billing.refundedCredits) && billing.refundedCredits > 0
+                    ? {
+                        label: 'Returned',
+                        value: `${formatCreditCount(billing.refundedCredits)}`
+                    }
+                    : null
+            ].filter(Boolean)
+        };
+    }
+
     function getCallRestTimeoutMs(path, method) {
         const p = String(path || '');
         const m = String(method || 'GET').toUpperCase();
@@ -563,6 +811,8 @@
 
     async function runAutoAnalysisOnLoad() {
         if (!config || !config.autoRunOnLoad) return;
+        const accountStatusSummary = buildAccountStatusSummary();
+        if (accountStatusSummary.shouldBlockAnalysis) return;
         const post = readEditorPost();
         if (!post || !post.content) return;
 
@@ -585,6 +835,7 @@
             site_id: window.location.hostname,
             meta_description: post.metaDescription || '',
             enable_web_lookups: false,
+            token_estimate: preResult.data.tokenEstimate || 0,
             manifest: preResult.data.manifest
         });
     }
@@ -1062,6 +1313,13 @@
                 retry: true
             };
         }
+        if (code === 'insufficient_credits' || code === 'analysis_not_allowed' || status === 402 || status === 403) {
+            return {
+                type: 'warning',
+                message: payload && payload.message ? String(payload.message) : 'AiVI could not admit this analysis run for the current account state.',
+                retry: true
+            };
+        }
         if (status === 400) {
             return {
                 type: 'error',
@@ -1286,6 +1544,7 @@
                 createElement(Button, {
                     isSmall: true,
                     onClick: props.onRetry,
+                    disabled: props.retryDisabled,
                     style: { background: COLORS.error, color: COLORS.white, border: 'none' }
                 }, 'Retry')
             )
@@ -1670,6 +1929,214 @@
         );
     }
 
+    function AccountStatusCard(props) {
+        if (!props || !props.summary) return null;
+        const summary = props.summary;
+        const compact = props.compact === true;
+        const tone = summary.kind === 'connected'
+            ? {
+                background: '#ECFDF5',
+                border: '#A7F3D0',
+                badgeBackground: '#D1FAE5',
+                badgeColor: '#065F46',
+                titleColor: '#065F46'
+            }
+            : summary.kind === 'blocked'
+                ? {
+                    background: '#FEF2F2',
+                    border: '#FECACA',
+                    badgeBackground: '#FEE2E2',
+                    badgeColor: '#991B1B',
+                    titleColor: '#991B1B'
+                }
+                : {
+                    background: '#F8FAFC',
+                    border: '#DBEAFE',
+                    badgeBackground: '#EFF6FF',
+                    badgeColor: '#1D4ED8',
+                    titleColor: '#16325C'
+                };
+
+        return createElement('div', {
+            style: {
+                background: tone.background,
+                border: '1px solid ' + tone.border,
+                borderRadius: 8,
+                padding: compact ? '10px 12px' : '12px',
+                marginBottom: 12
+            }
+        },
+            createElement('div', {
+                style: {
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 8,
+                    marginBottom: 8
+                }
+            },
+                createElement('span', {
+                    style: {
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        padding: '4px 10px',
+                        borderRadius: 999,
+                        background: tone.badgeBackground,
+                        color: tone.badgeColor,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: '0.02em'
+                    }
+                }, summary.badge),
+                summary.detail && createElement('span', {
+                    style: {
+                        fontSize: 11,
+                        color: COLORS.subtext,
+                        fontWeight: 600,
+                        textAlign: 'right'
+                    }
+                }, summary.detail)
+            ),
+            createElement('div', {
+                style: {
+                    fontSize: compact ? 13 : 14,
+                    fontWeight: 700,
+                    color: tone.titleColor,
+                    marginBottom: 4
+                }
+            }, summary.title),
+            createElement('div', {
+                style: {
+                    fontSize: 12,
+                    color: COLORS.subtext,
+                    lineHeight: 1.55
+                }
+            }, summary.message),
+            Array.isArray(summary.meta) && summary.meta.length > 0 && createElement('div', {
+                style: {
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '6px 10px',
+                    marginTop: 8,
+                    fontSize: 11,
+                    color: COLORS.subtext
+                }
+            }, summary.meta.map((item, index) => createElement('span', { key: `${summary.kind}-${index}` }, item))),
+            Array.isArray(summary.actions) && summary.actions.length > 0 && createElement('div', {
+                style: {
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                    marginTop: 10
+                }
+            }, summary.actions.map((action, index) => createElement('a', {
+                key: `${summary.kind}-action-${index}`,
+                href: action.href,
+                style: {
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: 32,
+                    padding: action.primary ? '0 12px' : '0 11px',
+                    borderRadius: 999,
+                    border: action.primary ? '1px solid #1D4ED8' : '1px solid #BFDBFE',
+                    background: action.primary ? '#1D4ED8' : '#EFF6FF',
+                    color: action.primary ? '#FFFFFF' : '#1D4ED8',
+                    textDecoration: 'none',
+                    fontSize: 12,
+                    fontWeight: 700
+                }
+            }, action.label)))
+        );
+    }
+
+    function CreditDebitCard(props) {
+        if (!props || !props.summary) return null;
+        const summary = props.summary;
+
+        return createElement('div', {
+            style: {
+                background: COLORS.primaryLight,
+                border: '1px solid #BFDBFE',
+                borderRadius: 10,
+                padding: '12px 14px',
+                marginBottom: 16
+            }
+        },
+            createElement('div', {
+                style: {
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 8,
+                    marginBottom: 8
+                }
+            },
+                createElement('span', {
+                    style: {
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        padding: '4px 10px',
+                        borderRadius: 999,
+                        background: '#DBEAFE',
+                        color: '#1D4ED8',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: '0.02em'
+                    }
+                }, summary.badge || 'Credits')
+            ),
+            createElement('div', {
+                style: {
+                    fontSize: 14,
+                    fontWeight: 700,
+                    color: COLORS.scoreText,
+                    marginBottom: 4
+                }
+            }, summary.title),
+            createElement('div', {
+                style: {
+                    fontSize: 12,
+                    color: COLORS.subtext,
+                    lineHeight: 1.55
+                }
+            }, summary.message),
+            Array.isArray(summary.metrics) && summary.metrics.length > 0 && createElement('div', {
+                style: {
+                    display: 'grid',
+                    gridTemplateColumns: summary.metrics.length > 1 ? '1fr 1fr' : '1fr',
+                    gap: 8,
+                    marginTop: 10
+                }
+            },
+                summary.metrics.map((metric, index) => createElement('div', {
+                    key: `billing-metric-${index}`,
+                    style: {
+                        background: COLORS.white,
+                        border: '1px solid #DBEAFE',
+                        borderRadius: 8,
+                        padding: '8px 10px'
+                    }
+                },
+                    createElement('div', {
+                        style: {
+                            fontSize: 11,
+                            color: COLORS.subtext,
+                            marginBottom: 2
+                        }
+                    }, metric.label),
+                    createElement('div', {
+                        style: {
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: COLORS.scoreText
+                        }
+                    }, metric.value)
+                ))
+            )
+        );
+    }
+
 
 
     // ============================================
@@ -1699,6 +2166,9 @@
         const staleEventRunRef = useRef('');
         const detailsDrawer = useAiviDetailsDrawer();
         const [isStaleBanner] = useStaleBanner();
+        const billingSummary = buildPostRunDebitSummary(report && report.billing_summary);
+        const accountStatusSummary = buildAccountStatusSummary(report && report.billing_summary);
+        const analysisBlocked = accountStatusSummary.shouldBlockAnalysis === true;
 
         useEffect(() => {
             if (!isPluginAvailable()) {
@@ -1870,6 +2340,13 @@
                 return;
             }
 
+            if (analysisBlocked) {
+                setState('error');
+                setErrorMessage(accountStatusSummary.message);
+                setAnalysisPhase('idle');
+                return;
+            }
+
             setState('analyzing');
             setAnalysisPhase('preflight');
             setErrorMessage(null);
@@ -1921,6 +2398,7 @@
                 site_id: window.location.hostname,
                 meta_description: post.metaDescription || '',
                 enable_web_lookups: false,
+                token_estimate: preResult.data.tokenEstimate || 0,
                 manifest: preResult.data.manifest
             });
 
@@ -2634,11 +3112,16 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
         // Render
         return createElement(PluginSidebar, { name: 'aivi-sidebar', title: 'AiVI Inspector' },
             createElement(PanelBody, { title: 'Content Analysis', initialOpen: true },
+                state !== 'analyzing' && createElement(AccountStatusCard, {
+                    summary: accountStatusSummary,
+                    compact: state === 'success'
+                }),
 
                 // IDLE STATE
                 state === 'idle' && createElement(LauncherCard, {
                     onAnalyze: runAnalysis,
-                    onClearCache: clearCache
+                    onClearCache: clearCache,
+                    disabled: analysisBlocked
                 }),
                 // ANALYZING STATE
                 state === 'analyzing' && createElement('div', {
@@ -2674,7 +3157,8 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                     createElement(ProgressBar, {
                         error: true,
                         errorMessage: errorMessage,
-                        onRetry: runAnalysis
+                        onRetry: runAnalysis,
+                        retryDisabled: analysisBlocked
                     })
                 ),
 
@@ -2703,6 +3187,7 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                     createElement(Button, {
                         isPrimary: true,
                         onClick: runAnalysis,
+                        disabled: analysisBlocked,
                         style: { width: '100%', justifyContent: 'center', height: 40 }
                     }, 'Retry analysis')
                 ),
@@ -2735,6 +3220,7 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                             isSecondary: true,
                             isSmall: true,
                             onClick: runAnalysis,
+                            disabled: analysisBlocked,
                             style: { marginLeft: 12 }
                         }, 'Re-run analysis')
                     ),
@@ -2746,6 +3232,7 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                         lastRun: getTimeAgo(),
                         animate: showSuccessAnim
                     }),
+                    billingSummary && createElement(CreditDebitCard, { summary: billingSummary }),
                     createElement('div', { style: { display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 16 } },
                         createElement(ScoreCircle, { value: getScores().aeo, max: 55, color: COLORS.aeoRing, label: 'AEO Score' }),
                         createElement(ScoreCircle, { value: getScores().geo, max: 45, color: COLORS.geoRing, label: 'GEO Score' })
@@ -2819,7 +3306,7 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
 
                     createElement(JsonLdPanel, { jsonLd: getFaqJsonLd() }),
                     createElement('div', { style: { marginTop: 12, display: 'flex', gap: 8 } },
-                        createElement(Button, { isSecondary: true, isSmall: true, onClick: runAnalysis }, 'Re-analyze'),
+                        createElement(Button, { isSecondary: true, isSmall: true, onClick: runAnalysis, disabled: analysisBlocked }, 'Re-analyze'),
                         createElement(Button, { isTertiary: true, isSmall: true, onClick: clearCache }, 'Clear')
                     ),
 

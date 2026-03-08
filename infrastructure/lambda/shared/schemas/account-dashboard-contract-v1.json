@@ -1,0 +1,51 @@
+{
+  "schema_version": "v1",
+  "description": "Canonical customer dashboard summary payload for AiVI WordPress surfaces.",
+  "dashboard_summary": {
+    "account": {
+      "connected": "boolean",
+      "connection_status": "disconnected|pending|connected|revoked|error",
+      "display_state": "string",
+      "account_label": "string",
+      "last_sync_at": "ISO-8601 string|null"
+    },
+    "plan": {
+      "plan_code": "string",
+      "plan_name": "string",
+      "subscription_status": "string",
+      "trial_status": "string",
+      "trial_active": "boolean",
+      "renewal_date": "ISO-8601 string|null",
+      "cancel_at": "ISO-8601 string|null",
+      "max_sites": "integer|null"
+    },
+    "credits": {
+      "included_remaining": "integer|null",
+      "topup_remaining": "integer|null",
+      "total_remaining": "integer|null",
+      "reserved_credits": "integer|null",
+      "last_run_debit": "integer|null",
+      "monthly_included": "integer|null",
+      "monthly_used": "integer|null"
+    },
+    "usage": {
+      "analyses_this_month": "integer|null",
+      "credits_used_this_month": "integer|null",
+      "last_analysis_at": "ISO-8601 string|null",
+      "last_run_status": "string|null"
+    },
+    "site": {
+      "site_id": "string",
+      "blog_id": "integer",
+      "connected_domain": "string",
+      "plugin_version": "string",
+      "binding_status": "string"
+    },
+    "support": {
+      "docs_url": "string",
+      "billing_url": "string",
+      "support_url": "string",
+      "help_label": "string"
+    }
+  }
+}

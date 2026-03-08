@@ -112,6 +112,39 @@ describe('Sidebar-Payload Hard Separation', () => {
             expect(stripped).toHaveProperty('details_token');
         });
 
+        test('preserves sanitized billing summary without exposing ledger internals', () => {
+            const stripped = stripSidebarPayload({
+                ok: true,
+                run_id: 'test-run-billing',
+                status: 'success',
+                billing_summary: {
+                    billing_status: 'settled',
+                    credits_used: 1184,
+                    reserved_credits: 1400,
+                    refunded_credits: 216,
+                    previous_balance: 60000,
+                    current_balance: 58816,
+                    raw_cost_usd: 0.039467,
+                    pricing_version: 'mistral-public-2026-03-06',
+                    event_id: 'ledger_123',
+                    account_id: 'acct_1'
+                }
+            }, 'test-run-billing');
+
+            expect(stripped.billing_summary).toEqual({
+                billing_status: 'settled',
+                credits_used: 1184,
+                reserved_credits: 1400,
+                refunded_credits: 216,
+                previous_balance: 60000,
+                current_balance: 58816
+            });
+            expect(stripped.billing_summary).not.toHaveProperty('raw_cost_usd');
+            expect(stripped.billing_summary).not.toHaveProperty('pricing_version');
+            expect(stripped.billing_summary).not.toHaveProperty('event_id');
+            expect(stripped.billing_summary).not.toHaveProperty('account_id');
+        });
+
         test('preserves partial contract fields only', () => {
             const payload = {
                 ok: true,

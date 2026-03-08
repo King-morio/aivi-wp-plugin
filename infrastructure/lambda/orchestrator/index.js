@@ -22,6 +22,13 @@ const { applySuggestionHandler, getSuggestionHistoryHandler } = require('./apply
 // Import Phase 5 Async components
 const { analyzeRunAsyncHandler } = require('./analyze-run-async-handler');
 const { runStatusHandler } = require('./run-status-handler');
+const { accountConnectHandler, accountDisconnectHandler } = require('./account-connect-handler');
+const { accountSummaryHandler } = require('./account-summary-handler');
+const { billingCheckoutHandler } = require('./billing-checkout-handler');
+const { paypalWebhookHandler } = require('./paypal-webhook-handler');
+const { superAdminReadHandler } = require('./super-admin-read-handler');
+const { superAdminMutationHandler } = require('./super-admin-mutation-handler');
+const { superAdminDiagnosticsHandler } = require('./super-admin-diagnostics-handler');
 
 // Import Result Contract Lock components
 const { analysisDetailsHandler, validateSessionToken } = require('./analysis-details-handler');
@@ -49,6 +56,8 @@ const log = (level, message, context = {}) => {
   }));
 };
 
+exports.creditLedger = require('./credit-ledger');
+
 const parseEventBody = (event) => {
   let rawBody = event?.body;
   if (typeof rawBody === 'string' && event?.isBase64Encoded) {
@@ -72,6 +81,41 @@ const parseEventBody = (event) => {
     return rawBody;
   }
   return null;
+};
+
+const resolveCatchAllRoute = (method = '', rawPath = '') => {
+  const normalizedMethod = String(method || '').trim().toUpperCase();
+  const normalizedPath = String(rawPath || '').trim().replace(/\/+$/, '') || '/';
+
+  const dynamicRoutes = [
+    { method: 'GET', pattern: /^\/aivi\/v1\/analyze\/run\/[^/]+$/, route: 'GET /aivi/v1/analyze/run/{run_id}' },
+    { method: 'GET', pattern: /^\/aivi\/v1\/analysis\/[^/]+\/details$/, route: 'GET /aivi/v1/analysis/{run_id}/details' },
+    { method: 'GET', pattern: /^\/aivi\/v1\/analysis\/[^/]+\/raw$/, route: 'GET /aivi/v1/analysis/{run_id}/raw' },
+    { method: 'GET', pattern: /^\/aivi\/v1\/suggestion\/[^/]+\/history$/, route: 'GET /aivi/v1/suggestion/{suggestion_id}/history' },
+    { method: 'GET', pattern: /^\/aivi\/v1\/admin\/accounts\/[^/]+$/, route: 'GET /aivi/v1/admin/accounts/{account_id}' },
+    { method: 'POST', pattern: /^\/aivi\/v1\/admin\/accounts\/[^/]+\/actions$/, route: 'POST /aivi/v1/admin/accounts/{account_id}/actions' },
+    { method: 'GET', pattern: /^\/aivi\/v1\/admin\/accounts\/[^/]+\/diagnostics$/, route: 'GET /aivi/v1/admin/accounts/{account_id}/diagnostics' },
+    { method: 'POST', pattern: /^\/aivi\/v1\/admin\/accounts\/[^/]+\/diagnostics\/recovery$/, route: 'POST /aivi/v1/admin/accounts/{account_id}/diagnostics/recovery' }
+  ];
+
+  const matchedDynamicRoute = dynamicRoutes.find((candidate) => candidate.method === normalizedMethod && candidate.pattern.test(normalizedPath));
+  if (matchedDynamicRoute) {
+    return matchedDynamicRoute.route;
+  }
+
+  return `${normalizedMethod} ${normalizedPath}`;
+};
+
+const resolveRoute = (event = {}) => {
+  const method = event.httpMethod || event.requestContext?.http?.method || '';
+  const pathPattern = event.resource || event.path || event.requestContext?.http?.path || event.rawPath || '/';
+  const routeKey = event.routeKey;
+
+  if (routeKey && routeKey !== 'ANY /{proxy+}' && routeKey !== '$default') {
+    return routeKey;
+  }
+
+  return resolveCatchAllRoute(method, event.rawPath || event.path || pathPattern);
 };
 
 // Helper function to generate UUID
@@ -688,8 +732,8 @@ exports.handler = async (event, context) => {
 
     // Route based on HTTP method and path
     // For REST API Proxy, use event.resource to match patterns like /path/{param}
-    const pathPattern = event.resource || event.path || event.requestContext?.http?.path;
-    const route = event.routeKey || `${event.httpMethod || event.requestContext?.http?.method} ${pathPattern}`;
+    const route = resolveRoute(event);
+    event.aiviResolvedRoute = route;
 
     let response;
 
@@ -716,6 +760,43 @@ exports.handler = async (event, context) => {
       case 'GET /aivi/v1/analyze/run/{run_id}':
         // Phase 5: Polling endpoint for run status
         response = await runStatusHandler(event);
+        break;
+
+      case 'GET /aivi/v1/account/summary':
+        response = await accountSummaryHandler(event);
+        break;
+
+      case 'POST /aivi/v1/account/connect':
+        response = await accountConnectHandler(event);
+        break;
+
+      case 'POST /aivi/v1/account/disconnect':
+        response = await accountDisconnectHandler(event);
+        break;
+
+      case 'GET /aivi/v1/admin/accounts':
+      case 'GET /aivi/v1/admin/accounts/{account_id}':
+        response = await superAdminReadHandler(event);
+        break;
+
+      case 'POST /aivi/v1/admin/accounts/{account_id}/actions':
+        response = await superAdminMutationHandler(event);
+        break;
+
+      case 'GET /aivi/v1/admin/accounts/{account_id}/diagnostics':
+      case 'POST /aivi/v1/admin/accounts/{account_id}/diagnostics/recovery':
+        response = await superAdminDiagnosticsHandler(event);
+        break;
+
+      case 'POST /aivi/v1/billing/checkout/subscription':
+      case 'POST /aivi/v1/billing/checkout/topup':
+      case 'GET /aivi/v1/billing/return/paypal':
+      case 'POST /aivi/v1/billing/manage':
+        response = await billingCheckoutHandler(event);
+        break;
+
+      case 'POST /aivi/v1/billing/webhook/paypal':
+        response = await paypalWebhookHandler(event);
         break;
 
       case 'GET /aivi/v1/analysis/{run_id}/details':

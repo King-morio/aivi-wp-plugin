@@ -16,13 +16,26 @@ if (Test-Path Env:AWS_DEFAULT_PROFILE) {
     Remove-Item Env:AWS_DEFAULT_PROFILE -ErrorAction SilentlyContinue
 }
 
-$sevenZip = Join-Path $PSScriptRoot "lambda\worker_temp\7za.exe"
+$sevenZipCandidates = @(
+    (Join-Path $PSScriptRoot "lambda\worker_temp\7za.exe"),
+    (Join-Path $PSScriptRoot "lambda\worker_temp\7z.exe")
+)
+$sevenZip = $sevenZipCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+$tarExe = (Get-Command tar.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1)
+$archiveTool = if ($sevenZip) { '7zip' } elseif ($tarExe) { 'tar' } else { 'dotnet' }
 $orchestratorFunction = "aivi-orchestrator-run-dev"
 $workerFunction = "aivi-analyzer-worker-dev"
 $region = "eu-north-1"
 
-if (-not (Test-Path $sevenZip)) {
-    throw "7za executable not found at $sevenZip"
+if ($archiveTool -eq 'tar') {
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    Write-Host "7za executable not found. Falling back to tar.exe zip packaging."
+}
+elseif ($archiveTool -eq 'dotnet') {
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    Write-Host "7za executable not found. Falling back to .NET zip packaging."
 }
 
 function Resolve-FirstExistingPath {
@@ -79,6 +92,27 @@ function Ensure-SharedDefinitions {
     }
 }
 
+function Ensure-SharedRuntime {
+    param([string]$LambdaDir)
+    $sharedDir = Join-Path $PSScriptRoot "lambda\shared"
+    $targetDir = Join-Path $LambdaDir "shared"
+
+    $runtimeFiles = @(
+        "billing-account-state.js",
+        "credit-ledger.js",
+        "credit-pricing.js"
+    )
+
+    New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+    foreach ($runtimeFile in $runtimeFiles) {
+        $source = Join-Path $sharedDir $runtimeFile
+        if (-not (Test-Path $source)) {
+            throw "Missing shared runtime file: $source"
+        }
+        Copy-Item $source -Destination (Join-Path $targetDir $runtimeFile) -Force
+    }
+}
+
 function Assert-PathsExist {
     param(
         [string[]]$Paths,
@@ -98,22 +132,102 @@ function Assert-PathsExist {
 
 function Get-ArchiveEntries {
     param([string]$ArchivePath)
-    $output = & $sevenZip l -slt $ArchivePath
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to list archive contents for $ArchivePath"
-    }
-    $entries = @()
-    foreach ($line in $output) {
-        if ($line -match '^Path = (.+)$') {
-            $entries += $Matches[1]
+    if ($archiveTool -ne '7zip') {
+        $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $ArchivePath))
+        try {
+            return $zip.Entries | ForEach-Object { $_.FullName }
+        }
+        finally {
+            $zip.Dispose()
         }
     }
-    return $entries
+    else {
+        $output = & $sevenZip l -slt $ArchivePath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to list archive contents for $ArchivePath"
+        }
+        $entries = @()
+        foreach ($line in $output) {
+            if ($line -match '^Path = (.+)$') {
+                $entries += $Matches[1]
+            }
+        }
+        return $entries
+    }
+}
+
+function Write-ZipArchive {
+    param(
+        [Parameter(Mandatory = $true)][string]$ArchivePath,
+        [Parameter(Mandatory = $true)][string[]]$Paths
+    )
+
+    $resolvedArchivePath = [System.IO.Path]::GetFullPath((Join-Path (Get-Location).Path $ArchivePath))
+    if (Test-Path $resolvedArchivePath) {
+        Remove-Item $resolvedArchivePath -Force
+    }
+
+    if ($archiveTool -eq '7zip') {
+        & $sevenZip a -tzip $resolvedArchivePath $Paths -mx=5 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to package $resolvedArchivePath"
+        }
+        return
+    }
+
+    if ($archiveTool -eq 'tar') {
+        & $tarExe -a -cf $resolvedArchivePath @Paths
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to package $resolvedArchivePath via tar.exe"
+        }
+        return
+    }
+
+    $currentDir = (Get-Location).Path
+    $zip = [System.IO.Compression.ZipFile]::Open($resolvedArchivePath, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($path in $Paths) {
+            $resolvedPath = [System.IO.Path]::GetFullPath((Join-Path $currentDir $path))
+            if (-not (Test-Path $resolvedPath)) {
+                throw "Missing path during packaging: $resolvedPath"
+            }
+
+            if ((Get-Item $resolvedPath) -is [System.IO.DirectoryInfo]) {
+                Get-ChildItem -Path $resolvedPath -Recurse -File | ForEach-Object {
+                    $relativePath = (Get-RelativeArchivePath -BasePath $currentDir -TargetPath $_.FullName) -replace '\\', '/'
+                    [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $_.FullName, $relativePath, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+                }
+            }
+            else {
+                $relativePath = (Get-RelativeArchivePath -BasePath $currentDir -TargetPath $resolvedPath) -replace '\\', '/'
+                [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $resolvedPath, $relativePath, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+            }
+        }
+    }
+    finally {
+        $zip.Dispose()
+    }
 }
 
 function Normalize-ArchivePath {
     param([string]$PathValue)
     return ($PathValue -replace '\\', '/').Trim().ToLowerInvariant()
+}
+
+function Get-RelativeArchivePath {
+    param(
+        [Parameter(Mandatory = $true)][string]$BasePath,
+        [Parameter(Mandatory = $true)][string]$TargetPath
+    )
+
+    $base = [System.IO.Path]::GetFullPath($BasePath)
+    if (-not $base.EndsWith([System.IO.Path]::DirectorySeparatorChar)) {
+        $base += [System.IO.Path]::DirectorySeparatorChar
+    }
+    $target = [System.IO.Path]::GetFullPath($TargetPath)
+    $baseUri = New-Object System.Uri($base)
+    $targetUri = New-Object System.Uri($target)
+    return [System.Uri]::UnescapeDataString($baseUri.MakeRelativeUri($targetUri).ToString())
 }
 
 function Assert-ArchiveContains {
@@ -168,6 +282,15 @@ function Update-LambdaModelEnv {
     $envVars['AI_SOFT_ANALYSIS_TARGET_MS'] = '90000'
     $envVars['AI_MAX_ANALYSIS_LATENCY_MS'] = '420000'
     $envVars['AI_LAMBDA_RESERVE_MS'] = '20000'
+    $envVars['ACCOUNT_BILLING_STATE_TABLE'] = 'aivi-account-billing-state-dev'
+    $envVars['CREDIT_LEDGER_TABLE'] = 'aivi-credit-ledger-dev'
+    $envVars['BILLING_CHECKOUT_INTENTS_TABLE'] = 'aivi-billing-checkout-intents-dev'
+    $envVars['PAYPAL_WEBHOOK_EVENTS_TABLE'] = 'aivi-paypal-webhook-events-dev'
+    $envVars['BILLING_SUBSCRIPTIONS_TABLE'] = 'aivi-billing-subscriptions-dev'
+    $envVars['BILLING_TOPUP_ORDERS_TABLE'] = 'aivi-billing-topup-orders-dev'
+    $envVars['ADMIN_AUDIT_LOG_TABLE'] = 'aivi-admin-audit-log-dev'
+    $envVars['AIVI_ADMIN_REQUIRE_MFA'] = 'true'
+    $envVars['AIVI_ADMIN_ALLOW_BOOTSTRAP_TOKEN'] = 'false'
 
     $envSpec = @{ Variables = $envVars } | ConvertTo-Json -Compress -Depth 12
     $tmpEnvPath = Join-Path $env:TEMP ("lambda-env-" + [guid]::NewGuid().ToString() + ".json")
@@ -199,14 +322,34 @@ Write-Host "[1/4] Packaging Orchestrator Lambda..."
 
 Set-Location (Join-Path $PSScriptRoot "lambda\orchestrator")
 Ensure-SharedDefinitions -LambdaDir (Get-Location).Path
+Ensure-SharedRuntime -LambdaDir (Get-Location).Path
 
 $orchestratorFiles = @(
     "index.js",
+    "account-connect-handler.js",
+    "account-summary-handler.js",
     "analysis-serializer.js",
     "analysis-details-handler.js",
+    "billing-account-state.js",
+    "billing-checkout-handler.js",
+    "billing-store.js",
+    "credit-ledger.js",
+    "credit-pricing.js",
+    "connection-token.js",
     "run-status-handler.js",
+    "paypal-client.js",
+    "paypal-config.js",
+    "paypal-reconciliation.js",
+    "paypal-webhook-handler.js",
+    "paypal-webhook-processing.js",
     "sidebar-payload-stripper.js",
     "pii-scrubber.js",
+    "super-admin-audit-store.js",
+    "super-admin-auth.js",
+    "super-admin-diagnostics-handler.js",
+    "super-admin-mutation-handler.js",
+    "super-admin-read-handler.js",
+    "super-admin-store.js",
     "telemetry-emitter.js",
     "analyze-run-handler.js",
     "analyze-run-async-handler.js",
@@ -222,6 +365,9 @@ $orchestratorFiles = @(
     "package.json",
     "node_modules",
     "schemas",
+    "shared\billing-account-state.js",
+    "shared\credit-ledger.js",
+    "shared\credit-pricing.js",
     "shared\schemas\checks-definitions-v1.json",
     "shared\schemas\check-runtime-contract-v1.json",
     "shared\schemas\deterministic-explanations-v1.json",
@@ -231,15 +377,20 @@ $orchestratorFiles = @(
 Assert-PathsExist -Paths $orchestratorFiles -Label "orchestrator"
 
 Remove-Item -Path "..\orchestrator-rcl.zip" -Force -ErrorAction SilentlyContinue
-& $sevenZip a -tzip "..\orchestrator-rcl.zip" $orchestratorFiles -mx=5 | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    throw "Failed to package orchestrator-rcl.zip"
-}
+Write-ZipArchive -ArchivePath "..\orchestrator-rcl.zip" -Paths $orchestratorFiles
 
 Assert-ArchiveContains -ArchivePath "..\orchestrator-rcl.zip" -Label "orchestrator-rcl.zip" -RequiredEntries @(
     "index.js",
+    "account-connect-handler.js",
     "analysis-serializer.js",
+    "billing-account-state.js",
+    "billing-checkout-handler.js",
+    "connection-token.js",
+    "super-admin-read-handler.js",
     "schema-draft-builder.js",
+    "shared/billing-account-state.js",
+    "shared/credit-ledger.js",
+    "shared/credit-pricing.js",
     "shared/schemas/check-runtime-contract-v1.json",
     "shared/schemas/deterministic-explanations-v1.json",
     "shared/schemas/scoring-config-v1.json"
@@ -254,6 +405,7 @@ Write-Host "[2/4] Packaging Worker Lambda..."
 
 Set-Location (Join-Path $PSScriptRoot "lambda\worker")
 Ensure-SharedDefinitions -LambdaDir (Get-Location).Path
+Ensure-SharedRuntime -LambdaDir (Get-Location).Path
 
 $workerFiles = @(
     "index.js",
@@ -265,6 +417,9 @@ $workerFiles = @(
     "node_modules",
     "schemas",
     "prompts",
+    "shared\billing-account-state.js",
+    "shared\credit-ledger.js",
+    "shared\credit-pricing.js",
     "shared\schemas\checks-definitions-v1.json",
     "shared\schemas\check-runtime-contract-v1.json",
     "shared\schemas\deterministic-explanations-v1.json",
@@ -274,15 +429,15 @@ $workerFiles = @(
 Assert-PathsExist -Paths $workerFiles -Label "worker"
 
 Remove-Item -Path "..\worker-rcl.zip" -Force -ErrorAction SilentlyContinue
-& $sevenZip a -tzip "..\worker-rcl.zip" $workerFiles -mx=5 | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    throw "Failed to package worker-rcl.zip"
-}
+Write-ZipArchive -ArchivePath "..\worker-rcl.zip" -Paths $workerFiles
 
 Assert-ArchiveContains -ArchivePath "..\worker-rcl.zip" -Label "worker-rcl.zip" -RequiredEntries @(
     "index.js",
     "analysis-serializer.js",
     "schema-draft-builder.js",
+    "shared/billing-account-state.js",
+    "shared/credit-ledger.js",
+    "shared/credit-pricing.js",
     "shared/schemas/check-runtime-contract-v1.json",
     "shared/schemas/deterministic-explanations-v1.json",
     "shared/schemas/scoring-config-v1.json"

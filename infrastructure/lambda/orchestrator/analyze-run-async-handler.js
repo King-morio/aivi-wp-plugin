@@ -11,6 +11,9 @@ const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
 const { SQSClient, SendMessageCommand } = require("@aws-sdk/client-sqs");
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { v4: uuidv4 } = require("uuid");
+const { buildReservationPreview } = require("./credit-pricing");
+const { createReservationEvent, persistLedgerEvent } = require("./credit-ledger");
+const { createAccountBillingStateStore, applyLedgerEventToState } = require("./billing-account-state");
 
 // Initialize AWS clients
 const ddbClient = new DynamoDBClient({});
@@ -48,6 +51,170 @@ const log = (level, message, data = {}) => {
     console.log(JSON.stringify({ level, message, ...data, timestamp: new Date().toISOString() }));
 };
 
+const normalizeNonNegativeInt = (value) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+    return Math.floor(parsed);
+};
+
+const normalizeNullableInt = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    return Math.floor(parsed);
+};
+
+const normalizeIncomingAccountState = (candidate = {}) => {
+    const raw = candidate && typeof candidate === 'object' ? candidate : {};
+    const credits = raw.credits && typeof raw.credits === 'object' ? raw.credits : {};
+    const entitlements = raw.entitlements && typeof raw.entitlements === 'object' ? raw.entitlements : {};
+    const site = raw.site && typeof raw.site === 'object' ? raw.site : {};
+
+    return {
+        connected: raw.connected === true,
+        connection_status: String(raw.connection_status || raw.connectionStatus || '').trim().toLowerCase(),
+        account_id: String(raw.account_id || raw.accountId || '').trim(),
+        account_label: String(raw.account_label || raw.accountLabel || '').trim(),
+        plan_code: String(raw.plan_code || raw.planCode || '').trim(),
+        plan_name: String(raw.plan_name || raw.planName || '').trim(),
+        subscription_status: String(raw.subscription_status || raw.subscriptionStatus || '').trim(),
+        trial_status: String(raw.trial_status || raw.trialStatus || '').trim(),
+        site_binding_status: String(raw.site_binding_status || raw.siteBindingStatus || '').trim(),
+        credits: {
+            included_remaining: normalizeNullableInt(credits.included_remaining ?? credits.includedRemaining),
+            topup_remaining: normalizeNullableInt(credits.topup_remaining ?? credits.topupRemaining),
+            last_run_debit: normalizeNullableInt(credits.last_run_debit ?? credits.lastRunDebit)
+        },
+        entitlements: {
+            analysis_allowed: entitlements.analysis_allowed === true || entitlements.analysisAllowed === true,
+            site_limit_reached: entitlements.site_limit_reached === true || entitlements.siteLimitReached === true
+        },
+        site: {
+            site_id: String(site.site_id || site.siteId || '').trim(),
+            connected_domain: String(site.connected_domain || site.connectedDomain || '').trim()
+        }
+    };
+};
+
+const getAvailableCredits = (accountState) => {
+    const included = normalizeNullableInt(accountState?.credits?.included_remaining);
+    const topup = normalizeNullableInt(accountState?.credits?.topup_remaining);
+    if (included === null && topup === null) return null;
+    return (included || 0) + (topup || 0);
+};
+
+const buildBlockedReservationResponse = (statusCode, errorCode, message, extra = {}) => ({
+    statusCode,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        ok: false,
+        error: errorCode,
+        message,
+        ...extra
+    })
+});
+
+const attemptSilentReservation = async ({ runId, runMetadata, manifest, tokenEstimate }) => {
+    const incomingAccountState = normalizeIncomingAccountState(runMetadata.account_state || {});
+    let accountState = incomingAccountState;
+    const isConnected = accountState.connected && accountState.connection_status === 'connected';
+
+    if (!isConnected || !accountState.account_id) {
+        return { mode: 'skipped', reason: 'local_or_unbound_site', metadata: null };
+    }
+
+    try {
+        const remoteState = await createAccountBillingStateStore().getAccountState(accountState.account_id);
+        if (remoteState) {
+            accountState = normalizeIncomingAccountState(remoteState);
+        }
+    } catch (error) {
+        log('WARN', 'Failed to resolve authoritative billing state during admission; falling back to incoming state', {
+            account_id: accountState.account_id,
+            error: error.message
+        });
+    }
+
+    if (accountState.entitlements.analysis_allowed !== true) {
+        const siteLimitReached = accountState.entitlements.site_limit_reached || accountState.site_binding_status === 'limit_reached';
+        const message = siteLimitReached
+            ? 'This site has reached the plan site limit. Remove another connected site or upgrade the plan before analyzing again.'
+            : 'Analysis is not available for this connected account right now. Add credits or update the plan in your AiVI account.';
+        return {
+            mode: 'blocked',
+            response: buildBlockedReservationResponse(402, 'analysis_not_allowed', message, {
+                account_state: {
+                    plan_name: accountState.plan_name,
+                    subscription_status: accountState.subscription_status,
+                    trial_status: accountState.trial_status
+                }
+            })
+        };
+    }
+
+    const preview = buildReservationPreview({
+        model: getEnv('MISTRAL_MODEL', 'mistral-large-latest'),
+        tokenEstimate,
+        manifest
+    });
+    const reservedCredits = preview.usage_snapshot.credits_used;
+    const availableCredits = getAvailableCredits(accountState);
+
+    if (availableCredits !== null && reservedCredits > availableCredits) {
+        return {
+            mode: 'blocked',
+            response: buildBlockedReservationResponse(402, 'insufficient_credits', 'You do not have enough AiVI credits to analyze this content. Add credits or upgrade the plan, then try again.', {
+                billing: {
+                    required_credits: reservedCredits,
+                    available_credits: availableCredits
+                }
+            })
+        };
+    }
+
+    const ledgerEvent = await persistLedgerEvent(createReservationEvent({
+        account_id: accountState.account_id,
+        site_id: runMetadata.site_id || accountState.site.site_id || 'unknown',
+        run_id: runId,
+        reason_code: 'analysis_admission',
+        pricing_snapshot: preview.pricing_snapshot,
+        amounts: {
+            reserved_credits: reservedCredits,
+            balance_before: availableCredits,
+            balance_after: availableCredits === null ? null : Math.max(availableCredits - reservedCredits, 0)
+        }
+    }));
+
+    try {
+        const accountStateStore = createAccountBillingStateStore();
+        const existingState = await accountStateStore.getAccountState(accountState.account_id);
+        const nextState = applyLedgerEventToState(existingState || accountState, ledgerEvent);
+        await accountStateStore.putAccountState(nextState);
+    } catch (error) {
+        log('WARN', 'Failed to apply reservation to authoritative billing state', {
+            account_id: accountState.account_id,
+            run_id: runId,
+            error: error.message
+        });
+    }
+
+    return {
+        mode: 'reserved',
+        metadata: {
+            reservation_status: 'reserved',
+            event_id: ledgerEvent.event_id,
+            idempotency_key: ledgerEvent.idempotency_key,
+            account_id: accountState.account_id,
+            reserved_credits: reservedCredits,
+            balance_before: ledgerEvent.amounts.balance_before,
+            balance_after: ledgerEvent.amounts.balance_after,
+            token_estimate: normalizeNonNegativeInt(tokenEstimate),
+            pricing_snapshot: ledgerEvent.pricing_snapshot,
+            created_at: ledgerEvent.created_at
+        }
+    };
+};
+
 /**
  * Creates initial run record in DynamoDB with status: queued
  */
@@ -67,6 +234,7 @@ const createQueuedRun = async (runId, metadata, manifestS3Key, options = {}) => 
         prompt_version: metadata.prompt_version || 'v1',
         enable_web_lookups: enableWebLookups,
         feature_flags: featureFlags,
+        credit_reservation: options.creditReservation || null,
         created_at: now,
         updated_at: now,
         ttl: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // 7 days TTL
@@ -122,6 +290,7 @@ const enqueueJob = async (runId, manifestS3Key, metadata, options = {}) => {
         content_type: metadata.content_type || 'article',
         enable_web_lookups: enableWebLookups,
         feature_flags: featureFlags,
+        credit_reservation: options.creditReservation || null,
         enqueued_at: new Date().toISOString()
     };
 
@@ -270,6 +439,7 @@ async function analyzeRunAsyncHandler(event) {
         };
         const featureFlags = normalizeFeatureFlags(runMetadata.feature_flags || body.feature_flags || {});
         const enableWebLookups = parseBooleanFlag(body.enable_web_lookups);
+        const tokenEstimate = normalizeNonNegativeInt(body.token_estimate || body.tokenEstimate || manifest.tokenEstimate);
 
         // Use client-provided run_id if available (Fire-and-Forget pattern), otherwise generate
         runId = body.run_id || uuidv4();
@@ -303,9 +473,26 @@ async function analyzeRunAsyncHandler(event) {
             run_id: runId,
             site_id: runMetadata.site_id,
             content_type: runMetadata.content_type,
+            token_estimate: tokenEstimate,
             enable_web_lookups: enableWebLookups,
             feature_flags: featureFlags
         });
+
+        const reservation = await attemptSilentReservation({
+            runId,
+            runMetadata,
+            manifest,
+            tokenEstimate
+        });
+
+        if (reservation.mode === 'blocked') {
+            log('WARN', 'Blocked analysis admission due to credit reservation check', {
+                run_id: runId,
+                site_id: runMetadata.site_id,
+                token_estimate: tokenEstimate
+            });
+            return reservation.response;
+        }
 
         // Step 1: Store manifest to S3
         const manifestS3Key = await storeManifest(runId, manifest);
@@ -313,13 +500,15 @@ async function analyzeRunAsyncHandler(event) {
         // Step 2: Create queued run record in DynamoDB
         await createQueuedRun(runId, runMetadata, manifestS3Key, {
             enableWebLookups,
-            featureFlags
+            featureFlags,
+            creditReservation: reservation.metadata
         });
 
         // Step 3: Enqueue job to SQS
         await enqueueJob(runId, manifestS3Key, runMetadata, {
             enableWebLookups,
-            featureFlags
+            featureFlags,
+            creditReservation: reservation.metadata
         });
 
         const processingTime = Date.now() - startTime;

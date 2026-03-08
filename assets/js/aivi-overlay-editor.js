@@ -768,6 +768,7 @@
         const restBase = cfg.restBase || '/wp-json/aivi/v1';
         const nonce = cfg.nonce || '';
         const backendConfigured = cfg.backendConfigured === true;
+        const accountState = (cfg.accountState && typeof cfg.accountState === 'object') ? cfg.accountState : {};
         const isEnabled = typeof cfg.isEnabled === 'boolean' ? cfg.isEnabled : true;
         const text = cfg.text || {};
         const featureFlags = (cfg.featureFlags && typeof cfg.featureFlags === 'object') ? cfg.featureFlags : {};
@@ -777,7 +778,7 @@
             : (typeof featureFlags.STABILITY_RELEASE_MODE === 'boolean'
                 ? featureFlags.STABILITY_RELEASE_MODE
                 : true);
-        return { restBase, nonce, backendConfigured, isEnabled, text, featureFlags, stalePolicy, stabilityReleaseMode };
+        return { restBase, nonce, backendConfigured, accountState, isEnabled, text, featureFlags, stalePolicy, stabilityReleaseMode };
     }
 
     function getUiText() {
@@ -940,10 +941,10 @@
             return { message: 'Analysis results stale — please re-run analysis', type: 'warning', blockAi: true };
         }
         if (cfg.isEnabled === false) {
-            return { message: text.plugin_disabled || 'AiVI plugin is disabled. Please enable in Settings > AiVI.', type: 'error', blockAi: true };
+            return { message: text.plugin_disabled || 'AiVI is currently disabled for this site. Contact support if this was unexpected.', type: 'error', blockAi: true };
         }
         if (!cfg.backendConfigured) {
-            return { message: text.backend_not_configured || 'Backend URL not configured. Please configure in Settings > AiVI.', type: 'error', blockAi: true };
+            return { message: text.backend_not_configured || 'AiVI is not ready on this site yet. Connect your AiVI account or contact support.', type: 'error', blockAi: true };
         }
         const report = state.lastReport || {};
         const aiUnavailable = report.error === 'ai_unavailable' || report.status === 'unavailable' || report.aiAvailable === false || report.ai_available === false;

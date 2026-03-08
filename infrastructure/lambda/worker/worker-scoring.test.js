@@ -2,6 +2,16 @@ global.Request = global.Request || function Request() {};
 global.Response = global.Response || function Response() {};
 global.Headers = global.Headers || function Headers() {};
 global.fetch = global.fetch || jest.fn();
+jest.mock('@aws-sdk/client-dynamodb', () => ({
+    DynamoDBClient: jest.fn()
+}), { virtual: true });
+jest.mock('@aws-sdk/lib-dynamodb', () => ({
+    DynamoDBDocumentClient: {
+        from: jest.fn(() => ({ send: jest.fn() }))
+    },
+    PutCommand: jest.fn((input) => ({ input })),
+    GetCommand: jest.fn((input) => ({ input }))
+}), { virtual: true });
 
 const { __testHooks } = require('./index');
 

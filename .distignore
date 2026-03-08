@@ -5,6 +5,7 @@
 bin/
 diag/
 docs/
+control-plane/
 fixtures/
 infrastructure/
 node_modules/

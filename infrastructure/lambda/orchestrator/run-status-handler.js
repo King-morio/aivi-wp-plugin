@@ -437,6 +437,9 @@ const runStatusHandler = async (event) => {
             status: finalStatus,
             prompt_provenance: run.prompt_provenance || run.audit?.prompt_provenance || null
         };
+        if (run.billing_summary && typeof run.billing_summary === 'object') {
+            response.billing_summary = run.billing_summary;
+        }
         const telemetryContext = {
             categoriesCount: 0,
             abortReason: null,
