@@ -1,200 +1,191 @@
 # AiVI — AI Visibility Inspector
 
-An AI-gated content analysis product that measures AEO/GEO visibility for WordPress content.
-
-## Papa Fuego Plan Summary
-
-AiVI follows the Papa Fuego development philosophy: AI-gated analysis with deterministic preflight, abort-on-failure behavior, and no silent fallbacks. The plugin serves as a UI shell that delegates all semantic checks to an AI orchestrator backend.
-
-### Core Principles
-- **AI-Gated**: All semantic analysis performed by AI backend
-- **Abort on Failure**: Clear banner shown if AI unavailable
-- **Minimal Deterministic Layer**: Only preflight (token estimate) and manifest extraction
-- **No Silent Fallbacks**: Never show partial or speculative results
-
-## Description
-
-AiVI is a WordPress plugin that provides AI-powered content analysis with a focus on Answer Engine Optimization (AEO) and Generative Engine Optimization (GEO). The plugin follows a strict "AI-gated or abort" philosophy - if AI analysis is unavailable, the analysis is aborted with a clear banner rather than showing partial or deterministic results.
+AiVI is a WordPress plugin for analyzing how content is likely to perform in answer-driven and AI-assisted search experiences. It combines deterministic preflight checks in WordPress with a managed AiVI backend that handles deeper analysis, structured reporting, and guided editing flows.
 
 ## Public Repository Scope
 
-This public repository contains the WordPress plugin surface only: the plugin runtime, contributor-safe tests, and packaging/build helpers needed to install, understand, and package AiVI.
+This public repository contains the WordPress plugin surface only:
+
+- plugin runtime code
+- editor UI assets
+- contributor-safe tests
+- packaging and build helpers
 
 Internal operator systems and private infrastructure are intentionally excluded, including:
 
-- super-admin and control-plane applications
+- control-plane and super-admin applications
 - backend infrastructure and deployment code
-- billing, PayPal, Cognito, and operator-only integration paths
+- billing, PayPal, Cognito, and operator-only integrations
 - internal runbooks, environment inventories, and debug artifacts
 
-## Features
+## What the Plugin Includes
 
-- **Deterministic Preflight**: Token estimation and basic content extraction
-- **AI-Gated Analysis**: All semantic checks performed by AI backend
-- **Graceful Failure**: Clear abort banner when AI is unavailable
-- **Editor Integration**: Works with both Gutenberg and Classic editors
-- **REST API**: Modular endpoints for preflight, analysis, and rewrite
-- **FAQ JSON-LD**: AI-generated schema suggestions (manual insertion)
+- Editor analysis UI for both Gutenberg and Classic Editor
+- Deterministic preflight extraction before backend analysis
+- Async run polling, detailed findings, and review-rail rendering
+- Overlay review/editing support for guided content fixes
+- Document metadata support for title, meta description, canonical URL, and language
+- Account-aware settings pages for Overview, Plans, Credits, Connection, and Support
+- Safe packaging tooling for release ZIP creation
 
-## Architecture
+## How AiVI Works
 
-### Core Philosophy
+At a high level, the plugin does four things:
 
-1. **Minimal Deterministic Layer**: Only preflight (token estimate) and manifest extraction
-2. **AI-Only Semantic Checks**: All analysis performed by AI orchestrator
-3. **No Silent Fallbacks**: If AI fails, show clear abort banner
-4. **Manual Application**: AI suggestions require manual user action
+1. extracts and normalizes the current post content in WordPress
+2. runs preflight checks such as manifest/block-map generation and token estimation
+3. sends the article to the managed AiVI backend through WordPress proxy routes
+4. renders the returned report, details, and editing flows inside the editor UI
 
-### Plugin Structure
-
-```
-ai-visibility-inspector/
-├── ai-visibility-inspector.php   # Bootstrap file
-├── includes/
-│   ├── class-plugin.php          # Core plugin class
-│   ├── class-admin-menu.php      # Admin menu management
-│   ├── class-editor-sidebar.php  # Editor sidebar integration
-│   ├── class-assets.php          # Asset management
-│   ├── class-rest-preflight.php  # Preflight endpoint
-│   ├── class-rest-analyze.php    # Analysis endpoint
-│   ├── class-rest-rewrite.php    # Rewrite endpoint
-│   ├── class-rest-ping.php       # Backend status check
-│   └── helpers/
-│       └── functions.php         # Helper functions
-├── assets/
-│   ├── js/
-│   │   └── aivi-sidebar.js       # Frontend JavaScript
-│   └── css/                      # Styles (inline for now)
-├── tests/                        # Test suite (placeholder)
-├── .github/
-│   └── workflows/                # CI/CD workflows
-├── LICENSE                       # GPLv2 license
-├── CONTRIBUTING.md               # Developer onboarding
-└── readme.md                     # This file
-```
+When the managed backend is unavailable, AiVI reports that state clearly instead of inventing speculative results.
 
 ## Installation
 
-1. Download the plugin as a ZIP file
-2. Upload to `wp-content/plugins/`
-3. Activate the plugin in WordPress admin
-4. Access "AiVI Inspector" from the admin menu
+### Option 1 — Install from a release ZIP
 
-## Usage
+1. Download the latest plugin ZIP.
+2. In WordPress admin, go to **Plugins → Add New → Upload Plugin**.
+3. Upload the ZIP and activate the plugin.
 
-1. Edit any post or page
-2. Open the AiVI sidebar in the editor
-3. Click "Analyze Content"
-4. Review results (if AI backend is configured)
+### Option 2 — Install from source
 
-## REST API Endpoints
+1. Clone this repository.
+2. Copy or symlink it into your WordPress `wp-content/plugins/` directory.
+3. Activate **AiVI - AI Visibility Inspector** in WordPress admin.
 
-### Preflight
-- **POST** `/wp-json/aivi/v1/preflight`
-- Estimates tokens and validates content length
-- Returns manifest data and token count
+## First-Time Setup
 
-### Analyze
-- **POST** `/wp-json/aivi/v1/analyze`
-- Performs AI analysis (requires backend configuration)
-- Returns scores, checks, and suggestions
+1. Open **AiVI** in WordPress admin.
+2. Review the settings tabs:
+   - `Overview`
+   - `Plans`
+   - `Credits`
+   - `Connection`
+   - `Support`
+3. On normal customer installs, leave **Backend URL** empty so AiVI uses the built-in production backend endpoint.
+4. Use account connection, trial, plan, or credit flows as supported in your AiVI environment.
+5. Enable **Web Lookups** only when you want external verification for source-sensitive checks.
 
-### Rewrite
-- **POST** `/wp-json/aivi/v1/rewrite`
-- Provides content rewrite suggestions
-- Not implemented in skeleton
+### Important Configuration Notes
 
-### Ping
-- **GET** `/wp-json/aivi/v1/ping`
-- Checks backend availability
-- Returns AI availability status
+- **Backend URL** is primarily for staging, development, support overrides, or controlled troubleshooting.
+- **AiVI API Key** is optional and environment-dependent.
+- The plugin can store operational settings in WordPress options, but provider secrets and private infrastructure credentials are intentionally kept out of the public plugin surface.
 
-## Configuration
+## Using AiVI
 
-### Admin Settings
+### In Gutenberg
 
-1. Navigate to **Settings → AiVI** in your WordPress admin
-2. Configure the following settings:
+1. Open a post or page in the Block Editor.
+2. Open the **AiVI Inspector** sidebar.
+3. Start analysis from the sidebar.
+4. Review findings, details, and guided editing actions.
 
-#### Backend Configuration
-- **AiVI Backend Base URL**: The root URL of your AiVI backend API (e.g., `https://api.aivi.example.com`)
-- **Enable Web Lookups**: Allow semantic checks to perform external web requests
-- **Token Cutoff Override**: Maximum tokens per analysis (default: 200,000)
-- **Enable AiVI**: Master switch to disable all features if needed
+### In Classic Editor
 
-#### Testing
-- Use the **Test Connection** button to verify your backend is accessible
-- Check for success/failure messages after testing
+1. Open a post or page in the Classic Editor.
+2. Use the AiVI meta box in the side column.
+3. Run analysis and review the returned findings.
 
-### Troubleshooting
+## WordPress-Side Runtime Surface
 
-1. **Backend Not Available**
-   - Verify the backend URL is correct and accessible
-   - Check network connectivity and firewall settings
-   - Ensure SSL certificate is valid
+The current public plugin surface includes:
 
-2. **Analysis Fails**
-   - Check that backend is configured and responding
-   - Verify content is within token limits
-   - Check error logs for detailed messages
+- plugin bootstrap in `ai-visibility-inspector.php`
+- runtime PHP classes in `includes/`
+- editor assets in `assets/`
+- category map data in `includes/data/`
+- contributor-safe tests in `tests/js/`, `tests/unit/`, and `tests/includes/`
+- release packaging helper in `tools/package-plugin-release.ps1`
 
-3. **Plugin Disabled**
-   - Go to Settings → AiVI
-   - Ensure "Enable AiVI" checkbox is checked
-   - Save settings
+## Runtime Routes
 
-### Security Notes
+AiVI registers WordPress REST routes under `aivi/v1`.
 
-- No API keys or secrets are stored in WordPress
-- All external API calls are proxied through the plugin
-- All REST endpoints require proper capabilities and nonces
-- Content is sanitized before processing
+Public plugin routes include:
+
+- `POST /wp-json/aivi/v1/preflight`
+- `GET /wp-json/aivi/v1/backend/proxy_ping`
+- `POST /wp-json/aivi/v1/backend/proxy_analyze`
+- `GET /wp-json/aivi/v1/backend/proxy_run_status/<run_id>`
+- `POST /wp-json/aivi/v1/backend/analysis-details`
+- `POST /wp-json/aivi/v1/backend/analysis-raw`
+- `GET|POST /wp-json/aivi/v1/settings/web-lookups`
+- `GET|POST /wp-json/aivi/v1/document-meta/<post_id>`
+
+Additional account, connection, and billing-related proxy routes are part of the plugin runtime, but the internal backend implementations behind them are intentionally not part of this public repository.
 
 ## Development
 
 ### Requirements
 
-- WordPress 5.0+
-- PHP 7.4+
-- Node.js (for development)
+- WordPress `5.8+`
+- PHP `7.4+`
+- Node.js and npm for frontend tests
+- Composer for PHPUnit dependencies
 
-### Onboarding
+### Local Development
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for developer setup and guidelines.
+1. Clone the repository.
+2. Install JavaScript dependencies:
 
-### Adding Features
+   ```bash
+   npm install
+   ```
 
-1. Follow the existing class structure
-2. Maintain the AI-gated philosophy
-3. Add defensive coding practices
-4. Update documentation
-5. Ensure UI consistency between Classic and Gutenberg editors
+3. Install PHP development dependencies:
 
-### Security
+   ```bash
+   composer install
+   ```
 
-- All endpoints require `edit_posts` capability
-- Nonce-protected REST API
-- Sanitized and escaped outputs
-- No fatal errors on failures
+4. Activate the plugin in a local WordPress install.
 
-## Phase 1 Priorities
+### Running Tests
 
-Next development phase focuses on:
-1. Analyzer JSON schema definition
-2. Sonnet prompt engineering
-3. Backend orchestrator integration
-4. Enhanced error handling
-5. Performance optimization
+Run frontend tests:
 
-## License
+```bash
+npm test
+```
 
-GPLv2 or later - see [LICENSE](LICENSE) file for details
+Run PHPUnit:
+
+```bash
+vendor/bin/phpunit
+```
+
+Install the WordPress PHPUnit scaffold when needed:
+
+```bash
+bin/install-wp-tests.sh
+```
+
+### Packaging a Release ZIP
+
+From the plugin root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\package-plugin-release.ps1
+```
+
+This creates a WordPress-ready release ZIP that includes only the runtime files needed by the plugin package.
+
+## Security and Privacy Notes
+
+- Runtime routes enforce WordPress capability checks where appropriate.
+- The plugin sanitizes and validates user-provided settings and request payloads.
+- The public repository does not include private backend infrastructure, deploy scripts, or operator-only credentials.
+- Customer sites may store operational plugin settings such as backend overrides or an optional AiVI API key, depending on environment needs.
+
+## Contributing
+
+See `CONTRIBUTING.md` for contributor workflow, coding expectations, and testing guidance.
 
 ## Changelog
 
-### 0.9.1
-- Initial modular release
-- Extracted from single-file prototype
-- Maintained all original functionality
-- Added proper class structure
-- Implemented UI consistency between Classic and Gutenberg editors
+See `CHANGELOG.md` for release history.
+
+## License
+
+GPLv2 or later — see `LICENSE`.
