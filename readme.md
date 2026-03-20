@@ -1,6 +1,6 @@
-# AiVI — AI Visibility Inspector
+# AiVI — AI Visibility Inspector WordPress Plugin
 
-AiVI is a WordPress plugin for analyzing how content is likely to perform in answer-driven and AI-assisted search experiences. It combines deterministic preflight checks in WordPress with a managed AiVI backend that handles deeper analysis, structured reporting, and guided editing flows.
+AI Visibility Inspector WordPress Plugin (AiVI) is a WordPress plugin for analyzing how content is likely to perform in answer-driven and AI-assisted search experiences. It combines deterministic preflight checks in WordPress with a managed AiVI backend that handles deeper analysis, structured reporting, and guided editing flows.
 
 ## Public Repository Scope
 
