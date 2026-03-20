@@ -78,7 +78,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			)
 		);
 
-		// Phase 5: Polling endpoint for async analysis status
+		// Polling endpoint for async analysis status
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/proxy_run_status/(?P<run_id>[a-zA-Z0-9\-]+)',
@@ -982,7 +982,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 	}
 
 	/**
-	 * Proxy analyze request to backend (Phase 5: Async pattern)
+	 * Proxy analyze request to backend
 	 *
 	 * Calls POST /aivi/v1/analyze/run which returns 202 Accepted with run_id.
 	 * Frontend will poll GET /aivi/v1/analyze/run/{run_id} for results.
@@ -1076,7 +1076,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			);
 		}
 
-		// Phase 5 Fix: Client-Side ID Generation (Fire-and-Forget)
+		// Generate the run ID locally so the backend can accept the job immediately
 		$run_id = wp_generate_uuid4();
 
 		$body = array(
@@ -1211,7 +1211,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 	}
 
 	/**
-	 * Proxy run status request to backend (Phase 5: Polling)
+	 * Proxy run status request to backend
 	 *
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error
@@ -1312,7 +1312,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 				);
 			}
 
-			// Phase 5 Fix: Fetch S3 content server-side to bypass CORS
+			// Fetch presigned result content server-side to avoid browser CORS issues
 			if (isset($data['status']) && in_array($data['status'], array('success', 'success_partial'), true) && !empty($data['result_url'])) {
 				$s3_response = $this->wp_remote_get_with_retries(
 					$data['result_url'],

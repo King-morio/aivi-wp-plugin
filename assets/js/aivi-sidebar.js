@@ -2828,7 +2828,7 @@
             setAnalysisPhase('queued');
 
 
-            // Run analysis (Phase 5: Async pattern)
+            // Run analysis through the async backend flow
             const result = await callRest('/backend/proxy_analyze', 'POST', {
                 content_html: post.content,
                 title: post.title,
@@ -2887,7 +2887,7 @@
                 return;
             }
 
-            // Handle immediate success (legacy sync response)
+            // Handle immediate success from older synchronous responses
             if (result.ok && result.data) {
                 setAnalysisPhase('idle');
                 setAnalysisStartTime(null);
@@ -2911,7 +2911,7 @@
             }
         }
 
-        // Phase 5: Poll for async analysis results
+        // Poll for async analysis results
         async function pollForResults(runId) {
             const INITIAL_INTERVAL = 1500;      // 1.5 seconds
             const EARLY_MAX_INTERVAL = 4000;    // 4 seconds
@@ -3387,7 +3387,7 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
 
         // New Helper: Group ALL checks by Category (includes passed for toggle)
         // CRITICAL FIX: Support both analysis_summary.categories (Result Contract Lock)
-        // and legacy report.checks format for backward compatibility
+        // and older report.checks payloads for backward compatibility
         function getGroupedIssues(customReport, rawReport) {
             const targetReport = customReport || report;
             if (!targetReport) return { groups: {}, allIssues: [], issueCount: 0 };
@@ -3487,7 +3487,7 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
             // LEGACY FALLBACK: Use report.checks if analysis_summary not available
             if (!targetReport.checks) return { groups: {}, allIssues: [], issueCount: 0 };
 
-            // Phase 5 fix: Preserve Keys as IDs (Sonnet output schema doesn't embed ID in value)
+            // Preserve object keys as IDs when report.checks is keyed by check ID
             const checksArray = Array.isArray(targetReport.checks)
                 ? targetReport.checks
                 : Object.entries(targetReport.checks).map(([key, val]) => ({ ...val, id: key }));

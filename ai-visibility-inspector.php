@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: AiVI - AI Visibility Inspector
- * Description: AI-gated content analysis product that measures AEO/GEO visibility.
+ * Description: Analyze content in WordPress, review structured AiVI findings, and improve AI search readiness.
  * Version: 1.0.8
  * Author: AiVI Team
  * License: GPLv2 or later

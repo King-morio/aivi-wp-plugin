@@ -1,7 +1,7 @@
 /**
  * Sidebar entitlement awareness regression tests
  *
- * Covers Phase 5 Milestone 1 Step 4:
+ * Covers sidebar entitlement-awareness gating:
  * - disconnected sites remain on fallback/backend mode
  * - connected sites with no entitlement are blocked
  * - connected entitled sites remain actionable

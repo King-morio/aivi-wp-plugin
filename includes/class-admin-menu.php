@@ -43,7 +43,7 @@ class Admin_Menu {
     }
 
     /**
-     * Add the single top-level AiVI menu and preserve the legacy slug.
+     * Add the single top-level AiVI menu while keeping the original slug stable.
      */
     public function add_menu_page() {
         add_menu_page(

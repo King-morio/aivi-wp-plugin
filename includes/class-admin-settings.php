@@ -389,7 +389,7 @@ class Admin_Settings {
 				<details class="aivi-operational-settings">
 					<summary><?php esc_html_e( 'Operational fallback settings', 'ai-visibility-inspector' ); ?></summary>
 					<p class="aivi-operational-settings__intro">
-						<?php esc_html_e( 'These legacy connection and fallback controls remain available during the account-dashboard rollout. They are not intended as the primary customer experience.', 'ai-visibility-inspector' ); ?>
+						<?php esc_html_e( 'These operational connection controls remain available for advanced troubleshooting and support-guided overrides. Most sites should use the account dashboard above and leave these settings unchanged.', 'ai-visibility-inspector' ); ?>
 					</p>
 
 					<form action="options.php" method="post">
@@ -3065,7 +3065,7 @@ class Admin_Settings {
 				<div>
 					<h2 class="aivi-account-card__title"><?php esc_html_e( 'AiVI Account Connection', 'ai-visibility-inspector' ); ?></h2>
 					<p class="aivi-account-card__desc">
-						<?php esc_html_e( 'This is the Milestone 1 read-only connection overview. Backend configuration remains below until account connection fully replaces it.', 'ai-visibility-inspector' ); ?>
+						<?php esc_html_e( 'Review the current account and site connection state here. Operational settings remain below for troubleshooting and support-only overrides.', 'ai-visibility-inspector' ); ?>
 					</p>
 				</div>
 				<span class="aivi-account-badge <?php echo esc_attr( $badge_class ); ?>">
@@ -3107,7 +3107,7 @@ class Admin_Settings {
 				</div>
 			</div>
 			<p class="aivi-account-card__foot">
-				<?php esc_html_e( 'Next Milestone 1 steps will add connection handshake and account-state refresh so this panel becomes live, not just scaffolded.', 'ai-visibility-inspector' ); ?>
+				<?php esc_html_e( 'Use this panel to confirm plan, credit, and site connection status. Reach for the operational settings below only when support asks you to troubleshoot or override the backend connection.', 'ai-visibility-inspector' ); ?>
 			</p>
 		</div>
 		<?php
@@ -4518,7 +4518,7 @@ class Admin_Settings {
 	}
 
 	/**
-	 * Whether legacy operational settings should be visible.
+	 * Whether operational settings should be visible.
 	 *
 	 * Hidden by default for normal customers. Internal/support environments can
 	 * enable them explicitly via constant or filter without affecting runtime behavior.
