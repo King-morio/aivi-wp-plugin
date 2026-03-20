@@ -1,0 +1,1074 @@
+.aivi-overlay-root {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 999999;
+}
+
+.aivi-overlay-root[data-open="true"] {
+    pointer-events: auto;
+}
+
+.aivi-overlay-backdrop {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 14px;
+    box-sizing: border-box;
+    background: rgba(15, 23, 42, 0.32);
+}
+
+.aivi-overlay-root[data-open="true"] .aivi-overlay-backdrop {
+    display: flex;
+}
+
+.aivi-overlay-panel {
+    background: #ffffff;
+    border-radius: 24px;
+    box-shadow: 0 18px 44px rgba(23, 26, 33, 0.16);
+    width: min(1540px, calc(100vw - 20px));
+    max-height: calc(100vh - 28px);
+    overflow: hidden;
+    border: 1px solid rgba(23, 26, 33, 0.08);
+}
+
+.aivi-overlay-content {
+    height: 100%;
+    min-height: 0;
+    padding: 16px;
+    overflow: hidden;
+    font-family: "Manrope", "Segoe UI", -apple-system, system-ui, sans-serif;
+    color: #171a21;
+    background: linear-gradient(180deg, rgba(37, 99, 235, 0.05), transparent 24%), #f5f6f8;
+}
+
+.aivi-overlay-shell {
+    display: grid;
+    grid-template-columns: 392px minmax(0, 1fr);
+    gap: 16px;
+    align-items: stretch;
+    height: 100%;
+    min-height: 0;
+}
+
+.aivi-overlay-review-rail {
+    padding: 16px;
+    border: 1px solid rgba(23, 26, 33, 0.08);
+    border-radius: 24px;
+    background: #ffffff;
+    box-shadow: 0 18px 44px rgba(23, 26, 33, 0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.aivi-overlay-rail-head {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.aivi-overlay-review-rail-title {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #69707d;
+}
+
+.aivi-overlay-rail-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.aivi-overlay-rail-btn {
+    border: 1px solid #dee3ea;
+    background: #ffffff;
+    color: #171a21;
+    padding: 9px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.2;
+    cursor: pointer;
+    font-family: "Manrope", "Segoe UI", -apple-system, system-ui, sans-serif;
+}
+
+.aivi-overlay-rail-btn:hover {
+    background: #f5f8fd;
+}
+
+.aivi-overlay-rail-btn.primary {
+    background: #171a21;
+    border-color: #171a21;
+    color: #ffffff;
+}
+
+.aivi-overlay-rail-btn.primary:hover {
+    background: #222835;
+    border-color: #222835;
+}
+
+.aivi-overlay-rail-btn.subtle {
+    color: #69707d;
+}
+
+.aivi-overlay-rail-banner,
+.aivi-overlay-rail-status {
+    border-radius: 14px;
+    padding: 11px 12px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.aivi-overlay-rail-banner {
+    border: 1px solid #f3dfad;
+    background: #fff9ea;
+    color: #92400e;
+}
+
+.aivi-overlay-rail-banner.is-error {
+    border-color: #f4c5bf;
+    background: #fff1ef;
+    color: #991b1b;
+}
+
+.aivi-overlay-rail-status {
+    border: 1px solid #dee3ea;
+    background: #fbfbfc;
+    color: #4b5563;
+}
+
+.aivi-overlay-review-summary,
+.aivi-overlay-review-empty,
+.aivi-overlay-review-preview-item {
+    border: 1px solid #dee3ea;
+    border-radius: 14px;
+    background: #ffffff;
+}
+
+.aivi-overlay-review-summary,
+.aivi-overlay-review-empty {
+    padding: 14px;
+}
+
+.aivi-overlay-review-count {
+    font-size: 15px;
+    font-weight: 700;
+    color: #13233d;
+}
+
+.aivi-overlay-review-preview-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.aivi-overlay-review-viewport {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 0 10px 18px 0;
+    margin-right: -4px;
+    scrollbar-width: thin;
+    scrollbar-color: #b9c2d0 transparent;
+    scroll-padding-bottom: 18px;
+}
+
+.aivi-overlay-review-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-bottom: 6px;
+}
+
+.aivi-overlay-review-viewport::-webkit-scrollbar,
+.aivi-overlay-stage::-webkit-scrollbar {
+    width: 10px;
+}
+
+.aivi-overlay-review-viewport::-webkit-scrollbar-thumb,
+.aivi-overlay-stage::-webkit-scrollbar-thumb {
+    background: #b9c2d0;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.aivi-overlay-review-viewport::-webkit-scrollbar-track,
+.aivi-overlay-stage::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.aivi-overlay-review-scroll-controls {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 2px 4px 0 0;
+}
+
+.aivi-overlay-review-scroll-btn {
+    width: 34px;
+    height: 34px;
+    border: 1px solid #dee3ea;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #171a21;
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 8px 18px rgba(23, 26, 33, 0.08);
+}
+
+.aivi-overlay-review-scroll-btn:hover {
+    background: #f5f8fd;
+}
+
+.aivi-overlay-review-scroll-btn[disabled] {
+    opacity: 0.4;
+    cursor: default;
+    box-shadow: none;
+}
+
+.aivi-overlay-review-preview-item,
+.aivi-overlay-review-item {
+    padding: 12px 14px;
+}
+
+.aivi-overlay-review-preview-item,
+.aivi-overlay-review-item {
+    border: 1px solid #dee3ea;
+    border-radius: 18px;
+    background: #fbfbfc;
+}
+
+.aivi-overlay-review-item[data-verdict="fail"] {
+    border-color: #f0c6c6;
+    box-shadow: inset 3px 0 0 #d14343;
+}
+
+.aivi-overlay-review-item[data-verdict="partial"] {
+    border-color: #efd6a4;
+    box-shadow: inset 3px 0 0 #b56a07;
+}
+
+.aivi-overlay-review-preview-name,
+.aivi-overlay-review-item-name {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.35;
+    color: #171a21;
+}
+
+.aivi-overlay-review-item-summary {
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #69707d;
+}
+
+.aivi-overlay-review-item-actions {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.aivi-overlay-review-btn {
+    border: 1px solid #dee3ea;
+    background: #fff;
+    color: #171a21;
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.2;
+    cursor: pointer;
+    font-family: "Manrope", "Segoe UI", -apple-system, system-ui, sans-serif;
+}
+
+.aivi-overlay-review-btn:hover {
+    background: #f5f8fd;
+}
+
+.aivi-overlay-review-btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.aivi-overlay-review-details {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.aivi-overlay-review-details[hidden] {
+    display: none !important;
+}
+
+.aivi-overlay-review-schema-assist {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid #d9e3f1;
+    border-radius: 14px;
+    background: #ffffff;
+}
+
+.aivi-overlay-review-schema-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.aivi-overlay-review-schema-title-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.aivi-overlay-review-schema-title {
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1.35;
+    color: #153670;
+}
+
+.aivi-overlay-review-schema-badge {
+    border-radius: 999px;
+    padding: 6px 10px;
+    background: #f5f8fd;
+    border: 1px solid #cfdbef;
+    color: #153670;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.aivi-overlay-review-schema-note {
+    font-size: 12px;
+    line-height: 1.6;
+    color: #4b607d;
+}
+
+.aivi-overlay-review-schema-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.aivi-overlay-review-schema-preview {
+    width: 100%;
+    min-height: 148px;
+    font-size: 11px;
+    font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid #cfdbef;
+    background: #fbfdff;
+    color: #15233a;
+    resize: vertical;
+}
+
+.aivi-overlay-review-schema-status {
+    font-size: 11px;
+    line-height: 1.5;
+    color: #4b607d;
+}
+
+.aivi-overlay-review-metadata {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid #d9e3f1;
+    border-radius: 14px;
+    background: #ffffff;
+}
+
+.aivi-overlay-review-metadata-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.aivi-overlay-review-metadata-title {
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1.35;
+    color: #153670;
+}
+
+.aivi-overlay-review-metadata-badge {
+    border-radius: 999px;
+    padding: 6px 10px;
+    background: #f5f8fd;
+    border: 1px solid #cfdbef;
+    color: #153670;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.aivi-overlay-review-metadata-note,
+.aivi-overlay-review-metadata-status {
+    font-size: 12px;
+    line-height: 1.6;
+    color: #4b607d;
+}
+
+.aivi-overlay-review-metadata-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.aivi-overlay-review-metadata-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.aivi-overlay-review-metadata-label {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #5b6980;
+}
+
+.aivi-overlay-review-metadata-input {
+    width: 100%;
+    border: 1px solid #cfdbef;
+    border-radius: 12px;
+    background: #fbfdff;
+    color: #15233a;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    box-sizing: border-box;
+    font-family: "Manrope", "Segoe UI", -apple-system, system-ui, sans-serif;
+}
+
+.aivi-overlay-review-metadata-input:focus {
+    outline: none;
+    border-color: #9fb7df;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.aivi-overlay-review-metadata-input.is-description {
+    resize: vertical;
+    min-height: 96px;
+}
+
+.aivi-overlay-review-metadata-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.aivi-overlay-review-item-snippet {
+    font-size: 12px;
+    line-height: 1.55;
+    color: #69707d;
+    border: 1px solid #dee3ea;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: 10px 11px;
+}
+
+.aivi-overlay-review-empty {
+    font-size: 13px;
+    line-height: 1.55;
+    color: #5e6f86;
+}
+
+.aivi-overlay-stage {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 4px 4px 8px 24px;
+    border-left: 1px solid #dee3ea;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #b9c2d0 transparent;
+}
+
+.aivi-overlay-doc-header {
+    width: min(100%, 860px);
+    margin: 0 auto;
+    padding: 10px 0 0;
+}
+
+.aivi-overlay-doc-title {
+    margin: 0;
+    font-size: clamp(38px, 4.2vw, 60px);
+    font-weight: 700;
+    line-height: 1.04;
+    color: #171a21;
+    letter-spacing: -0.03em;
+    font-family: "Newsreader", Georgia, serif;
+}
+
+.aivi-overlay-canvas {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: min(100%, 860px);
+    margin: 0 auto;
+    padding: 0 0 12px;
+    min-width: 0;
+}
+
+.aivi-overlay-canvas h1,
+.aivi-overlay-canvas h2,
+.aivi-overlay-canvas h3 {
+    font-family: "Newsreader", Georgia, serif;
+    color: #171a21;
+    line-height: 1.12;
+}
+
+.aivi-overlay-canvas p,
+.aivi-overlay-canvas li {
+    font-size: 20px;
+    line-height: 1.72;
+    color: #2a303b;
+}
+
+.aivi-overlay-block {
+    border: 0;
+    border-radius: 0;
+    padding: 0 28px 0 20px;
+    background: transparent;
+    box-shadow: none;
+    transition: background 0.16s ease;
+    position: relative;
+    margin: 0 0 18px;
+}
+
+.aivi-overlay-block::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 10px;
+    width: 6px;
+    height: calc(100% - 18px);
+    border-radius: 999px;
+    background: #2563eb;
+    opacity: 0;
+    transition: opacity 0.18s ease;
+}
+
+.aivi-overlay-block-nested {
+    margin-left: 12px;
+}
+
+.aivi-overlay-block-body {
+    font-size: 18px;
+    line-height: 1.72;
+    color: #1b2940;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    outline: none;
+}
+
+.aivi-overlay-block-handle {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border: 1px solid #d4deef;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.14s ease, transform 0.14s ease, background 0.14s ease;
+    transform: translateY(2px);
+    z-index: 3;
+}
+
+.aivi-overlay-block:hover .aivi-overlay-block-handle,
+.aivi-overlay-block:focus-within .aivi-overlay-block-handle,
+.aivi-overlay-block-editing .aivi-overlay-block-handle {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+.aivi-overlay-block:hover::before,
+.aivi-overlay-block:focus-within::before,
+.aivi-overlay-block-editing::before {
+    opacity: 1;
+}
+
+.aivi-overlay-block-handle span {
+    width: 4px;
+    height: 4px;
+    border-radius: 999px;
+    background: #5e6f86;
+    display: inline-block;
+}
+
+.aivi-overlay-block-handle:hover {
+    background: #f6f9ff;
+}
+
+.aivi-overlay-block-menu {
+    position: fixed;
+    width: 320px;
+    padding: 10px;
+    border: 1px solid #d7deea;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.99);
+    box-shadow: 0 24px 48px rgba(15, 23, 42, 0.18);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow: auto;
+    z-index: 1000001;
+}
+
+.aivi-overlay-block-menu-header {
+    padding: 8px 10px 10px;
+    border-bottom: 1px solid rgba(23, 26, 33, 0.08);
+    margin-bottom: 2px;
+}
+
+.aivi-overlay-block-menu-kicker {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #69707d;
+    font-weight: 800;
+}
+
+.aivi-overlay-block-menu-title {
+    margin-top: 4px;
+    display: block;
+    font-size: 15px;
+    font-weight: 800;
+    color: #171a21;
+    letter-spacing: -0.02em;
+}
+
+.aivi-overlay-block-menu-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.aivi-overlay-block-menu-toggle {
+    border-radius: 14px;
+}
+
+.aivi-overlay-block-menu-section.open .aivi-overlay-block-menu-toggle {
+    background: #f5f8fd;
+}
+
+.aivi-overlay-block-menu-btn {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: #20252e;
+    padding: 11px 12px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: all 0.16s ease;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    text-align: left;
+}
+
+.aivi-overlay-block-menu-btn:hover {
+    background: #f5f8fd;
+}
+
+.aivi-overlay-block-menu-item-body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.aivi-overlay-block-menu-item-label {
+    font-weight: 800;
+    font-size: 14px;
+    color: #171a21;
+}
+
+.aivi-overlay-block-menu-item-copy {
+    color: #69707d;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.aivi-overlay-block-menu-chevron {
+    color: #6b7280;
+    font-size: 14px;
+    transition: transform 0.16s ease;
+}
+
+.aivi-overlay-block-menu-section.open .aivi-overlay-block-menu-chevron {
+    transform: rotate(90deg);
+}
+
+.aivi-overlay-block-menu-submenu {
+    display: none;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 0 2px 6px;
+}
+
+.aivi-overlay-block-menu-section.open .aivi-overlay-block-menu-submenu {
+    display: grid;
+}
+
+.aivi-overlay-block-menu-action {
+    border: 1px solid rgba(23, 26, 33, 0.08);
+    border-radius: 12px;
+    background: #fbfbfc;
+    color: #171a21;
+    padding: 10px 11px;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.35;
+    text-align: left;
+    min-height: 56px;
+    cursor: pointer;
+}
+
+.aivi-overlay-block-menu-action:hover {
+    background: #eef4ff;
+    border-color: #cfe0ff;
+}
+
+.aivi-overlay-block-menu-action.wide {
+    grid-column: 1 / -1;
+    min-height: 0;
+}
+
+.aivi-overlay-block-body img {
+    max-width: 100%;
+    border-radius: 10px;
+    display: block;
+    margin-bottom: 10px;
+}
+
+.aivi-overlay-block-body figcaption {
+    font-size: 12px;
+    color: #5e6f86;
+}
+
+.aivi-overlay-inline-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 12px;
+    border: 1px solid #d7dfec;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
+.aivi-overlay-highlight {
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 0 1px;
+    text-decoration-line: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+    text-decoration-skip-ink: none;
+    transition: background-color 0.18s ease, text-decoration-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.aivi-overlay-highlight:hover {
+    background: rgba(21, 35, 58, 0.08);
+}
+
+.aivi-overlay-highlight[data-severity="fail"],
+.aivi-overlay-highlight-fail {
+    text-decoration-style: solid;
+    text-decoration-color: #d14343;
+    background: rgba(209, 67, 67, 0.1);
+}
+
+.aivi-overlay-highlight[data-severity="partial"],
+.aivi-overlay-highlight-partial {
+    text-decoration-style: dashed;
+    text-decoration-color: #b56a07;
+    background: rgba(181, 106, 7, 0.11);
+}
+
+.aivi-overlay-highlight[data-severity="pass"],
+.aivi-overlay-highlight-pass {
+    text-decoration-style: solid;
+    text-decoration-color: #0f8b5f;
+    background: rgba(15, 139, 95, 0.08);
+}
+
+.aivi-overlay-highlight-ai {
+    font-weight: 600;
+}
+
+.aivi-overlay-highlight.v2-rect {
+    text-decoration: none;
+    padding: 0;
+    border-radius: 8px;
+    box-shadow: none;
+}
+
+.aivi-overlay-empty {
+    padding: 24px;
+    text-align: center;
+    font-size: 14px;
+    color: #5e6f86;
+    border: 1px dashed #ccd7eb;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.aivi-overlay-unhighlightable {
+    border: 1px solid #cfdcf0;
+    border-radius: 14px;
+    padding: 14px;
+    background: linear-gradient(180deg, #fbfdff 0%, #f4f8ff 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.aivi-overlay-recommendations-title {
+    font-size: 19px;
+    font-weight: 700;
+    color: #13233d;
+    font-family: "Newsreader", "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+}
+
+.aivi-overlay-recommendations-subtitle {
+    font-size: 12px;
+    color: #5e6f86;
+    font-weight: 600;
+}
+
+.aivi-overlay-recommendation-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: #fff;
+    border: 1px solid #d4deef;
+    border-radius: 12px;
+}
+
+.aivi-overlay-recommendation-check {
+    font-size: 18px;
+    font-weight: 700;
+    color: #14253f;
+    line-height: 1.2;
+    font-family: "Newsreader", "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+}
+
+.aivi-overlay-recommendation-rationale {
+    font-size: 14px;
+    color: #1d2c43;
+}
+
+.aivi-overlay-recommendation-snippet {
+    font-size: 13px;
+    color: #4b607d;
+    background: #fbfdff;
+    border-radius: 10px;
+    padding: 9px 10px;
+    border: 1px solid #e2e8f3;
+    line-height: 1.5;
+}
+
+.aivi-overlay-recommendation-action {
+    font-size: 13px;
+    color: #1d4ed8;
+}
+
+.aivi-overlay-recommendation-reason {
+    font-size: 11px;
+    color: #5e6f86;
+}
+
+.aivi-overlay-recommendation-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.aivi-overlay-recommendation-btn {
+    border: 1px solid #c7d7ef;
+    background: #fff;
+    color: #13346f;
+    padding: 6px 11px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: "Manrope", "Segoe UI", -apple-system, system-ui, sans-serif;
+}
+
+.aivi-overlay-recommendation-btn:hover {
+    background: #f6f9ff;
+}
+
+.aivi-overlay-recommendation-btn[disabled] {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.aivi-overlay-guidance {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 11px;
+    border: 1px solid #cfdbef;
+    border-radius: 11px;
+    background: #f8fbff;
+}
+
+.aivi-overlay-guidance-inline {
+    border-color: #d7dfec;
+    background: #f8fafd;
+}
+
+.aivi-overlay-guidance-recommendation {
+    border-color: #cfdbef;
+    background: #f6faff;
+}
+
+.aivi-overlay-guidance-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.aivi-overlay-guidance-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #1f4f9c;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.aivi-overlay-guidance-text {
+    font-size: 14px;
+    color: #172740;
+    line-height: 1.6;
+}
+
+.aivi-overlay-guidance-steps {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    color: #172740;
+    line-height: 1.55;
+}
+
+@keyframes aiviOverlayJumpPulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(34, 113, 177, 0.34);
+    }
+    70% {
+        box-shadow: 0 0 0 14px rgba(34, 113, 177, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(34, 113, 177, 0);
+    }
+}
+
+.aivi-overlay-block-jump-focus {
+    position: relative;
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(222, 235, 255, 0.66) 0%, rgba(222, 235, 255, 0.2) 100%);
+    box-shadow: inset 0 0 0 2px rgba(34, 113, 177, 0.62), 0 10px 24px rgba(16, 42, 87, 0.16);
+    transition: box-shadow 0.25s ease, background 0.25s ease;
+}
+
+.aivi-overlay-block-jump-focus .aivi-overlay-block-body {
+    padding: 6px 8px;
+    margin: -6px -8px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.62);
+}
+
+.aivi-overlay-block-jump-flash {
+    animation: aiviOverlayJumpPulse 1.2s ease-out 1;
+}
+
+.aivi-overlay-block-focus {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+    border-radius: 10px;
+}
+
+@media (max-width: 980px) {
+    .aivi-overlay-panel {
+        width: calc(100vw - 12px);
+        max-height: calc(100vh - 12px);
+    }
+
+    .aivi-overlay-content {
+        padding: 10px;
+    }
+
+    .aivi-overlay-shell {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+
+    .aivi-overlay-review-rail {
+        height: auto;
+        max-height: none;
+        overflow: visible;
+    }
+
+    .aivi-overlay-review-viewport {
+        max-height: 40vh;
+    }
+
+    .aivi-overlay-stage {
+        padding-left: 0;
+        border-left: 0;
+        overflow: visible;
+    }
+}

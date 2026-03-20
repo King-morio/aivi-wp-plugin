@@ -1,0 +1,151 @@
+# WordPress
+*.log
+wp-config.php
+wp-content/advanced-cache.php
+wp-content/backup-db/
+wp-content/backups/
+wp-content/cache/
+wp-content/upgrade/
+wp-content/uploads/
+wp-content/mu-plugins/
+wp-content/plugins/hello.php
+
+# Composer
+/vendor/
+composer.lock
+
+# NPM
+/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Testing
+/coverage/
+/.phpunit.result.cache
+
+# Build
+/dist/
+/build/
+/control-plane/admin-console/dist/
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Debug
+debug.log
+*.debug.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Local-only plugin config and ops helpers
+/config.json
+/fetch-config.ps1
+/revert-model.ps1
+/update-model.ps1
+/s3-prompts-policy.json
+
+# Local infrastructure scratch/generated files
+/infrastructure/cdk/cdk.context.json
+/infrastructure/lambda/worker_temp/
+/infrastructure/lambda/worker_deploy/
+/infrastructure/tmp/
+/php.ini
+/infrastructure/lambda/worker/worker.code.url.txt
+/infrastructure/lambda/worker/7-zip.chm
+/infrastructure/lambda/worker/7za.exe
+/infrastructure/lambda/worker/deploy_result*.json
+/infrastructure/lambda/worker/*logs*.json
+/infrastructure/lambda/worker/invoke-result*.json
+/infrastructure/lambda/worker/lambda_functions.txt
+/infrastructure/lambda/worker/mistral_logs.json
+/infrastructure/lambda/worker/recent_streams.json
+/infrastructure/lambda/worker/run_logs.json
+/infrastructure/lambda/worker/test-analysis.js
+/infrastructure/lambda/worker/test-event*.json
+/infrastructure/lambda/worker/test-*.js
+/infrastructure/lambda/worker/verify_logs.json
+/infrastructure/lambda/worker/license.txt
+/infrastructure/lambda/worker/readme.txt
+/infrastructure/lambda/worker/*.tar
+/infrastructure/lambda/worker/*.zip
+/tools/artifacts_html/
+/docs/archive/
+/infrastructure/archive/
+/tools/archive/
+# Local AI/dev tooling
+/.trae/
+/.cursor/
+/.windsurf/
+/antigravity/
+
+# Local temp and replay artifacts
+/_tmp_*
+/latest_*
+/recent-*.json
+/orchestrator_logs.json
+/worker-logs.json
+/worker_logs*.json
+/worker_today.json
+/logs.json
+/logs.txt
+/response.json
+/full_stream.json
+/invoke-result.json
+/manual-invoke-result.json
+/run-item.json
+/simulation_*.json
+/temp_debug_log*.txt
+/worker_temp.zip
+
+# Root debug helpers and scratch files
+/debug-*.js
+/debug_*.js
+/debug_*.sh
+/debug_logs.txt
+/error-logs.json
+/error_check.json
+/eslint-output.json
+/esm_status.json
+/jest-*.json
+/latest_full_logs.txt
+/test*.json
+/tmp-jest.json
+
+# Infrastructure temp outputs
+/infrastructure/tmp/
+/infrastructure/lambda/*.zip
+/infrastructure/lambda/*.tar.gz
+/infrastructure/lambda/*_result*.json
+/infrastructure/lambda/*payload*.json
+/infrastructure/lambda/*response*.json
+/infrastructure/lambda/*status*.json
+/infrastructure/lambda/*logs*.txt
+/infrastructure/lambda/orchestrator/*.tmp.json
+/infrastructure/lambda/orchestrator/payload.tmp.json
+/infrastructure/lambda/orchestrator/poll*.json
+/infrastructure/lambda/orchestrator/response*.json
+/infrastructure/lambda/orchestrator/lambda_list.json
+/infrastructure/lambda/orchestrator/orchestrator.code.url.txt

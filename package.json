@@ -1,0 +1,62 @@
+{
+  "name": "ai-visibility-inspector",
+  "version": "1.0.8",
+  "description": "AI-gated content analysis product that measures AEO/GEO visibility",
+  "main": "assets/js/aivi-sidebar.js",
+  "scripts": {
+    "test": "jest",
+    "lint": "eslint assets/js/ --ext .js",
+    "lint:fix": "eslint assets/js/ --ext .js --fix",
+    "build": "npm run lint && npm run test",
+    "watch": "npm run lint -- --watch"
+  },
+  "keywords": [
+    "wordpress",
+    "ai",
+    "seo",
+    "aeo",
+    "geo",
+    "content-analysis"
+  ],
+  "author": "AiVI Team",
+  "license": "GPL-2.0-or-later",
+  "devDependencies": {
+    "eslint": "^8.0.0",
+    "jest": "^29.0.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "@wordpress/eslint-plugin": "^24.1.0",
+    "@aws-sdk/client-lambda": "^3.969.0",
+    "@aws-sdk/client-s3": "^3.969.0",
+    "@aws-sdk/s3-request-presigner": "^3.454.0"
+  },
+  "eslintConfig": {
+    "extends": ["plugin:@wordpress/eslint-plugin/recommended"],
+    "env": {
+      "browser": true,
+      "jquery": true
+    },
+    "globals": {
+      "wp": "readonly",
+      "AIVI_CONFIG": "readonly"
+    },
+    "rules": {
+      "prettier/prettier": "off",
+      "curly": "off",
+      "object-shorthand": "off",
+      "no-bitwise": "off",
+      "no-nested-ternary": "off",
+      "no-shadow": "off",
+      "no-unused-expressions": "off",
+      "@wordpress/no-unused-vars-before-return": "off",
+      "@wordpress/no-global-active-element": "off",
+      "jsdoc/require-param": "off",
+      "jsdoc/check-line-alignment": "off",
+      "jsdoc/check-tag-names": "off"
+    }
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "setupFilesAfterEnv": ["<rootDir>/tests/js/setup.js"],
+    "testPathIgnorePatterns": ["/cdk.out/"]
+  }
+}
