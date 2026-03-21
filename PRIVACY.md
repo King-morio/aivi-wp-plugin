@@ -122,7 +122,7 @@ The plugin can store and display normalized account state such as:
 This information is used to:
 
 - determine whether analysis is allowed
-- power the Overview, Plans, Credits, and Connection tabs
+- power the Overview, Plans, Credits, Connection, Support, and Documentation tabs
 - explain connection, plan, or credit issues in the editor/sidebar
 - keep the local dashboard in sync with the managed service
 

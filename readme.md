@@ -25,7 +25,7 @@ Internal operator systems and private infrastructure are intentionally excluded,
 - Async run polling, detailed findings, and review-rail rendering
 - Overlay review/editing support for guided content fixes
 - Document metadata support for title, meta description, canonical URL, and language
-- Account-aware settings pages for Overview, Plans, Credits, Connection, and Support
+- Account-aware settings pages for Overview, Plans, Credits, Connection, Support, and Documentation
 - Safe packaging tooling for release ZIP creation
 
 ## How AiVI Works
@@ -62,6 +62,7 @@ When the managed backend is unavailable, AiVI reports that state clearly instead
    - `Credits`
    - `Connection`
    - `Support`
+   - `Documentation`
 3. On normal customer installs, leave **Backend URL** empty so AiVI uses the built-in production backend endpoint.
 4. Use account connection, trial, plan, or credit flows as supported in your AiVI environment.
 5. Enable **Web Lookups** only when you want external verification for source-sensitive checks.

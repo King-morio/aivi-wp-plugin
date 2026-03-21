@@ -207,6 +207,7 @@ This area manages:
 - Credits
 - Connection
 - Support
+- Documentation
 
 It also stores and normalizes key WordPress-side operational data such as:
 

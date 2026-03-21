@@ -17,6 +17,7 @@ Replace these placeholder lines with screenshots when you are ready:
 - `[Screenshot: AiVI settings Credits tab]`
 - `[Screenshot: AiVI settings Connection tab]`
 - `[Screenshot: AiVI settings Support tab]`
+- `[Screenshot: AiVI settings Documentation tab]`
 
 ## What AiVI Does
 
@@ -161,6 +162,7 @@ The current settings tabs are:
 - Credits
 - Connection
 - Support
+- Documentation
 
 ### Overview
 
@@ -223,6 +225,21 @@ Typical categories include:
 - General Support
 
 `[Screenshot: AiVI settings Support tab]`
+
+### Documentation
+
+The Documentation tab gives you an in-product knowledge surface for the current AiVI guides.
+
+Use it when you want to:
+
+- review the user guide without leaving WordPress
+- look up the meaning of a check family
+- work through troubleshooting steps for stale results or missing highlights
+- read privacy, terms, support, development, architecture, operations, and decision docs from one place
+
+Support-side documentation links now route into this internal docs surface where appropriate, so you can move from a support question into the right guide more quickly.
+
+`[Screenshot: AiVI settings Documentation tab]`
 
 When asking for help, it is useful to include:
 

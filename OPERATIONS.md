@@ -116,6 +116,7 @@ Check the current public-facing tabs:
 - `Credits`
 - `Connection`
 - `Support`
+- `Documentation`
 
 Confirm layout, copy, and buttons still behave as expected.
 

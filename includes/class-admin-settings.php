@@ -1333,9 +1333,12 @@ class Admin_Settings {
 			),
 		);
 		$blog_id = self::format_dashboard_metric_value( $dashboard_state['site']['blog_id'] ?? null, __( 'Not available', 'ai-visibility-inspector' ) );
-		$requested_settings_tab = sanitize_key( (string) ( $_GET['aivi_tab'] ?? '' ) );
+		$requested_settings_tab    = sanitize_key( (string) ( $_GET['aivi_tab'] ?? '' ) );
 		$requested_support_category = sanitize_key( (string) ( $_GET['aivi_support_category'] ?? '' ) );
-		if ( ! in_array( $requested_settings_tab, array( 'overview', 'billing', 'credits', 'connection', 'support' ), true ) ) {
+		$requested_doc_slug         = sanitize_key( (string) ( $_GET['aivi_doc'] ?? '' ) );
+		$documentation_catalog      = self::get_documentation_catalog();
+		$requested_doc_slug         = self::normalize_documentation_slug( $requested_doc_slug );
+		if ( ! in_array( $requested_settings_tab, array( 'overview', 'billing', 'credits', 'connection', 'support', 'documentation' ), true ) ) {
 			$requested_settings_tab = 'overview';
 		}
 		if ( ! in_array( $requested_support_category, array( 'billing', 'connection', 'analysis', 'general' ), true ) ) {
@@ -1362,7 +1365,24 @@ class Admin_Settings {
 				),
 				$settings_page_base_url
 			) . '#aivi-settings-tab-support',
+			'documentation' => add_query_arg(
+				array(
+					'aivi_tab' => 'documentation',
+					'aivi_doc' => $requested_doc_slug,
+				),
+				$settings_page_base_url
+			) . '#aivi-doc-' . $requested_doc_slug,
 		);
+		$documentation_entry_urls = array();
+		foreach ( $documentation_catalog as $doc_slug => $doc_entry ) {
+			$documentation_entry_urls[ $doc_slug ] = add_query_arg(
+				array(
+					'aivi_tab' => 'documentation',
+					'aivi_doc' => $doc_slug,
+				),
+				$settings_page_base_url
+			) . '#aivi-doc-' . $doc_slug;
+		}
 		$support_category_urls = array(
 			'billing'    => add_query_arg(
 				array(
@@ -1406,8 +1426,8 @@ class Admin_Settings {
 				'category_label'     => __( 'Billing & Plans', 'ai-visibility-inspector' ),
 				'priority'           => __( 'Normal', 'ai-visibility-inspector' ),
 				'message'            => __( 'I expected the renewed plan balance to sync immediately, but the dashboard still shows the previous total.', 'ai-visibility-inspector' ),
-				'context_link_label' => ! empty( $billing_url ) ? __( 'Billing guide', 'ai-visibility-inspector' ) : ( ! empty( $docs_url ) ? __( 'Documentation', 'ai-visibility-inspector' ) : '' ),
-				'context_link_url'   => ! empty( $billing_url ) ? $billing_url : $docs_url,
+				'context_link_label' => ! empty( $billing_url ) ? __( 'Billing guide', 'ai-visibility-inspector' ) : __( 'Documentation', 'ai-visibility-inspector' ),
+				'context_link_url'   => ! empty( $billing_url ) ? $billing_url : $documentation_entry_urls['user-guide'],
 			),
 			'connection' => array(
 				'key'                => 'connection',
@@ -1428,8 +1448,8 @@ class Admin_Settings {
 				'category_label'     => __( 'Analysis & Results', 'ai-visibility-inspector' ),
 				'priority'           => __( 'Normal', 'ai-visibility-inspector' ),
 				'message'            => __( 'I need help understanding a recent result, score shift, or analysis behavior on this site.', 'ai-visibility-inspector' ),
-				'context_link_label' => ! empty( $docs_url ) ? __( 'Documentation', 'ai-visibility-inspector' ) : '',
-				'context_link_url'   => $docs_url,
+				'context_link_label' => __( 'Documentation', 'ai-visibility-inspector' ),
+				'context_link_url'   => $documentation_entry_urls['troubleshooting'],
 			),
 			'general'    => array(
 				'key'                => 'general',
@@ -1439,8 +1459,8 @@ class Admin_Settings {
 				'category_label'     => __( 'General Support', 'ai-visibility-inspector' ),
 				'priority'           => __( 'Normal', 'ai-visibility-inspector' ),
 				'message'            => __( 'I need help with a question that does not fit billing, connection, or analysis.', 'ai-visibility-inspector' ),
-				'context_link_label' => ! empty( $docs_url ) ? __( 'Documentation', 'ai-visibility-inspector' ) : '',
-				'context_link_url'   => $docs_url,
+				'context_link_label' => __( 'Documentation', 'ai-visibility-inspector' ),
+				'context_link_url'   => $documentation_entry_urls['user-guide'],
 			),
 		);
 		$current_support_category_config = $support_category_configs[ $requested_support_category ];
@@ -1448,6 +1468,8 @@ class Admin_Settings {
 		$billing_tab_href    = $settings_tab_urls['billing'];
 		$credits_tab_href    = $settings_tab_urls['credits'];
 		$support_tab_href    = $settings_tab_urls['support'];
+		$documentation_tab_href = $settings_tab_urls['documentation'];
+		$documentation_groups = self::get_documentation_groups();
 		$trial_label = self::format_dashboard_text_value( $trial_catalog['label'] ?? '', __( 'Free Trial', 'ai-visibility-inspector' ) );
 		$trial_credits = self::format_dashboard_metric_value( $trial_catalog['included_credits'] ?? AIVI_TRIAL_CREDITS, '0' );
 		$trial_days = self::format_dashboard_metric_value( $trial_catalog['duration_days'] ?? AIVI_TRIAL_DAYS, '0' );
@@ -1644,6 +1666,54 @@ class Admin_Settings {
 			.aivi-support-ticket__note{font-size:13px;line-height:1.55;color:#5c6b80;}
 			.aivi-support-ticket__cta{display:flex;gap:10px;flex-wrap:wrap;}
 			.aivi-support-ticket__pending{display:inline-flex;align-items:center;padding:9px 12px;border-radius:999px;background:#eef4ff;color:#214d9c;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
+			.aivi-docs-shell{display:grid;gap:20px;}
+			.aivi-docs-hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:end;padding:22px 24px;border:1px solid #dbe5f1;border-radius:24px;background:linear-gradient(180deg,#ffffff 0%,#fbfdff 100%);box-shadow:0 14px 30px rgba(15,23,42,.04);}
+			.aivi-docs-hero__eyebrow{display:inline-flex;align-items:center;padding:7px 12px;border-radius:999px;border:1px solid #efd98c;background:#fff6de;color:#8c6308;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;}
+			.aivi-docs-hero__title{margin:14px 0 10px;font-size:34px;line-height:1.04;letter-spacing:-.05em;color:#10233f;}
+			.aivi-docs-hero__desc{margin:0;max-width:760px;color:#516175;font-size:15px;line-height:1.75;}
+			.aivi-docs-hero__actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px;}
+			.aivi-docs-layout{display:grid;grid-template-columns:minmax(240px,280px) minmax(0,1fr) minmax(220px,280px);gap:18px;}
+			.aivi-docs-panel{border:1px solid #dce6f1;border-radius:22px;background:#fff;box-shadow:0 12px 24px rgba(15,23,42,.04);}
+			.aivi-docs-nav{padding:18px;}
+			.aivi-docs-nav__title,.aivi-docs-utility__title{margin:0 0 14px;font-size:18px;line-height:1.2;color:#10233f;}
+			.aivi-docs-nav__group + .aivi-docs-nav__group{margin-top:18px;}
+			.aivi-docs-nav__label{display:block;margin-bottom:8px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#6e8097;}
+			.aivi-docs-nav__item{display:grid;gap:4px;padding:12px 14px;border:1px solid #dce6f1;border-radius:16px;background:#fff;color:#10233f;text-decoration:none;transition:border-color .16s ease,background .16s ease,box-shadow .16s ease;}
+			.aivi-docs-nav__item + .aivi-docs-nav__item{margin-top:8px;}
+			.aivi-docs-nav__item:hover{border-color:#cbd7e5;box-shadow:0 10px 24px rgba(15,23,42,.05);}
+			.aivi-docs-nav__item.is-active{border-color:#e1b84f;background:linear-gradient(180deg,#fffdf8 0%,#fff7e5 100%);}
+			.aivi-docs-nav__item strong{font-size:14px;line-height:1.35;color:#10233f;}
+			.aivi-docs-nav__item span{font-size:13px;line-height:1.5;color:#516175;}
+			.aivi-docs-main{padding:20px 22px;}
+			.aivi-docs-article{display:none;}
+			.aivi-docs-article.is-active{display:block;}
+			.aivi-docs-article__top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px;}
+			.aivi-docs-article__meta{display:flex;flex-wrap:wrap;gap:10px;}
+			.aivi-docs-article__chip{display:inline-flex;align-items:center;padding:7px 11px;border-radius:999px;background:#edf3ff;color:#264d9e;font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;}
+			.aivi-docs-article__body{padding:24px;border:1px solid #dce6f1;border-radius:22px;background:linear-gradient(180deg,#ffffff 0%,#fcfdff 100%);}
+			.aivi-docs-article__title{margin:0 0 12px;font-size:30px;line-height:1.05;letter-spacing:-.04em;color:#10233f;}
+			.aivi-docs-article__lead{margin:0 0 18px;color:#516175;font-size:14px;line-height:1.75;}
+			.aivi-docs-article__body h2{margin:28px 0 12px;font-size:26px;line-height:1.12;letter-spacing:-.03em;color:#10233f;}
+			.aivi-docs-article__body h2:first-child{margin-top:0;}
+			.aivi-docs-article__body h3{margin:22px 0 10px;font-size:20px;line-height:1.2;color:#10233f;}
+			.aivi-docs-article__body h4{margin:18px 0 8px;font-size:16px;line-height:1.3;color:#10233f;}
+			.aivi-docs-article__body p{margin:0 0 14px;color:#334a66;font-size:14px;line-height:1.85;}
+			.aivi-docs-article__body ul,.aivi-docs-article__body ol{margin:0 0 16px 20px;color:#334a66;font-size:14px;line-height:1.8;}
+			.aivi-docs-article__body li + li{margin-top:6px;}
+			.aivi-docs-article__body a{color:#2153a4;text-decoration:none;font-weight:600;}
+			.aivi-docs-article__body a:hover{text-decoration:underline;}
+			.aivi-docs-article__body code{padding:2px 6px;border-radius:8px;background:#f2f5fa;color:#10233f;font-size:13px;}
+			.aivi-docs-article__body pre{margin:0 0 16px;padding:14px 16px;border-radius:16px;background:#10233f;color:#eef4ff;overflow:auto;}
+			.aivi-docs-article__body pre code{padding:0;background:transparent;color:inherit;}
+			.aivi-docs-utility{padding:18px;}
+			.aivi-docs-utility__card{padding:16px;border:1px solid #dce6f1;border-radius:18px;background:#fff;}
+			.aivi-docs-utility__card + .aivi-docs-utility__card{margin-top:12px;}
+			.aivi-docs-utility__card strong{display:block;margin-bottom:8px;font-size:15px;line-height:1.35;color:#10233f;}
+			.aivi-docs-utility__card p{margin:0;color:#516175;font-size:13px;line-height:1.65;}
+			.aivi-docs-utility__card .button{margin-top:12px;}
+			.aivi-docs-status-list{display:grid;gap:10px;}
+			.aivi-docs-status{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px solid #dce6f1;border-radius:16px;background:#f8fbff;font-size:13px;color:#334a66;}
+			.aivi-docs-status b{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#6b7c92;}
 			.aivi-trial-email-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.48);z-index:100000;}
 			.aivi-trial-email-modal.is-open{display:flex;}
 			.aivi-trial-email-modal__dialog{width:min(100%,520px);background:#fff;border:1px solid #d7e0ee;border-radius:20px;box-shadow:0 24px 60px rgba(15,23,42,.18);padding:24px;}
@@ -1658,9 +1728,9 @@ class Admin_Settings {
 			.aivi-operational-settings > summary{cursor:pointer;font-size:15px;font-weight:700;color:#10233f;}
 			.aivi-operational-settings__intro{margin:14px 0 0;color:#516175;max-width:760px;}
 			.aivi-operational-settings__test{margin-top:20px;padding-top:18px;border-top:1px solid #e4ebf5;}
-			@media (max-width: 782px){.aivi-settings-shell{padding:18px;}.aivi-settings-hero{padding:20px;}.aivi-settings-hero__title{font-size:28px;}.aivi-settings-tab{width:100%;border-radius:12px;border-bottom:1px solid #d5dbea;margin-bottom:0;}.aivi-settings-tab.is-active{border-bottom-color:#d5dbea;}.aivi-settings-section{border-radius:18px;}.aivi-settings-spotlight{grid-template-columns:1fr;}.aivi-settings-spotlight__title{font-size:26px;}.aivi-settings-spotlight__side{padding:16px;}.aivi-settings-spotlight__signal-row{grid-template-columns:repeat(3,minmax(0,1fr));}.aivi-settings-spotlight__side-actions{flex-wrap:wrap;}.aivi-settings-plan-card__top{flex-direction:column;}.aivi-settings-plan-card__price{text-align:left;}.aivi-settings-callout--connection{grid-template-columns:1fr;}.aivi-settings-token-grid{grid-template-columns:1fr !important;}.aivi-settings-token-card__actions{justify-content:flex-start;}.aivi-support-shell__top{grid-template-columns:1fr;}.aivi-support-shell__chips{justify-content:flex-start;}.aivi-support-shell__top-title{font-size:28px;}.aivi-support-layout,.aivi-support-ticket__form{grid-template-columns:1fr;}.aivi-support-ticket__meta-item--wide{grid-column:auto;}}
+			@media (max-width: 782px){.aivi-settings-shell{padding:18px;}.aivi-settings-hero{padding:20px;}.aivi-settings-hero__title{font-size:28px;}.aivi-settings-tab{width:100%;border-radius:12px;border-bottom:1px solid #d5dbea;margin-bottom:0;}.aivi-settings-tab.is-active{border-bottom-color:#d5dbea;}.aivi-settings-section{border-radius:18px;}.aivi-settings-spotlight{grid-template-columns:1fr;}.aivi-settings-spotlight__title{font-size:26px;}.aivi-settings-spotlight__side{padding:16px;}.aivi-settings-spotlight__signal-row{grid-template-columns:repeat(3,minmax(0,1fr));}.aivi-settings-spotlight__side-actions{flex-wrap:wrap;}.aivi-settings-plan-card__top{flex-direction:column;}.aivi-settings-plan-card__price{text-align:left;}.aivi-settings-callout--connection{grid-template-columns:1fr;}.aivi-settings-token-grid{grid-template-columns:1fr !important;}.aivi-settings-token-card__actions{justify-content:flex-start;}.aivi-support-shell__top{grid-template-columns:1fr;}.aivi-support-shell__chips{justify-content:flex-start;}.aivi-support-shell__top-title{font-size:28px;}.aivi-support-layout,.aivi-support-ticket__form,.aivi-docs-layout,.aivi-docs-hero{grid-template-columns:1fr;}.aivi-support-ticket__meta-item--wide{grid-column:auto;}.aivi-docs-hero__title{font-size:28px;}.aivi-docs-hero__actions{justify-content:flex-start;}}
 		</style>
-		<div class="aivi-settings-shell" data-aivi-active-support-category="<?php echo esc_attr( $requested_support_category ); ?>">
+		<div class="aivi-settings-shell" data-aivi-active-support-category="<?php echo esc_attr( $requested_support_category ); ?>" data-aivi-active-doc="<?php echo esc_attr( $requested_doc_slug ); ?>">
 			<div class="aivi-settings-hero">
 				<div>
 					<span class="aivi-settings-hero__eyebrow"><?php esc_html_e( 'AiVI account workspace', 'ai-visibility-inspector' ); ?></span>
@@ -1677,6 +1747,7 @@ class Admin_Settings {
 				<?php endif; ?>
 				<a href="<?php echo esc_url( $settings_tab_urls['connection'] ); ?>" class="aivi-settings-tab<?php echo 'connection' === $requested_settings_tab ? ' is-active' : ''; ?>" data-aivi-settings-tab-button="connection"><?php esc_html_e( 'Connection', 'ai-visibility-inspector' ); ?></a>
 				<a href="<?php echo esc_url( $settings_tab_urls['support'] ); ?>" class="aivi-settings-tab<?php echo 'support' === $requested_settings_tab ? ' is-active' : ''; ?>" data-aivi-settings-tab-button="support"><?php esc_html_e( 'Support', 'ai-visibility-inspector' ); ?></a>
+				<a href="<?php echo esc_url( $settings_tab_urls['documentation'] ); ?>" class="aivi-settings-tab<?php echo 'documentation' === $requested_settings_tab ? ' is-active' : ''; ?>" data-aivi-settings-tab-button="documentation"><?php esc_html_e( 'Documentation', 'ai-visibility-inspector' ); ?></a>
 			</nav>
 			<div id="aivi-billing-result" class="notice inline aivi-billing-result"></div>
 			<div class="aivi-trial-email-modal" data-aivi-trial-email-modal="true" aria-hidden="true">
@@ -2241,7 +2312,8 @@ class Admin_Settings {
 											<div class="aivi-support-ticket__note"><?php printf( esc_html__( 'Prefilled: site URL, site ID, plugin version %1$s, WordPress %2$s', 'ai-visibility-inspector' ), esc_html( $support_plugin_version ), esc_html( $support_wp_version ) ); ?></div>
 											<div class="aivi-support-ticket__cta">
 												<?php if ( ! empty( $current_support_category_config['context_link_url'] ) && ! empty( $current_support_category_config['context_link_label'] ) ) : ?>
-													<a id="aivi-support-context-link" class="button button-secondary" href="<?php echo esc_url( $current_support_category_config['context_link_url'] ); ?>" <?php echo $current_support_category_config['context_link_url'] === $connection_tab_href ? '' : 'target="_blank" rel="noreferrer noopener"'; ?>><?php echo esc_html( $current_support_category_config['context_link_label'] ); ?></a>
+													<?php $is_internal_context_link = false !== strpos( (string) $current_support_category_config['context_link_url'], 'page=' . self::PAGE_SLUG ); ?>
+													<a id="aivi-support-context-link" class="button button-secondary" href="<?php echo esc_url( $current_support_category_config['context_link_url'] ); ?>" <?php echo $is_internal_context_link ? '' : 'target="_blank" rel="noreferrer noopener"'; ?>><?php echo esc_html( $current_support_category_config['context_link_label'] ); ?></a>
 												<?php else : ?>
 													<a id="aivi-support-context-link" class="button button-secondary" href="#" hidden><?php esc_html_e( 'Documentation', 'ai-visibility-inspector' ); ?></a>
 												<?php endif; ?>
@@ -2263,6 +2335,93 @@ class Admin_Settings {
 						</div>
 					</div>
 				</section>
+				<section class="aivi-settings-section<?php echo 'documentation' === $requested_settings_tab ? ' is-active' : ''; ?>" data-aivi-settings-tab-panel="documentation" id="aivi-settings-tab-documentation">
+					<div class="aivi-docs-shell">
+						<div class="aivi-docs-hero">
+							<div>
+								<span class="aivi-docs-hero__eyebrow"><?php esc_html_e( 'AiVI knowledge surface', 'ai-visibility-inspector' ); ?></span>
+								<h3 class="aivi-docs-hero__title"><?php esc_html_e( 'Open the right guide without leaving AiVI.', 'ai-visibility-inspector' ); ?></h3>
+								<p class="aivi-docs-hero__desc"><?php esc_html_e( 'Use the documentation hub to understand checks, fix issues, review policy guidance, and work through contributor docs from the same settings workspace.', 'ai-visibility-inspector' ); ?></p>
+							</div>
+							<div class="aivi-docs-hero__actions">
+								<a class="button button-primary" href="<?php echo esc_url( $documentation_entry_urls['user-guide'] ); ?>" data-aivi-doc-button="user-guide"><?php esc_html_e( 'Start here', 'ai-visibility-inspector' ); ?></a>
+								<a class="button button-secondary" href="<?php echo esc_url( $support_tab_href ); ?>" data-aivi-settings-tab-link="support"><?php esc_html_e( 'Open support', 'ai-visibility-inspector' ); ?></a>
+								<?php if ( ! empty( $docs_url ) ) : ?>
+									<a class="button button-secondary" href="<?php echo esc_url( $docs_url ); ?>" target="_blank" rel="noreferrer noopener"><?php esc_html_e( 'Hosted docs', 'ai-visibility-inspector' ); ?></a>
+								<?php endif; ?>
+							</div>
+						</div>
+						<div class="aivi-docs-layout">
+							<aside class="aivi-docs-panel aivi-docs-nav">
+								<h4 class="aivi-docs-nav__title"><?php esc_html_e( 'Browse the docs', 'ai-visibility-inspector' ); ?></h4>
+								<?php foreach ( $documentation_groups as $group_key => $group_label ) : ?>
+									<div class="aivi-docs-nav__group">
+										<span class="aivi-docs-nav__label"><?php echo esc_html( $group_label ); ?></span>
+										<?php foreach ( $documentation_catalog as $doc_slug => $doc_entry ) : ?>
+											<?php if ( $group_key !== $doc_entry['group'] ) : ?>
+												<?php continue; ?>
+											<?php endif; ?>
+											<a href="<?php echo esc_url( $documentation_entry_urls[ $doc_slug ] ); ?>" class="aivi-docs-nav__item<?php echo $requested_doc_slug === $doc_slug ? ' is-active' : ''; ?>" data-aivi-doc-button="<?php echo esc_attr( $doc_slug ); ?>">
+												<strong><?php echo esc_html( $doc_entry['title'] ); ?></strong>
+												<span><?php echo esc_html( $doc_entry['summary'] ); ?></span>
+											</a>
+										<?php endforeach; ?>
+									</div>
+								<?php endforeach; ?>
+							</aside>
+							<div class="aivi-docs-panel aivi-docs-main">
+								<?php foreach ( $documentation_catalog as $doc_slug => $doc_entry ) : ?>
+									<?php $doc_payload = self::get_documentation_entry_payload( $doc_slug, $doc_entry ); ?>
+									<article class="aivi-docs-article<?php echo $requested_doc_slug === $doc_slug ? ' is-active' : ''; ?>" data-aivi-doc-panel="<?php echo esc_attr( $doc_slug ); ?>" id="aivi-doc-<?php echo esc_attr( $doc_slug ); ?>">
+										<div class="aivi-docs-article__top">
+											<div class="aivi-docs-article__meta">
+												<span class="aivi-docs-article__chip"><?php echo esc_html( $doc_entry['kind'] ); ?></span>
+												<span class="aivi-docs-article__chip"><?php esc_html_e( 'Current', 'ai-visibility-inspector' ); ?></span>
+												<span class="aivi-docs-article__chip"><?php echo esc_html( $doc_entry['audience'] ); ?></span>
+											</div>
+											<div class="aivi-docs-article__meta">
+												<span class="aivi-docs-article__chip">
+													<?php
+													printf(
+														esc_html__( 'Plugin v%s', 'ai-visibility-inspector' ),
+														esc_html( $support_plugin_version )
+													);
+													?>
+												</span>
+											</div>
+										</div>
+										<div class="aivi-docs-article__body">
+											<h4 class="aivi-docs-article__title"><?php echo esc_html( $doc_payload['title'] ); ?></h4>
+											<p class="aivi-docs-article__lead"><?php echo esc_html( $doc_entry['summary'] ); ?></p>
+											<?php echo wp_kses_post( $doc_payload['html'] ); ?>
+										</div>
+									</article>
+								<?php endforeach; ?>
+							</div>
+							<aside class="aivi-docs-panel aivi-docs-utility">
+								<h4 class="aivi-docs-utility__title"><?php esc_html_e( 'Related tools', 'ai-visibility-inspector' ); ?></h4>
+								<div class="aivi-docs-utility__card">
+									<strong><?php esc_html_e( 'Need the meaning of a check?', 'ai-visibility-inspector' ); ?></strong>
+									<p><?php esc_html_e( 'Jump into the Check Reference when you need the current pass, partial, fail, or edge-case guidance behind a surfaced finding.', 'ai-visibility-inspector' ); ?></p>
+									<a class="button button-secondary" href="<?php echo esc_url( $documentation_entry_urls['check-reference'] ); ?>" data-aivi-doc-button="check-reference"><?php esc_html_e( 'Open Check Reference', 'ai-visibility-inspector' ); ?></a>
+								</div>
+								<div class="aivi-docs-utility__card">
+									<strong><?php esc_html_e( 'Still blocked after reading?', 'ai-visibility-inspector' ); ?></strong>
+									<p><?php esc_html_e( 'Move into the Support tab when you need site-specific help with connection, billing, or analysis behavior.', 'ai-visibility-inspector' ); ?></p>
+									<a class="button button-secondary" href="<?php echo esc_url( $support_tab_href ); ?>" data-aivi-settings-tab-link="support"><?php esc_html_e( 'Open Support', 'ai-visibility-inspector' ); ?></a>
+								</div>
+								<div class="aivi-docs-utility__card">
+									<strong><?php esc_html_e( 'Documentation status', 'ai-visibility-inspector' ); ?></strong>
+									<div class="aivi-docs-status-list">
+										<div class="aivi-docs-status"><span><?php esc_html_e( 'Docs baseline', 'ai-visibility-inspector' ); ?></span><b><?php esc_html_e( 'Current', 'ai-visibility-inspector' ); ?></b></div>
+										<div class="aivi-docs-status"><span><?php esc_html_e( 'Plugin package', 'ai-visibility-inspector' ); ?></span><b><?php esc_html_e( 'Ready', 'ai-visibility-inspector' ); ?></b></div>
+										<div class="aivi-docs-status"><span><?php esc_html_e( 'Public repo sync', 'ai-visibility-inspector' ); ?></span><b><?php esc_html_e( 'Aligned', 'ai-visibility-inspector' ); ?></b></div>
+									</div>
+								</div>
+							</aside>
+						</div>
+					</div>
+				</section>
 			</div>
 			<script>
 			(function() {
@@ -2273,6 +2432,9 @@ class Admin_Settings {
 
 				var buttons = Array.prototype.slice.call(shell.querySelectorAll('[data-aivi-settings-tab-button]'));
 				var panels = Array.prototype.slice.call(shell.querySelectorAll('[data-aivi-settings-tab-panel]'));
+				var inlineTabLinks = Array.prototype.slice.call(shell.querySelectorAll('[data-aivi-settings-tab-link]'));
+				var docButtons = Array.prototype.slice.call(shell.querySelectorAll('[data-aivi-doc-button]'));
+				var docPanels = Array.prototype.slice.call(shell.querySelectorAll('[data-aivi-doc-panel]'));
 				if (!buttons.length || !panels.length) {
 					return;
 				}
@@ -2298,26 +2460,83 @@ class Admin_Settings {
 					if (value === 'support' || value === 'help' || value === 'aivi-settings-tab-support' || value === 'aivi-settings-tab-help' || value === 'aivi-settings-tab-support-panel') {
 						return 'support';
 					}
+					if (value === 'documentation' || value === 'docs' || value === 'aivi-settings-tab-documentation' || value.indexOf('aivi-doc-') === 0) {
+						return 'documentation';
+					}
 
 					return 'overview';
+				}
+
+				function normalizeDoc(docOrHash) {
+					var fallback = shell.getAttribute('data-aivi-active-doc') || 'user-guide';
+					var value = String(docOrHash || '').replace(/^#/, '').trim().toLowerCase();
+					if (value.indexOf('aivi-doc-') === 0) {
+						value = value.substring(9);
+					}
+					if (!value) {
+						return fallback;
+					}
+					if (!shell.querySelector('[data-aivi-doc-button="' + value + '"]') || !shell.querySelector('[data-aivi-doc-panel="' + value + '"]')) {
+						return fallback;
+					}
+					return value;
 				}
 
 				function getPanelForTab(tab) {
 					return shell.querySelector('[data-aivi-settings-tab-panel="' + tab + '"]');
 				}
 
-				function buildUrlForTab(tab) {
-					var panel = getPanelForTab(tab);
+				function getDocPanelForSlug(slug) {
+					return shell.querySelector('[data-aivi-doc-panel="' + slug + '"]');
+				}
+
+				function buildUrlForState(tab, supportCategory, docSlug) {
 					var url = new URL(window.location.href);
 					url.searchParams.set('aivi_tab', tab);
 					if (tab === 'support') {
-						var activeSupportCategory = shell.getAttribute('data-aivi-active-support-category') || 'billing';
-						url.searchParams.set('aivi_support_category', activeSupportCategory);
+						url.searchParams.set('aivi_support_category', supportCategory || shell.getAttribute('data-aivi-active-support-category') || 'billing');
+						url.searchParams.delete('aivi_doc');
+					} else if (tab === 'documentation') {
+						var activeDoc = normalizeDoc(docSlug || shell.getAttribute('data-aivi-active-doc') || 'user-guide');
+						var activeDocPanel = getDocPanelForSlug(activeDoc);
+						url.searchParams.set('aivi_doc', activeDoc);
+						url.searchParams.delete('aivi_support_category');
+						url.hash = activeDocPanel && activeDocPanel.id ? activeDocPanel.id : 'aivi-settings-tab-documentation';
+						return url.toString();
 					} else {
 						url.searchParams.delete('aivi_support_category');
+						url.searchParams.delete('aivi_doc');
 					}
+					var panel = getPanelForTab(tab);
 					url.hash = panel && panel.id ? panel.id : 'aivi-settings-tab-' + tab;
 					return url.toString();
+				}
+
+				function activateDoc(docOrHash, updateHistory) {
+					if (!docButtons.length || !docPanels.length) {
+						return shell.getAttribute('data-aivi-active-doc') || 'user-guide';
+					}
+
+					var slug = normalizeDoc(docOrHash);
+					shell.setAttribute('data-aivi-active-doc', slug);
+
+					docButtons.forEach(function(button) {
+						button.classList.toggle('is-active', button.getAttribute('data-aivi-doc-button') === slug);
+					});
+
+					docPanels.forEach(function(panel) {
+						panel.classList.toggle('is-active', panel.getAttribute('data-aivi-doc-panel') === slug);
+					});
+
+					if (updateHistory && window.history && window.history.replaceState) {
+						window.history.replaceState(
+							null,
+							document.title,
+							buildUrlForState('documentation', shell.getAttribute('data-aivi-active-support-category') || 'billing', slug)
+						);
+					}
+
+					return slug;
 				}
 
 				function activateTab(tabOrHash, updateHash) {
@@ -2337,7 +2556,15 @@ class Admin_Settings {
 					});
 
 					if (updateHash && window.history && window.history.replaceState) {
-						window.history.replaceState(null, document.title, buildUrlForTab(tab));
+						window.history.replaceState(
+							null,
+							document.title,
+							buildUrlForState(
+								tab,
+								shell.getAttribute('data-aivi-active-support-category') || 'billing',
+								shell.getAttribute('data-aivi-active-doc') || 'user-guide'
+							)
+						);
 					}
 
 					return tab;
@@ -2350,12 +2577,78 @@ class Admin_Settings {
 					});
 				});
 
-				window.addEventListener('hashchange', function() {
-					activateTab(window.location.hash, false);
+				inlineTabLinks.forEach(function(link) {
+					link.addEventListener('click', function(event) {
+						event.preventDefault();
+						if (typeof window.aiviOpenSettingsLocation === 'function') {
+							window.aiviOpenSettingsLocation(link.getAttribute('href') || '', true);
+							return;
+						}
+						activateTab(link.getAttribute('data-aivi-settings-tab-link') || link.getAttribute('href'), true);
+					});
 				});
 
+				docButtons.forEach(function(button) {
+					button.addEventListener('click', function(event) {
+						event.preventDefault();
+						activateTab('documentation', false);
+						activateDoc(button.getAttribute('data-aivi-doc-button') || button.getAttribute('href'), true);
+					});
+				});
+
+				window.addEventListener('hashchange', function() {
+					var tab = normalizeTab(window.location.hash);
+					activateTab(tab, false);
+					if (tab === 'documentation') {
+						activateDoc(window.location.hash, false);
+					}
+				});
+
+				window.aiviOpenSettingsLocation = function(urlOrPath, updateHistory) {
+					var rawValue = String(urlOrPath || '').trim();
+					if (!rawValue) {
+						return;
+					}
+
+					try {
+						var targetUrl = new URL(rawValue, window.location.href);
+						var targetTab = normalizeTab(targetUrl.searchParams.get('aivi_tab') || targetUrl.hash);
+						var targetSupportCategory = String(targetUrl.searchParams.get('aivi_support_category') || shell.getAttribute('data-aivi-active-support-category') || 'billing').trim().toLowerCase();
+						var targetDoc = targetUrl.searchParams.get('aivi_doc') || targetUrl.hash;
+
+						activateTab(targetTab, false);
+
+						if (targetTab === 'documentation') {
+							activateDoc(targetDoc, false);
+						}
+
+						if (targetTab === 'support' && typeof window.aiviActivateSupportCategory === 'function') {
+							window.aiviActivateSupportCategory(targetSupportCategory, {
+								forceMessage: false,
+								updateHistory: false
+							});
+						}
+
+						if (updateHistory !== false && window.history && window.history.replaceState) {
+							window.history.replaceState(
+								null,
+								document.title,
+								buildUrlForState(
+									targetTab,
+									targetSupportCategory,
+									targetTab === 'documentation' ? normalizeDoc(targetDoc) : (shell.getAttribute('data-aivi-active-doc') || 'user-guide')
+								)
+							);
+						}
+					} catch (error) {
+						window.location.href = rawValue;
+					}
+				};
+
 				window.aiviActivateSettingsTab = activateTab;
-				activateTab(window.location.hash, false);
+				var initialUrl = new URL(window.location.href);
+				activateTab(initialUrl.searchParams.get('aivi_tab') || window.location.hash, false);
+				activateDoc(initialUrl.searchParams.get('aivi_doc') || window.location.hash, false);
 			})();
 			</script>
 			<script>
@@ -2778,6 +3071,7 @@ class Admin_Settings {
 						window.history.replaceState(null, document.title, url.toString());
 					}
 				}
+				window.aiviActivateSupportCategory = activateSupportCategory;
 				supportButtons.forEach(function(button) {
 					button.addEventListener('click', function(event) {
 						event.preventDefault();
@@ -2788,9 +3082,13 @@ class Admin_Settings {
 				});
 				if (supportContextLink) {
 					supportContextLink.addEventListener('click', function(event) {
-						if (!supportContextLink.hidden && isInternalSupportLink(supportContextLink.getAttribute('href') || '') && typeof window.aiviActivateSettingsTab === 'function') {
+						if (!supportContextLink.hidden && isInternalSupportLink(supportContextLink.getAttribute('href') || '')) {
 							event.preventDefault();
-							window.aiviActivateSettingsTab('connection', true);
+							if (typeof window.aiviOpenSettingsLocation === 'function') {
+								window.aiviOpenSettingsLocation(supportContextLink.getAttribute('href') || '', true);
+								return;
+							}
+							window.location.href = supportContextLink.getAttribute('href') || '<?php echo esc_js( $support_tab_href ); ?>';
 						}
 					});
 				}
@@ -3155,6 +3453,367 @@ class Admin_Settings {
 
 		$error_detail = is_array( $decoded ) ? wp_json_encode( $decoded ) : $body;
 		wp_send_json_error( array( 'message' => sprintf( __( 'Connection test failed (HTTP %d): %s', 'ai-visibility-inspector' ), $status_code, $error_detail ) ) );
+	}
+
+	/**
+	 * Get documentation groups for the in-plugin docs surface.
+	 *
+	 * @return array<string, string>
+	 */
+	private static function get_documentation_groups() {
+		return array(
+			'start' => __( 'Start Here', 'ai-visibility-inspector' ),
+			'trust' => __( 'Trust & Policy', 'ai-visibility-inspector' ),
+			'build' => __( 'Build & Extend', 'ai-visibility-inspector' ),
+		);
+	}
+
+	/**
+	 * Get documentation catalog metadata.
+	 *
+	 * @return array<string, array<string, string>>
+	 */
+	private static function get_documentation_catalog() {
+		return array(
+			'user-guide'      => array(
+				'file'     => 'USER_GUIDE.md',
+				'title'    => __( 'User Guide', 'ai-visibility-inspector' ),
+				'summary'  => __( 'Analyze content, read findings, rerun safely, and use the main settings tabs.', 'ai-visibility-inspector' ),
+				'group'    => 'start',
+				'kind'     => __( 'Guide', 'ai-visibility-inspector' ),
+				'audience' => __( 'Editor Workflow', 'ai-visibility-inspector' ),
+			),
+			'check-reference' => array(
+				'file'     => 'CHECK_REFERENCE.md',
+				'title'    => __( 'Check Reference', 'ai-visibility-inspector' ),
+				'summary'  => __( 'Understand the main check families, verdicts, and common edge cases.', 'ai-visibility-inspector' ),
+				'group'    => 'start',
+				'kind'     => __( 'Reference', 'ai-visibility-inspector' ),
+				'audience' => __( 'Analysis Logic', 'ai-visibility-inspector' ),
+			),
+			'troubleshooting' => array(
+				'file'     => 'TROUBLESHOOTING.md',
+				'title'    => __( 'Troubleshooting', 'ai-visibility-inspector' ),
+				'summary'  => __( 'Work through stale results, missing highlights, connection issues, and rerun confusion.', 'ai-visibility-inspector' ),
+				'group'    => 'start',
+				'kind'     => __( 'Guide', 'ai-visibility-inspector' ),
+				'audience' => __( 'Recovery Flow', 'ai-visibility-inspector' ),
+			),
+			'privacy'         => array(
+				'file'     => 'PRIVACY.md',
+				'title'    => __( 'Privacy', 'ai-visibility-inspector' ),
+				'summary'  => __( 'See what the plugin captures, stores, and sends during normal AiVI usage.', 'ai-visibility-inspector' ),
+				'group'    => 'trust',
+				'kind'     => __( 'Policy', 'ai-visibility-inspector' ),
+				'audience' => __( 'Trust', 'ai-visibility-inspector' ),
+			),
+			'terms-of-service' => array(
+				'file'     => 'TERMS_OF_SERVICE.md',
+				'title'    => __( 'Terms of Service', 'ai-visibility-inspector' ),
+				'summary'  => __( 'Review current service boundaries, responsibilities, and commercial assumptions.', 'ai-visibility-inspector' ),
+				'group'    => 'trust',
+				'kind'     => __( 'Policy', 'ai-visibility-inspector' ),
+				'audience' => __( 'Trust', 'ai-visibility-inspector' ),
+			),
+			'support-guide'   => array(
+				'file'     => 'SUPPORT.md',
+				'title'    => __( 'Support Guide', 'ai-visibility-inspector' ),
+				'summary'  => __( 'Learn how to contact support, what to include, and how to describe an issue clearly.', 'ai-visibility-inspector' ),
+				'group'    => 'trust',
+				'kind'     => __( 'Guide', 'ai-visibility-inspector' ),
+				'audience' => __( 'Support', 'ai-visibility-inspector' ),
+			),
+			'development'     => array(
+				'file'     => 'DEVELOPMENT.md',
+				'title'    => __( 'Development', 'ai-visibility-inspector' ),
+				'summary'  => __( 'Use the current contributor workflow, testing commands, and packaging helpers.', 'ai-visibility-inspector' ),
+				'group'    => 'build',
+				'kind'     => __( 'Guide', 'ai-visibility-inspector' ),
+				'audience' => __( 'Contributors', 'ai-visibility-inspector' ),
+			),
+			'architecture'    => array(
+				'file'     => 'ARCHITECTURE.md',
+				'title'    => __( 'Architecture', 'ai-visibility-inspector' ),
+				'summary'  => __( 'Understand the plugin surface, request lifecycle, sidebar, overlay, and managed backend boundary.', 'ai-visibility-inspector' ),
+				'group'    => 'build',
+				'kind'     => __( 'Reference', 'ai-visibility-inspector' ),
+				'audience' => __( 'System Design', 'ai-visibility-inspector' ),
+			),
+			'operations'      => array(
+				'file'     => 'OPERATIONS.md',
+				'title'    => __( 'Operations', 'ai-visibility-inspector' ),
+				'summary'  => __( 'Follow the current packaging, specimen verification, and public snapshot release flow.', 'ai-visibility-inspector' ),
+				'group'    => 'build',
+				'kind'     => __( 'Runbook', 'ai-visibility-inspector' ),
+				'audience' => __( 'Release Flow', 'ai-visibility-inspector' ),
+			),
+			'changelog'       => array(
+				'file'     => 'CHANGELOG.md',
+				'title'    => __( 'Changelog', 'ai-visibility-inspector' ),
+				'summary'  => __( 'See the latest public-facing release notes for the plugin surface.', 'ai-visibility-inspector' ),
+				'group'    => 'build',
+				'kind'     => __( 'Release Notes', 'ai-visibility-inspector' ),
+				'audience' => __( 'Current Release', 'ai-visibility-inspector' ),
+			),
+		);
+	}
+
+	/**
+	 * Normalize a documentation slug.
+	 *
+	 * @param string $slug Raw slug.
+	 * @return string
+	 */
+	private static function normalize_documentation_slug( $slug ) {
+		$catalog = self::get_documentation_catalog();
+		$key = sanitize_key( (string) $slug );
+		if ( isset( $catalog[ $key ] ) ) {
+			return $key;
+		}
+
+		return 'user-guide';
+	}
+
+	/**
+	 * Get parsed documentation entry payload.
+	 *
+	 * @param string $slug  Entry slug.
+	 * @param array  $entry Entry metadata.
+	 * @return array{title:string, html:string}
+	 */
+	private static function get_documentation_entry_payload( $slug, $entry ) {
+		static $cache = array();
+
+		$slug = self::normalize_documentation_slug( $slug );
+		if ( isset( $cache[ $slug ] ) ) {
+			return $cache[ $slug ];
+		}
+
+		$fallback_title = isset( $entry['title'] ) ? (string) $entry['title'] : __( 'Documentation', 'ai-visibility-inspector' );
+		$file_name = isset( $entry['file'] ) ? (string) $entry['file'] : '';
+		$file_path = self::get_documentation_file_path( $file_name );
+		if ( '' === $file_name || ! is_readable( $file_path ) ) {
+			$cache[ $slug ] = array(
+				'title' => $fallback_title,
+				'html'  => '<p>' . esc_html__( 'This documentation article is not available in the current plugin package.', 'ai-visibility-inspector' ) . '</p>',
+			);
+			return $cache[ $slug ];
+		}
+
+		$markdown = (string) file_get_contents( $file_path );
+		$markdown = preg_replace( '/^## Screenshot Placeholders.*?(?=^##\s|\z)/ms', '', $markdown );
+		list( $title, $body ) = self::extract_documentation_heading_and_body( $markdown, $fallback_title );
+		$cache[ $slug ] = array(
+			'title' => $title,
+			'html'  => self::render_documentation_markdown( $body ),
+		);
+
+		return $cache[ $slug ];
+	}
+
+	/**
+	 * Resolve the file path for a documentation source file.
+	 *
+	 * @param string $file_name File name.
+	 * @return string
+	 */
+	private static function get_documentation_file_path( $file_name ) {
+		$plugin_root = dirname( __DIR__ );
+		return $plugin_root . DIRECTORY_SEPARATOR . ltrim( (string) $file_name, '\\/' );
+	}
+
+	/**
+	 * Extract the first heading as title and return the remaining body.
+	 *
+	 * @param string $markdown       Raw markdown.
+	 * @param string $fallback_title Fallback title.
+	 * @return array{0:string,1:string}
+	 */
+	private static function extract_documentation_heading_and_body( $markdown, $fallback_title ) {
+		$normalized = str_replace( array( "\r\n", "\r" ), "\n", (string) $markdown );
+		$normalized = preg_replace( '/^\xEF\xBB\xBF/', '', $normalized );
+		$normalized = ltrim( $normalized );
+		$title = $fallback_title;
+
+		if ( preg_match( '/^\#\s+(.+)$/m', $normalized, $matches ) && isset( $matches[1] ) ) {
+			$title = trim( wp_strip_all_tags( $matches[1] ) );
+		}
+
+		$body = preg_replace( '/^\#\s+.+\n*/', '', $normalized, 1 );
+		return array( $title, trim( (string) $body ) );
+	}
+
+	/**
+	 * Render markdown into simple documentation HTML.
+	 *
+	 * @param string $markdown Markdown body.
+	 * @return string
+	 */
+	private static function render_documentation_markdown( $markdown ) {
+		$lines = preg_split( '/\n/', str_replace( array( "\r\n", "\r" ), "\n", (string) $markdown ) );
+		$html = '';
+		$paragraph_lines = array();
+		$list_items = array();
+		$list_type = '';
+		$code_lines = array();
+		$inside_code_block = false;
+
+		$flush_paragraph = static function () use ( &$html, &$paragraph_lines ) {
+			if ( empty( $paragraph_lines ) ) {
+				return;
+			}
+
+			$text = trim( implode( ' ', array_map( 'trim', $paragraph_lines ) ) );
+			$paragraph_lines = array();
+			if ( '' === $text ) {
+				return;
+			}
+
+			$html .= '<p>' . self::render_documentation_inline( $text ) . '</p>';
+		};
+
+		$flush_list = static function () use ( &$html, &$list_items, &$list_type ) {
+			if ( empty( $list_items ) || '' === $list_type ) {
+				$list_items = array();
+				$list_type = '';
+				return;
+			}
+
+			$tag = 'ol' === $list_type ? 'ol' : 'ul';
+			$html .= '<' . $tag . '>';
+			foreach ( $list_items as $item ) {
+				$html .= '<li>' . self::render_documentation_inline( $item ) . '</li>';
+			}
+			$html .= '</' . $tag . '>';
+			$list_items = array();
+			$list_type = '';
+		};
+
+		$flush_code = static function () use ( &$html, &$code_lines ) {
+			if ( empty( $code_lines ) ) {
+				return;
+			}
+
+			$code = implode( "\n", $code_lines );
+			$code_lines = array();
+			$html .= '<pre><code>' . esc_html( rtrim( $code ) ) . '</code></pre>';
+		};
+
+		foreach ( $lines as $line ) {
+			if ( preg_match( '/^\s*```/', $line ) ) {
+				$flush_paragraph();
+				$flush_list();
+				if ( $inside_code_block ) {
+					$flush_code();
+				}
+				$inside_code_block = ! $inside_code_block;
+				continue;
+			}
+
+			if ( $inside_code_block ) {
+				$code_lines[] = $line;
+				continue;
+			}
+
+			if ( preg_match( '/^\s*-\s*`?\[Screenshot:/', $line ) ) {
+				continue;
+			}
+
+			if ( '' === trim( $line ) ) {
+				$flush_paragraph();
+				$flush_list();
+				continue;
+			}
+
+			if ( preg_match( '/^(#{2,6})\s+(.+)$/', trim( $line ), $matches ) ) {
+				$flush_paragraph();
+				$flush_list();
+				$level = min( 6, max( 2, strlen( $matches[1] ) ) );
+				$html .= sprintf(
+					'<h%d>%s</h%d>',
+					(int) $level,
+					self::render_documentation_inline( trim( $matches[2] ) ),
+					(int) $level
+				);
+				continue;
+			}
+
+			if ( preg_match( '/^\-\s+(.+)$/', trim( $line ), $matches ) ) {
+				$flush_paragraph();
+				if ( 'ul' !== $list_type ) {
+					$flush_list();
+					$list_type = 'ul';
+				}
+				$list_items[] = trim( $matches[1] );
+				continue;
+			}
+
+			if ( preg_match( '/^\d+\.\s+(.+)$/', trim( $line ), $matches ) ) {
+				$flush_paragraph();
+				if ( 'ol' !== $list_type ) {
+					$flush_list();
+					$list_type = 'ol';
+				}
+				$list_items[] = trim( $matches[1] );
+				continue;
+			}
+
+			$paragraph_lines[] = trim( $line );
+		}
+
+		$flush_paragraph();
+		$flush_list();
+		if ( $inside_code_block ) {
+			$flush_code();
+		}
+
+		return $html;
+	}
+
+	/**
+	 * Render inline markdown.
+	 *
+	 * @param string $text Inline markdown.
+	 * @return string
+	 */
+	private static function render_documentation_inline( $text ) {
+		$placeholders = array();
+		$placeholder_index = 0;
+		$raw_text = (string) $text;
+
+		$raw_text = preg_replace_callback(
+			'/`([^`]+)`/',
+			static function ( $matches ) use ( &$placeholders, &$placeholder_index ) {
+				$token = '__AIVI_DOC_TOKEN_' . $placeholder_index++ . '__';
+				$placeholders[ $token ] = '<code>' . esc_html( $matches[1] ) . '</code>';
+				return $token;
+			},
+			$raw_text
+		);
+
+		$raw_text = preg_replace_callback(
+			'/\[([^\]]+)\]\(([^)]+)\)/',
+			static function ( $matches ) use ( &$placeholders, &$placeholder_index ) {
+				$token = '__AIVI_DOC_TOKEN_' . $placeholder_index++ . '__';
+				$label = esc_html( $matches[1] );
+				$url   = esc_url( $matches[2] );
+				$placeholders[ $token ] = $url
+					? '<a href="' . $url . '">' . $label . '</a>'
+					: $label;
+				return $token;
+			},
+			$raw_text
+		);
+
+		$safe = esc_html( $raw_text );
+		$safe = preg_replace( '/\*\*(.+?)\*\*/', '<strong>$1</strong>', $safe );
+		$safe = preg_replace( '/\*(.+?)\*/', '<em>$1</em>', $safe );
+
+		foreach ( $placeholders as $token => $html ) {
+			$safe = str_replace( $token, $html, $safe );
+		}
+
+		return $safe;
 	}
 
 	/**

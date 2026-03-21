@@ -18,6 +18,16 @@ $allowlist = @(
     "ai-visibility-inspector.php",
     "LICENSE",
     "readme.md",
+    "USER_GUIDE.md",
+    "CHECK_REFERENCE.md",
+    "TROUBLESHOOTING.md",
+    "PRIVACY.md",
+    "TERMS_OF_SERVICE.md",
+    "SUPPORT.md",
+    "DEVELOPMENT.md",
+    "ARCHITECTURE.md",
+    "OPERATIONS.md",
+    "CHANGELOG.md",
     "assets",
     "includes"
 )

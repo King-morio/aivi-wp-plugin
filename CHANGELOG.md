@@ -18,6 +18,7 @@ This changelog is intentionally written for the public plugin surface. It exclud
   - `DEVELOPMENT.md`
   - `ARCHITECTURE.md`
   - `OPERATIONS.md`
+- added a first-class `Documentation` settings tab that renders the bundled guides inside WordPress
 - refreshed the public README and contributing guide to match the current plugin workflow
 
 ### Analysis and Editor Experience
