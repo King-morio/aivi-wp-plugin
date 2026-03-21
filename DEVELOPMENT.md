@@ -17,7 +17,7 @@ For development in this repository, treat these areas as the core public plugin 
 - `tests/unit/` and `tests/integration/` - PHPUnit coverage for plugin-safe PHP logic
 - `tools/package-plugin-release.ps1` - WordPress release packaging helper
 
-If you are working from a fuller internal source tree, keep control-plane, billing, private backend, deploy, and operator-only systems out of public plugin changes unless they are strictly needed for packaging or contributor-safe documentation.
+If you are working from a broader AiVI source tree, keep this repository focused on the WordPress plugin lane unless a packaging or documentation task truly depends on something else.
 
 ## Local Requirements
 
@@ -82,9 +82,9 @@ The plugin is organized around a few predictable areas:
 - `tools/package-plugin-release.ps1` - release ZIP packaging helper
 - `bin/install-wp-tests.sh` - WordPress PHPUnit scaffold helper
 
-## Public-Safe Development Boundaries
+## Plugin-Focused Development Boundaries
 
-AiVI uses a managed backend for deeper analysis, but not every surrounding system belongs in the plugin surface or in a public plugin repository.
+AiVI uses a managed backend for deeper analysis, but this repository should stay centered on the WordPress plugin surface.
 
 Keep plugin work focused on:
 
@@ -97,12 +97,12 @@ Keep plugin work focused on:
 
 Avoid adding or exposing:
 
-- private deployment infrastructure
-- operator-only admin or control-plane systems
-- payment, Cognito, or super-admin internals that are not required for plugin operation
-- environment inventories, replay dumps, temporary logs, or local scratch artifacts
+- unrelated service-side tooling or deployment code
+- environment-specific credentials or secrets
+- temporary logs, replay dumps, or local scratch artifacts
+- auxiliary systems that are not needed to understand or ship the plugin
 
-If a change touches both public plugin behavior and private infrastructure, separate the plugin-safe portion from the private lane instead of blending them into one change.
+If a change touches both plugin behavior and a broader service layer, separate the plugin-safe portion from the rest instead of blending them into one change.
 
 ## Daily Development Workflow
 
@@ -210,7 +210,7 @@ The packaged ZIP is written to:
 
 - `dist/AiVI-WP-Plugin.zip`
 
-The packaging helper intentionally includes only the runtime files WordPress needs:
+The packaging helper intentionally includes only the plugin files WordPress needs:
 
 - plugin bootstrap
 - `LICENSE`
@@ -218,19 +218,19 @@ The packaging helper intentionally includes only the runtime files WordPress nee
 - `assets/`
 - `includes/`
 
-Do not manually add debug artifacts, test output, local logs, or private infrastructure files to release ZIPs.
+Do not manually add debug artifacts, test output, local logs, or non-plugin service files to release ZIPs.
 
-## Working Safely on the Public Plugin Repo
+## Working Safely in the Plugin Repo
 
-If you contribute through the public plugin repository, keep changes constrained to the plugin surface described in this guide.
+If you contribute through the plugin repository, keep changes constrained to the plugin surface described in this guide.
 
 That means:
 
 - update plugin code, tests, and public docs
-- avoid committing private implementation details that are not needed for public contributors
-- keep the repo usable by someone who only has the WordPress plugin and not AiVI's private backend source tree
+- avoid committing implementation details that are not needed for plugin contributors
+- keep the repo usable by someone who only has the WordPress plugin code and contributor tooling
 
-The public plugin repository should be understandable and buildable without requiring internal operator systems.
+The plugin repository should be understandable and buildable without requiring unrelated service-side systems.
 
 ## Documentation Expectations
 

@@ -4,19 +4,14 @@ AI Visibility Inspector WordPress Plugin (AiVI) is a WordPress plugin for analyz
 
 ## Public Repository Scope
 
-This public repository contains the WordPress plugin surface only:
+This repository is focused on the WordPress plugin surface:
 
 - plugin runtime code
 - editor UI assets
 - contributor-safe tests
 - packaging and build helpers
 
-Internal operator systems and private infrastructure are intentionally excluded, including:
-
-- control-plane and super-admin applications
-- backend infrastructure and deployment code
-- billing, PayPal, Cognito, and operator-only integrations
-- internal runbooks, environment inventories, and debug artifacts
+It is meant to be enough for WordPress users and contributors who need to install, understand, extend, test, and package the plugin.
 
 ## What the Plugin Includes
 
@@ -71,7 +66,7 @@ When the managed backend is unavailable, AiVI reports that state clearly instead
 
 - **Backend URL** is primarily for staging, development, support overrides, or controlled troubleshooting.
 - **AiVI API Key** is optional and environment-dependent.
-- The plugin can store operational settings in WordPress options, but provider secrets and private infrastructure credentials are intentionally kept out of the public plugin surface.
+- The plugin can store operational settings in WordPress options, but environment-specific service credentials should still be handled carefully.
 
 ## Using AiVI
 
@@ -114,7 +109,7 @@ Public plugin routes include:
 - `GET|POST /wp-json/aivi/v1/settings/web-lookups`
 - `GET|POST /wp-json/aivi/v1/document-meta/<post_id>`
 
-Additional account, connection, and billing-related proxy routes are part of the plugin runtime, but the internal backend implementations behind them are intentionally not part of this public repository.
+Additional account, connection, and billing-related proxy routes are part of the plugin runtime. The service implementations behind those routes are managed separately from the WordPress plugin code.
 
 ## Development
 
@@ -176,7 +171,7 @@ This creates a WordPress-ready release ZIP that includes only the runtime files 
 
 - Runtime routes enforce WordPress capability checks where appropriate.
 - The plugin sanitizes and validates user-provided settings and request payloads.
-- The public repository does not include private backend infrastructure, deploy scripts, or operator-only credentials.
+- Sensitive service configuration and environment-specific credentials should not be committed to the plugin repository.
 - Customer sites may store operational plugin settings such as backend overrides or an optional AiVI API key, depending on environment needs.
 
 ## Contributing
