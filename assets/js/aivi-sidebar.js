@@ -78,7 +78,6 @@
             bannerTitle: 'Opening Signals',
             label: 'Intro Focus & Factuality',
             steps: [
-                { checkId: 'intro_focus_and_factuality.v1', text: 'Profiling intro alignment' },
                 { checkId: 'intro_wordcount', text: 'Calibrating intro length' },
                 { checkId: 'intro_readability', text: 'Parsing opening clarity' },
                 { checkId: 'intro_factual_entities', text: 'Resolving early entities' },

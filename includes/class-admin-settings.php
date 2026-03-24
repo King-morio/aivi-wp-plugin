@@ -517,6 +517,8 @@ class Admin_Settings {
 						return { kind: 'error', message: '<?php echo esc_js( __( 'AiVI could not finalize the top-up after PayPal returned. Please retry or contact support.', 'ai-visibility-inspector' ) ); ?>' };
 					case 'subscription_pending':
 						return { kind: 'warning', message: '<?php echo esc_js( __( 'Subscription approval received. AiVI is confirming activation with PayPal now. This may take a few seconds.', 'ai-visibility-inspector' ) ); ?>' };
+					case 'subscription_retry_ready':
+						return { kind: 'warning', message: '<?php echo esc_js( __( 'PayPal did not activate that subscription. Your previous AiVI access is still in place, and you can try again now.', 'ai-visibility-inspector' ) ); ?>' };
 					case 'processed':
 						return { kind: 'success', message: '<?php echo esc_js( __( 'Billing return processed. Refreshing your AiVI account state now.', 'ai-visibility-inspector' ) ); ?>' };
 					case 'backend_error':
@@ -589,6 +591,7 @@ class Admin_Settings {
 					return {
 						planCode: String(plan.plan_code || '').trim().toLowerCase(),
 						subscriptionStatus: String(plan.subscription_status || '').trim().toLowerCase(),
+						trialStatus: String(plan.trial_status || '').trim().toLowerCase(),
 						includedRemaining: Number(credits.included_remaining || 0),
 						topupRemaining: Number(credits.topup_remaining || 0),
 						totalRemaining: Number(credits.total_remaining || 0)
@@ -597,11 +600,48 @@ class Admin_Settings {
 					return {
 						planCode: '',
 						subscriptionStatus: '',
+						trialStatus: '',
 						includedRemaining: 0,
 						topupRemaining: 0,
 						totalRemaining: 0
 					};
 				}
+			}
+
+			function buildSettledSubscriptionReturnNotice(response, fallbackStatus) {
+				var planSnapshot = getSummaryPlanSnapshot(response);
+				var subscriptionStatus = String(planSnapshot.subscriptionStatus || '').trim().toLowerCase();
+				var trialStatus = String(planSnapshot.trialStatus || '').trim().toLowerCase();
+
+				if (subscriptionStatus === 'active') {
+					return {
+						kind: 'success',
+						message: '<?php echo esc_js( __( 'Your PayPal subscription is now active. AiVI refreshed your plan and credits successfully.', 'ai-visibility-inspector' ) ); ?>'
+					};
+				}
+
+				if (subscriptionStatus === 'trial' || trialStatus === 'active') {
+					return {
+						kind: 'warning',
+						message: '<?php echo esc_js( __( 'PayPal did not activate that subscription. Your free trial access is still active, and you can try again.', 'ai-visibility-inspector' ) ); ?>'
+					};
+				}
+
+				if (subscriptionStatus === 'cancelled' || subscriptionStatus === 'canceled' || subscriptionStatus === 'expired') {
+					return {
+						kind: 'warning',
+						message: '<?php echo esc_js( __( 'PayPal did not complete that subscription. Your previous AiVI access is still in place, and you can try again.', 'ai-visibility-inspector' ) ); ?>'
+					};
+				}
+
+				if (subscriptionStatus === 'error' || subscriptionStatus === 'payment_failed' || subscriptionStatus === 'suspended') {
+					return {
+						kind: 'error',
+						message: '<?php echo esc_js( __( 'PayPal did not complete that subscription payment. Your previous AiVI access is still in place, and you can retry with another payment method.', 'ai-visibility-inspector' ) ); ?>'
+					};
+				}
+
+				return buildBillingReturnNotice(fallbackStatus);
 			}
 
 			function getSummaryCreditSnapshot(response) {
@@ -798,8 +838,8 @@ class Admin_Settings {
 										}
 										return subscriptionStatus && subscriptionStatus !== 'created' && subscriptionStatus !== 'pending' && subscriptionStatus !== currentPlanSnapshot.subscriptionStatus;
 									},
-									onSettled: function() {
-										persistBillingReturnFlash(buildBillingReturnNotice(returnStatus));
+									onSettled: function(response) {
+										persistBillingReturnFlash(buildSettledSubscriptionReturnNotice(response, returnStatus));
 										window.location.replace(buildCleanBillingReturnUrl());
 									},
 									onFailure: function() {
@@ -1162,11 +1202,6 @@ class Admin_Settings {
 				var planTransition = String($button.data('planTransition') || '').trim();
 				var subscriptionStatus = String($button.data('subscriptionStatus') || '').trim();
 
-				if (!restBase || !endpoint || !nonce) {
-					setInlineNotice($result, 'error', '<?php echo esc_js( __( 'AiVI billing is not ready on this site yet.', 'ai-visibility-inspector' ) ); ?>');
-					return;
-				}
-
 				if ($button.prop('disabled')) {
 					return;
 				}
@@ -1177,6 +1212,11 @@ class Admin_Settings {
 						planChangeMessage = '<?php echo esc_js( __( 'Wait for the current subscription to finish activating before changing plans. AiVI will sync the new state automatically.', 'ai-visibility-inspector' ) ); ?>';
 					}
 					setInlineNotice($result, 'warning', planChangeMessage);
+					return;
+				}
+
+				if (!restBase || !endpoint || !nonce) {
+					setInlineNotice($result, 'error', '<?php echo esc_js( __( 'AiVI billing is not ready on this site yet.', 'ai-visibility-inspector' ) ); ?>');
 					return;
 				}
 
@@ -1890,7 +1930,7 @@ class Admin_Settings {
 							}
 							$is_current_plan              = $current_plan_code !== '' && $plan_code === $current_plan_code;
 							$plan_transition             = self::get_dashboard_plan_transition( $current_plan_code, $plan_code );
-							$pending_plan_activation     = $is_connected && in_array( $current_plan_code, AIVI_PLAN_CODES, true ) && 'created' === $current_subscription_status_code && ! $is_current_plan;
+							$pending_plan_activation     = $is_connected && 'created' === $current_subscription_status_code && ! $is_current_plan;
 							$downgrade_at_renewal_only   = $is_connected && in_array( $current_plan_code, AIVI_PLAN_CODES, true ) && 'active' === $current_subscription_status_code && ! $is_current_plan && 'downgrade' === $plan_transition;
 							$plan_change_requires_guard  = $pending_plan_activation || $downgrade_at_renewal_only;
 							$plan_button_label            = self::get_dashboard_plan_action_label( $current_plan_code, $plan_code );
@@ -5039,6 +5079,7 @@ class Admin_Settings {
 					'tone'    => 'danger',
 					'message' => __( 'Your subscription is suspended. Update billing or switch plans to restore uninterrupted analysis access.', 'ai-visibility-inspector' ),
 				);
+			case 'error':
 			case 'payment_failed':
 				return array(
 					'tone'    => 'danger',

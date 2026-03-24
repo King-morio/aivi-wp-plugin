@@ -156,6 +156,8 @@ This family checks whether visible content and structured data are aligned.
 
 - **Valid JSON-LD Schema**
   - checks whether JSON-LD is syntactically valid
+- **Article JSON-LD Presence & Completeness**
+  - checks whether article-like pages expose a primary `Article`, `BlogPosting`, or `NewsArticle` schema with the core fields needed to identify the page as a citable article
 - **Schema Matches Content**
   - checks whether visible content and schema intent agree
 - **Canonical Clarity**
@@ -172,18 +174,24 @@ This family checks whether visible content and structured data are aligned.
   - suggests FAQ schema when visible FAQ structure exists
 - **HowTo Schema Completeness**
   - bridges visible how-to content and schema completeness expectations
+- **ItemList JSON-LD Presence & Completeness**
+  - checks whether strong visible list sections are mirrored by aligned `ItemList` JSON-LD when appropriate
 
 ### Current candidacy behavior
 
-AiVI is more selective now about when FAQ or HowTo schema is actually required.
+AiVI is more selective now about when FAQ, HowTo, article, or ItemList schema is actually required.
 
 - FAQ schema should be driven by real visible Q&A structure
 - HowTo schema should be driven by real procedural intent, not just generic bullet lists
+- Article schema should be checked separately from JSON-LD syntax validity
+- ItemList schema should only be checked for strong visible list candidates, not for every paragraph or weak bullet block
 
 ### Common edge cases
 
 - A normal explainer with unordered tips should not be treated as a HowTo just because it has bullets.
 - Two short Q&A-style blocks do not automatically mean the page should fail FAQ schema.
+- A page can pass JSON-LD syntax validation and still fail the primary article-schema check if no real article schema is present.
+- A visible list should not trigger ItemList requirements when it is really FAQ, step-by-step HowTo, breadcrumbs, nav, or a weak two-item note block.
 - Some schema checks are intentionally score-neutral when the content is not a real candidate.
 
 ## Freshness & Temporal

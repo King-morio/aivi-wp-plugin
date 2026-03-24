@@ -649,8 +649,10 @@
 
     function getSchemaAssistLabel(schemaKind) {
         const kind = String(schemaKind || '').toLowerCase().trim();
+        if (kind === 'article_jsonld') return 'Article JSON-LD';
         if (kind === 'faq_jsonld') return 'FAQ JSON-LD';
         if (kind === 'howto_jsonld') return 'HowTo JSON-LD';
+        if (kind === 'itemlist_jsonld') return 'ItemList JSON-LD';
         if (kind === 'intro_schema_jsonld') return 'Intro Schema';
         if (kind === 'schema_alignment_jsonld') return 'Schema Alignment JSON-LD';
         if (kind === 'semantic_markup_plan') return 'Semantic Markup Plan';
@@ -668,15 +670,101 @@
         }
     }
 
+    function getSchemaAssistInsertCapability(schemaAssist) {
+        const capability = normalizeText(String(schemaAssist && schemaAssist.insert_capability || ''));
+        if (capability) return capability;
+        if (schemaAssist && schemaAssist.can_insert === true) return 'conflict_aware_insert';
+        if (schemaAssist && schemaAssist.can_copy === true) return 'copy_only';
+        return 'unavailable';
+    }
+
+    function getSchemaAssistBadgeText(schemaAssist) {
+        const capability = getSchemaAssistInsertCapability(schemaAssist);
+        if (capability === 'conflict_aware_insert') return 'Conflict-aware insert';
+        if (capability === 'copy_only') return 'Copy only';
+        return 'Unavailable';
+    }
+
+    function getSchemaAssistBaseNote(schemaAssist) {
+        const schemaKind = normalizeSchemaKind(schemaAssist && schemaAssist.schema_kind);
+        const isSemanticMarkupPlan = schemaKind === 'semantic_markup_plan';
+        const notes = Array.isArray(schemaAssist && schemaAssist.generation_notes)
+            ? schemaAssist.generation_notes.filter(Boolean)
+            : [];
+        if (notes[0]) return notes[0];
+        if (schemaKind === 'jsonld_repair') {
+            return 'Copy-only JSON-LD repair draft. Insert is disabled for repair mode.';
+        }
+        if (getSchemaAssistInsertCapability(schemaAssist) !== 'conflict_aware_insert' && isSemanticMarkupPlan) {
+            return 'Copy-only semantic markup plan. Apply these changes in your theme/editor markup.';
+        }
+        if (getSchemaAssistInsertCapability(schemaAssist) !== 'conflict_aware_insert') {
+            return 'Copy-only schema draft for this recommendation.';
+        }
+        return 'Deterministic schema draft generated from this recommendation.';
+    }
+
+    function joinReadableClauses(clauses) {
+        const list = (Array.isArray(clauses) ? clauses : []).filter(Boolean);
+        if (!list.length) return '';
+        if (list.length === 1) return list[0];
+        if (list.length === 2) return `${list[0]} and ${list[1]}`;
+        return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`;
+    }
+
+    function buildSchemaAssistPolicySummary(schemaAssist) {
+        const capability = getSchemaAssistInsertCapability(schemaAssist);
+        if (capability === 'copy_only') {
+            return 'Insert behavior: copy only. AiVI will not change editor or external schema blocks for this draft.';
+        }
+        if (capability !== 'conflict_aware_insert') {
+            return 'Insert behavior: unavailable. Copy this draft into your publishing workflow manually.';
+        }
+        const hints = schemaAssist && schemaAssist.insert_policy_hints && typeof schemaAssist.insert_policy_hints === 'object'
+            ? schemaAssist.insert_policy_hints
+            : {};
+        const clauses = [];
+        if (hints.default_insert_action === 'append_new_block') {
+            clauses.push('adds a new JSON-LD block when no match exists');
+        }
+        if (hints.managed_target_action === 'replace_existing_ai_block_when_single_clear_match') {
+            clauses.push('updates one clear AiVI-managed match');
+        }
+        if (hints.exact_match_action === 'no_op_existing_match') {
+            clauses.push('skips exact matches');
+        }
+        if (hints.external_conflict_action === 'copy_only_external_conflict') {
+            clauses.push('switches to copy-only when another schema source conflicts');
+        }
+        if (!clauses.length) {
+            return 'Insert behavior: AiVI uses conflict-aware insert rules for this draft.';
+        }
+        return `Insert behavior: AiVI ${joinReadableClauses(clauses)}.`;
+    }
+
+    function setSchemaAssistStatus(statusNode, tone, message) {
+        if (!statusNode) return;
+        const resolvedMessage = normalizeText(String(message || ''));
+        const resolvedTone = normalizeText(String(tone || 'neutral')) || 'neutral';
+        statusNode.textContent = resolvedMessage;
+        if (resolvedMessage) {
+            statusNode.dataset.state = resolvedTone;
+        } else if (statusNode.dataset) {
+            delete statusNode.dataset.state;
+        }
+    }
+
     function normalizeSchemaKind(schemaKind) {
         return String(schemaKind || '').toLowerCase().trim();
     }
 
     function canInsertSchemaKind(schemaKind) {
         const kind = normalizeSchemaKind(schemaKind);
-        return kind === 'faq_jsonld'
+        return kind === 'article_jsonld'
+            || kind === 'faq_jsonld'
             || kind === 'howto_jsonld'
             || kind === 'intro_schema_jsonld'
+            || kind === 'itemlist_jsonld'
             || kind === 'schema_alignment_jsonld';
     }
 
@@ -721,9 +809,549 @@
         ensureSchemaFingerprintSet().add(fingerprint);
     }
 
-    function buildSchemaScriptTag(draft) {
+    const AIVI_SCHEMA_BLOCK_MARKER = 'AIVI_SCHEMA_ASSIST';
+
+    function buildManagedSchemaMarker(schemaAssist, fingerprint) {
+        const payload = {
+            schema_kind: normalizeSchemaKind(schemaAssist && schemaAssist.schema_kind),
+            fingerprint: String(fingerprint || '').trim()
+        };
+        return `<!-- ${AIVI_SCHEMA_BLOCK_MARKER} ${JSON.stringify(payload)} -->`;
+    }
+
+    function parseManagedSchemaMarker(content) {
+        const source = String(content || '');
+        if (!source) return null;
+        const match = source.match(/<!--\s*AIVI_SCHEMA_ASSIST\s+({[\s\S]*?})\s*-->/i);
+        if (!match || !match[1]) return null;
+        try {
+            const payload = JSON.parse(match[1]);
+            if (!payload || typeof payload !== 'object') return null;
+            return {
+                schema_kind: normalizeSchemaKind(payload.schema_kind),
+                fingerprint: String(payload.fingerprint || '').trim()
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function extractJsonLdScriptContents(content) {
+        const source = String(content || '');
+        if (!source) return [];
+        const pattern = /<script[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/ig;
+        const matches = [];
+        let match;
+        while ((match = pattern.exec(source)) !== null) {
+            const raw = String(match[1] || '').trim();
+            if (raw) {
+                matches.push(raw);
+            }
+        }
+        return matches;
+    }
+
+    function normalizeJsonLdObjects(value) {
+        if (!value || typeof value !== 'object') return [];
+        if (Array.isArray(value)) {
+            return value.flatMap((entry) => normalizeJsonLdObjects(entry));
+        }
+        const graphEntries = Array.isArray(value['@graph'])
+            ? value['@graph'].flatMap((entry) => normalizeJsonLdObjects(entry))
+            : [];
+        return graphEntries.length ? graphEntries : [value];
+    }
+
+    function extractJsonLdSchemaTypes(value) {
+        const source = value && typeof value === 'object' ? value['@type'] : null;
+        const rawTypes = Array.isArray(source) ? source : [source];
+        return rawTypes
+            .map((item) => normalizeText(String(item || '')))
+            .filter(Boolean);
+    }
+
+    function collectNamedValues(list, keyResolver, limit) {
+        const maxItems = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Number(limit) : 8;
+        const seen = new Set();
+        const output = [];
+        (Array.isArray(list) ? list : []).forEach((item) => {
+            if (output.length >= maxItems) return;
+            const value = normalizeText(String(keyResolver(item) || ''));
+            const key = value.toLowerCase();
+            if (!value || seen.has(key)) return;
+            seen.add(key);
+            output.push(value);
+        });
+        return output;
+    }
+
+    function buildJsonLdComparisonSignature(jsonldObject) {
+        const normalizedObjects = normalizeJsonLdObjects(jsonldObject);
+        const primaryObject = normalizedObjects[0] || null;
+        const schemaTypes = primaryObject ? extractJsonLdSchemaTypes(primaryObject) : [];
+        const nameOrHeadline = primaryObject
+            ? normalizeText(String(primaryObject.headline || primaryObject.name || primaryObject.alternateName || ''))
+            : '';
+        const url = primaryObject ? normalizeText(String(primaryObject.url || '')) : '';
+        const mainEntityOfPage = primaryObject
+            ? normalizeText(String(primaryObject.mainEntityOfPage || primaryObject.mainEntityofpage || ''))
+            : '';
+        const faqQuestionNames = primaryObject && Array.isArray(primaryObject.mainEntity)
+            ? collectNamedValues(primaryObject.mainEntity, (entry) => entry && entry.name, 8)
+            : [];
+        const howToStepNames = primaryObject && Array.isArray(primaryObject.step)
+            ? collectNamedValues(primaryObject.step, (entry) => entry && (entry.name || entry.text), 12)
+            : [];
+        const itemListItemNames = primaryObject && Array.isArray(primaryObject.itemListElement)
+            ? collectNamedValues(primaryObject.itemListElement, (entry) => entry && (entry.name || (entry.item && entry.item.name)), 12)
+            : [];
+        return {
+            schema_types: schemaTypes,
+            primary_schema_type: schemaTypes[0] || '',
+            name_or_headline: nameOrHeadline,
+            url,
+            main_entity_of_page: mainEntityOfPage,
+            faq_question_names: faqQuestionNames,
+            howto_step_names: howToStepNames,
+            itemlist_item_names: itemListItemNames
+        };
+    }
+
+    function getBlockHtmlContent(block) {
+        if (!block || typeof block !== 'object') return '';
+        const attrs = block.attributes && typeof block.attributes === 'object' ? block.attributes : {};
+        return String(attrs.content || attrs.html || '');
+    }
+
+    function buildEditorSchemaBlockEntry(block) {
+        if (!block || typeof block !== 'object') return null;
+        const blockName = normalizeText(String(block.name || block.blockName || ''));
+        if (blockName !== 'core/html') return null;
+        const content = getBlockHtmlContent(block);
+        const scripts = extractJsonLdScriptContents(content);
+        if (!scripts.length) return null;
+
+        const marker = parseManagedSchemaMarker(content);
+        const parsedScripts = scripts.map((scriptContent) => {
+            try {
+                const parsed = JSON.parse(scriptContent);
+                return {
+                    valid: true,
+                    parsed,
+                    signature: buildJsonLdComparisonSignature(parsed),
+                    content_hash: buildCanonicalJsonHash(parsed)
+                };
+            } catch (e) {
+                return {
+                    valid: false,
+                    parsed: null,
+                    signature: null,
+                    content_hash: ''
+                };
+            }
+        });
+
+        return {
+            source: 'editor_block',
+            management: marker ? 'aivi_managed' : 'manual',
+            client_id: String(block.clientId || '').trim(),
+            block_name: blockName,
+            marker: marker || null,
+            script_count: scripts.length,
+            valid_script_count: parsedScripts.filter((entry) => entry.valid === true).length,
+            invalid_script_count: parsedScripts.filter((entry) => entry.valid !== true).length,
+            signatures: parsedScripts.filter((entry) => entry.signature).map((entry) => entry.signature),
+            content_hashes: parsedScripts.map((entry) => String(entry.content_hash || '')).filter(Boolean)
+        };
+    }
+
+    function collectExistingEditorSchemaBlocks(blocksInput) {
+        const blocks = Array.isArray(blocksInput) ? blocksInput : getBlocks();
+        return blocks
+            .map((block) => buildEditorSchemaBlockEntry(block))
+            .filter(Boolean);
+    }
+
+    function summarizeExistingEditorSchemaBlocks(entries) {
+        const list = Array.isArray(entries) ? entries : [];
+        return {
+            total: list.length,
+            aivi_managed_total: list.filter((entry) => entry.management === 'aivi_managed').length,
+            manual_total: list.filter((entry) => entry.management === 'manual').length,
+            valid_total: list.reduce((sum, entry) => sum + Number(entry.valid_script_count || 0), 0),
+            invalid_total: list.reduce((sum, entry) => sum + Number(entry.invalid_script_count || 0), 0)
+        };
+    }
+
+    function normalizeSchemaTypeValue(value) {
+        return normalizeText(String(value || '')).toLowerCase();
+    }
+
+    function buildCanonicalJsonHash(value) {
+        if (!value || typeof value !== 'object') return '';
+        try {
+            return stableHash(JSON.stringify(value, null, 2));
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function buildRenderedManifestSchemaEntries(manifest) {
+        const entries = manifest && Array.isArray(manifest.jsonld) ? manifest.jsonld : [];
+        return entries.map((entry) => {
+            if (!entry || entry.valid === false) return null;
+            const parsed = entry.parsed && typeof entry.parsed === 'object'
+                ? entry.parsed
+                : (entry.content && typeof entry.content === 'object' ? entry.content : null);
+            if (!parsed) return null;
+            return {
+                source: 'rendered_page',
+                management: 'external',
+                signatures: normalizeJsonLdObjects(parsed).map((objectValue) => buildJsonLdComparisonSignature(objectValue)),
+                content_hash: buildCanonicalJsonHash(parsed)
+            };
+        }).filter(Boolean);
+    }
+
+    function summarizeRenderedManifestSchemaEntries(entries) {
+        const list = Array.isArray(entries) ? entries : [];
+        return {
+            total: list.length,
+            valid_total: list.filter((entry) => entry && entry.content_hash).length
+        };
+    }
+
+    function normalizeSignatureValue(value) {
+        return normalizeText(String(value || '')).toLowerCase();
+    }
+
+    function countNormalizedOverlap(leftValues, rightValues) {
+        const left = new Set((Array.isArray(leftValues) ? leftValues : []).map((value) => normalizeSignatureValue(value)).filter(Boolean));
+        const right = new Set((Array.isArray(rightValues) ? rightValues : []).map((value) => normalizeSignatureValue(value)).filter(Boolean));
+        let overlap = 0;
+        left.forEach((value) => {
+            if (right.has(value)) overlap += 1;
+        });
+        return overlap;
+    }
+
+    function buildSignatureTypeSet(signature) {
+        return new Set((Array.isArray(signature && signature.schema_types) ? signature.schema_types : [])
+            .map((type) => normalizeSchemaTypeValue(type))
+            .filter(Boolean));
+    }
+
+    function isArticleSchemaType(type) {
+        return type === 'article' || type === 'blogposting' || type === 'newsarticle';
+    }
+
+    function areSchemaTypesCompatible(draftSignature, candidateSignature) {
+        const draftTypes = buildSignatureTypeSet(draftSignature);
+        const candidateTypes = buildSignatureTypeSet(candidateSignature);
+        if (!draftTypes.size || !candidateTypes.size) return false;
+
+        for (const type of draftTypes) {
+            if (candidateTypes.has(type)) return true;
+        }
+
+        const draftHasArticleFamily = Array.from(draftTypes).some((type) => isArticleSchemaType(type));
+        const candidateHasArticleFamily = Array.from(candidateTypes).some((type) => isArticleSchemaType(type));
+        return draftHasArticleFamily && candidateHasArticleFamily;
+    }
+
+    function hasSignatureAnchorMatch(draftSignature, candidateSignature) {
+        const draftUrls = [
+            normalizeSignatureValue(draftSignature && draftSignature.url),
+            normalizeSignatureValue(draftSignature && draftSignature.main_entity_of_page)
+        ].filter(Boolean);
+        const candidateUrls = new Set([
+            normalizeSignatureValue(candidateSignature && candidateSignature.url),
+            normalizeSignatureValue(candidateSignature && candidateSignature.main_entity_of_page)
+        ].filter(Boolean));
+        if (draftUrls.some((value) => candidateUrls.has(value))) {
+            return true;
+        }
+
+        const draftName = normalizeSignatureValue(draftSignature && draftSignature.name_or_headline);
+        const candidateName = normalizeSignatureValue(candidateSignature && candidateSignature.name_or_headline);
+        if (draftName && candidateName && draftName === candidateName) {
+            return true;
+        }
+
+        if (countNormalizedOverlap(draftSignature && draftSignature.faq_question_names, candidateSignature && candidateSignature.faq_question_names) >= 2) {
+            return true;
+        }
+        if (countNormalizedOverlap(draftSignature && draftSignature.howto_step_names, candidateSignature && candidateSignature.howto_step_names) >= 2) {
+            return true;
+        }
+        if (countNormalizedOverlap(draftSignature && draftSignature.itemlist_item_names, candidateSignature && candidateSignature.itemlist_item_names) >= 2) {
+            return true;
+        }
+
+        return false;
+    }
+
+    function findMatchingSchemaSignature(entries, predicate) {
+        const list = Array.isArray(entries) ? entries : [];
+        for (let index = 0; index < list.length; index += 1) {
+            const entry = list[index];
+            const signatures = Array.isArray(entry && entry.signatures) ? entry.signatures : [];
+            for (let sigIndex = 0; sigIndex < signatures.length; sigIndex += 1) {
+                const signature = signatures[sigIndex];
+                if (predicate(entry, signature)) {
+                    return { entry, signature };
+                }
+            }
+        }
+        return null;
+    }
+
+    function resolveSchemaInsertPolicy(schemaAssist, canonicalDraft, draftSignature, draftHash) {
+        const schemaKind = normalizeSchemaKind(schemaAssist && schemaAssist.schema_kind);
+        const editorEntries = collectExistingEditorSchemaBlocks();
+        const manifestEntries = buildRenderedManifestSchemaEntries(state.lastManifest);
+        const editorSummary = summarizeExistingEditorSchemaBlocks(editorEntries);
+        const manifestSummary = summarizeRenderedManifestSchemaEntries(manifestEntries);
+        const summary = {
+            existing_editor_schema_total: editorSummary.total,
+            existing_editor_aivi_schema_total: editorSummary.aivi_managed_total,
+            existing_editor_manual_schema_total: editorSummary.manual_total,
+            existing_rendered_schema_total: manifestSummary.total
+        };
+
+        const identicalEditorMatch = findMatchingSchemaSignature(editorEntries, (entry) => {
+            return Array.isArray(entry && entry.content_hashes) && entry.content_hashes.includes(draftHash);
+        });
+        if (identicalEditorMatch) {
+            return {
+                action: 'no_op_existing_match',
+                summary
+            };
+        }
+
+        const compatibleManagedEntries = (Array.isArray(editorEntries) ? editorEntries : []).filter((entry) => {
+            if (!entry || entry.management !== 'aivi_managed') return false;
+            if (normalizeSchemaKind(entry.marker && entry.marker.schema_kind) !== schemaKind) return false;
+            return Array.isArray(entry.signatures) && entry.signatures.some((signature) =>
+                areSchemaTypesCompatible(draftSignature, signature) && hasSignatureAnchorMatch(draftSignature, signature)
+            );
+        });
+
+        if (compatibleManagedEntries.length === 1) {
+            return {
+                action: 'replace_existing_ai_block',
+                target: compatibleManagedEntries[0],
+                summary
+            };
+        }
+
+        if (compatibleManagedEntries.length > 1) {
+            return {
+                action: 'copy_only_external_conflict',
+                reason: 'multiple_aivi_targets',
+                summary
+            };
+        }
+
+        const manualEditorConflict = findMatchingSchemaSignature(editorEntries, (entry, signature) => {
+            if (!entry || entry.management !== 'manual') return false;
+            return areSchemaTypesCompatible(draftSignature, signature) && hasSignatureAnchorMatch(draftSignature, signature);
+        });
+        if (manualEditorConflict) {
+            return {
+                action: 'copy_only_external_conflict',
+                reason: 'manual_editor_conflict',
+                summary
+            };
+        }
+
+        const renderedConflict = findMatchingSchemaSignature(manifestEntries, (_entry, signature) => {
+            return areSchemaTypesCompatible(draftSignature, signature) && hasSignatureAnchorMatch(draftSignature, signature);
+        });
+        if (renderedConflict) {
+            return {
+                action: 'copy_only_external_conflict',
+                reason: 'rendered_schema_conflict',
+                summary
+            };
+        }
+
+        return {
+            action: 'append_new_block',
+            summary
+        };
+    }
+
+    function buildSchemaScriptTag(draft, schemaAssist, fingerprint) {
         const safeDraft = String(draft || '').replace(/<\/script/gi, '<\\/script');
-        return `<script type="application/ld+json">\n${safeDraft}\n</script>`;
+        const marker = buildManagedSchemaMarker(schemaAssist, fingerprint);
+        return `${marker}\n<script type="application/ld+json">\n${safeDraft}\n</script>`;
+    }
+
+    function buildSchemaConflictStatusMessage(reason) {
+        if (reason === 'multiple_aivi_targets') {
+            return 'Conflict detected. More than one AiVI-managed schema block matches this draft, so insert is blocked.';
+        }
+        return 'Conflict detected. Another schema source already covers this area, so this draft is copy-only.';
+    }
+
+    function buildSchemaInsertReadiness(item, schemaAssist, draftInput) {
+        const rawDraft = String(draftInput || stringifySchemaDraft(schemaAssist)).trim();
+        if (!rawDraft) {
+            return {
+                tone: 'error',
+                message: 'Nothing to insert yet. Generate schema first.',
+                insertLabel: 'Insert schema',
+                allowInsert: false
+            };
+        }
+
+        let parsed;
+        try {
+            parsed = JSON.parse(rawDraft);
+        } catch (e) {
+            return {
+                tone: 'error',
+                message: 'Schema draft is invalid JSON. Regenerate and try again.',
+                insertLabel: 'Insert schema',
+                allowInsert: false
+            };
+        }
+
+        const canonicalDraft = JSON.stringify(parsed, null, 2);
+        const fingerprint = buildSchemaFingerprint(item, schemaAssist, canonicalDraft);
+        const draftHash = buildCanonicalJsonHash(parsed);
+        const draftSignature = buildJsonLdComparisonSignature(parsed);
+        const insertPolicy = resolveSchemaInsertPolicy(schemaAssist, canonicalDraft, draftSignature, draftHash);
+
+        if (insertPolicy.action === 'no_op_existing_match') {
+            return {
+                tone: 'blocked',
+                message: 'Already present. Equivalent schema already exists in the editor.',
+                insertLabel: 'Already present',
+                allowInsert: false,
+                fingerprint,
+                insertPolicy
+            };
+        }
+
+        if (insertPolicy.action === 'copy_only_external_conflict') {
+            return {
+                tone: 'blocked',
+                message: buildSchemaConflictStatusMessage(insertPolicy.reason),
+                insertLabel: 'Insert blocked',
+                allowInsert: false,
+                fingerprint,
+                insertPolicy
+            };
+        }
+
+        if (hasSchemaFingerprint(fingerprint)) {
+            return {
+                tone: 'blocked',
+                message: 'Inserted earlier in this run/session. AiVI will skip a duplicate block.',
+                insertLabel: 'Already inserted',
+                allowInsert: false,
+                fingerprint,
+                insertPolicy
+            };
+        }
+
+        if (insertPolicy.action === 'replace_existing_ai_block') {
+            return {
+                tone: 'ready',
+                message: 'Ready to update. AiVI will replace one matching AiVI-managed schema block.',
+                insertLabel: 'Replace AiVI block',
+                allowInsert: true,
+                fingerprint,
+                insertPolicy
+            };
+        }
+
+        return {
+            tone: 'ready',
+            message: 'Ready to insert. AiVI will add a new JSON-LD block at the end of the editor.',
+            insertLabel: 'Insert new block',
+            allowInsert: true,
+            fingerprint,
+            insertPolicy
+        };
+    }
+
+    function syncSchemaInsertButton(insertBtn, schemaInsertAllowed, readiness) {
+        if (!insertBtn) return;
+        insertBtn.textContent = 'Insert schema';
+        insertBtn.disabled = true;
+        insertBtn.hidden = !schemaInsertAllowed;
+        if (!schemaInsertAllowed || !readiness) {
+            return;
+        }
+        insertBtn.textContent = readiness.insertLabel || 'Insert schema';
+        insertBtn.disabled = readiness.allowInsert !== true;
+    }
+
+    function buildSchemaInsertResultPresentation(result) {
+        if (!result || typeof result !== 'object') {
+            return {
+                tone: 'error',
+                message: 'Insert failed. Please copy and add schema manually.',
+                metaMessage: 'Schema insert failed.'
+            };
+        }
+        if (result.ok) {
+            if (result.code === 'replace_existing_ai_block') {
+                return {
+                    tone: 'success',
+                    message: 'Replaced existing AiVI-managed schema block in the editor.',
+                    metaMessage: 'Schema replaced in editor.'
+                };
+            }
+            return {
+                tone: 'success',
+                message: 'Inserted new JSON-LD block at the end of the editor.',
+                metaMessage: 'Schema inserted into editor.'
+            };
+        }
+        if (result.code === 'duplicate') {
+            return {
+                tone: 'blocked',
+                message: 'Inserted earlier in this run/session. AiVI skipped a duplicate block.',
+                metaMessage: 'Schema already present from this run.'
+            };
+        }
+        if (result.code === 'no_op_existing_match') {
+            return {
+                tone: 'blocked',
+                message: 'Already present. Equivalent schema already exists in the editor.',
+                metaMessage: 'Equivalent schema already present.'
+            };
+        }
+        if (result.code === 'copy_only_external_conflict') {
+            return {
+                tone: 'blocked',
+                message: buildSchemaConflictStatusMessage(result.reason),
+                metaMessage: 'Schema insert blocked by existing schema.'
+            };
+        }
+        if (result.code === 'invalid_json') {
+            return {
+                tone: 'error',
+                message: 'Schema draft is invalid JSON. Regenerate and try again.',
+                metaMessage: 'Schema draft is invalid JSON.'
+            };
+        }
+        if (result.code === 'editor_unavailable' || result.code === 'insert_unavailable') {
+            return {
+                tone: 'error',
+                message: 'Editor insert API unavailable. Copy the schema manually.',
+                metaMessage: 'Schema insert API unavailable.'
+            };
+        }
+        return {
+            tone: 'error',
+            message: 'Insert failed. Please copy and add schema manually.',
+            metaMessage: 'Schema insert failed.'
+        };
     }
 
     function insertSchemaAssistIntoEditor(item, schemaAssist, draftInput) {
@@ -744,12 +1372,38 @@
         }
         const canonicalDraft = JSON.stringify(parsed, null, 2);
         const fingerprint = buildSchemaFingerprint(item, schemaAssist, canonicalDraft);
+        const draftHash = buildCanonicalJsonHash(parsed);
+        const draftSignature = buildJsonLdComparisonSignature(parsed);
+        const insertPolicy = resolveSchemaInsertPolicy(schemaAssist, canonicalDraft, draftSignature, draftHash);
+        const policySummary = insertPolicy && insertPolicy.summary ? insertPolicy.summary : {};
+        if (insertPolicy.action === 'no_op_existing_match') {
+            emitHighlightTelemetry('overlay_schema_insert_blocked_existing_match', {
+                run_id: (state.lastReport && state.lastReport.run_id) || '',
+                check_id: item && item.check ? item.check.check_id || '' : '',
+                schema_kind: normalizeSchemaKind(schemaAssist.schema_kind),
+                fingerprint,
+                ...policySummary
+            });
+            return { ok: false, code: 'no_op_existing_match', fingerprint, reason: insertPolicy.reason || '' };
+        }
+        if (insertPolicy.action === 'copy_only_external_conflict') {
+            emitHighlightTelemetry('overlay_schema_insert_blocked_conflict', {
+                run_id: (state.lastReport && state.lastReport.run_id) || '',
+                check_id: item && item.check ? item.check.check_id || '' : '',
+                schema_kind: normalizeSchemaKind(schemaAssist.schema_kind),
+                fingerprint,
+                reason: insertPolicy.reason || 'schema_conflict',
+                ...policySummary
+            });
+            return { ok: false, code: 'copy_only_external_conflict', fingerprint, reason: insertPolicy.reason || '' };
+        }
         if (hasSchemaFingerprint(fingerprint)) {
             emitHighlightTelemetry('overlay_schema_insert_blocked_duplicate', {
                 run_id: (state.lastReport && state.lastReport.run_id) || '',
                 check_id: item && item.check ? item.check.check_id || '' : '',
                 schema_kind: normalizeSchemaKind(schemaAssist.schema_kind),
-                fingerprint
+                fingerprint,
+                ...policySummary
             });
             return { ok: false, code: 'duplicate', fingerprint };
         }
@@ -763,13 +1417,41 @@
         }
 
         const block = wp.blocks.createBlock('core/html', {
-            content: buildSchemaScriptTag(canonicalDraft)
+            content: buildSchemaScriptTag(canonicalDraft, schemaAssist, fingerprint)
         });
         if (!block) {
             return { ok: false, code: 'block_create_failed' };
         }
 
         try {
+            if (insertPolicy.action === 'replace_existing_ai_block') {
+                const targetClientId = insertPolicy.target && insertPolicy.target.client_id
+                    ? String(insertPolicy.target.client_id).trim()
+                    : '';
+                if (!targetClientId) {
+                    return { ok: false, code: 'insert_failed' };
+                }
+                if (typeof dispatcher.updateBlockAttributes === 'function') {
+                    dispatcher.updateBlockAttributes(targetClientId, {
+                        content: buildSchemaScriptTag(canonicalDraft, schemaAssist, fingerprint)
+                    });
+                } else if (typeof dispatcher.replaceBlocks === 'function') {
+                    dispatcher.replaceBlocks(targetClientId, block);
+                } else {
+                    return { ok: false, code: 'insert_unavailable' };
+                }
+                rememberSchemaFingerprint(fingerprint);
+                emitHighlightTelemetry('overlay_schema_replaced', {
+                    run_id: (state.lastReport && state.lastReport.run_id) || '',
+                    check_id: item && item.check ? item.check.check_id || '' : '',
+                    schema_kind: normalizeSchemaKind(schemaAssist.schema_kind),
+                    fingerprint,
+                    target_client_id: targetClientId,
+                    ...policySummary
+                });
+                return { ok: true, code: 'replace_existing_ai_block', fingerprint };
+            }
+
             const blocks = getBlocks();
             const insertIndex = Array.isArray(blocks) ? blocks.length : undefined;
             if (Number.isFinite(insertIndex)) {
@@ -783,7 +1465,8 @@
                 check_id: item && item.check ? item.check.check_id || '' : '',
                 schema_kind: normalizeSchemaKind(schemaAssist.schema_kind),
                 insert_index: Number.isFinite(insertIndex) ? insertIndex : -1,
-                fingerprint
+                fingerprint,
+                ...policySummary
             });
             return { ok: true, code: 'inserted', fingerprint };
         } catch (e) {
@@ -791,7 +1474,8 @@
                 run_id: (state.lastReport && state.lastReport.run_id) || '',
                 check_id: item && item.check ? item.check.check_id || '' : '',
                 schema_kind: normalizeSchemaKind(schemaAssist.schema_kind),
-                reason: e && e.message ? e.message : 'insert_failed'
+                reason: e && e.message ? e.message : 'insert_failed',
+                ...policySummary
             });
             return { ok: false, code: 'insert_failed' };
         }
@@ -835,7 +1519,8 @@
 
         const badge = state.contextDoc.createElement('div');
         badge.className = 'aivi-overlay-review-schema-badge';
-        badge.textContent = schemaInsertAllowed ? 'Insertable' : 'Copy only';
+        badge.dataset.mode = getSchemaAssistInsertCapability(schemaAssist);
+        badge.textContent = getSchemaAssistBadgeText(schemaAssist);
 
         head.appendChild(titleWrap);
         head.appendChild(badge);
@@ -843,19 +1528,13 @@
 
         const note = state.contextDoc.createElement('div');
         note.className = 'aivi-overlay-review-schema-note';
-        const notes = Array.isArray(schemaAssist.generation_notes)
-            ? schemaAssist.generation_notes.filter(Boolean)
-            : [];
-        if (notes[0]) {
-            note.textContent = notes[0];
-        } else if (!schemaInsertAllowed && isSemanticMarkupPlan) {
-            note.textContent = 'Generate a semantic markup plan, then copy it into your theme or editor workflow.';
-        } else if (!schemaInsertAllowed) {
-            note.textContent = 'Generate a schema draft, then copy it into your publishing workflow.';
-        } else {
-            note.textContent = 'Generate a schema draft, review it, then copy or insert it into the article.';
-        }
+        note.textContent = getSchemaAssistBaseNote(schemaAssist);
         wrap.appendChild(note);
+
+        const policy = state.contextDoc.createElement('div');
+        policy.className = 'aivi-overlay-review-schema-policy';
+        policy.textContent = buildSchemaAssistPolicySummary(schemaAssist);
+        wrap.appendChild(policy);
 
         const actions = state.contextDoc.createElement('div');
         actions.className = 'aivi-overlay-review-schema-actions';
@@ -899,25 +1578,22 @@
         generateBtn.addEventListener('click', () => {
             const draft = stringifySchemaDraft(schemaAssist);
             if (!draft) {
-                status.textContent = isSemanticMarkupPlan
+                setSchemaAssistStatus(status, 'error', isSemanticMarkupPlan
                     ? 'No deterministic markup plan could be generated for this issue.'
-                    : 'No deterministic schema draft could be generated for this issue.';
+                    : 'No deterministic schema draft could be generated for this issue.');
                 return;
             }
             preview.value = draft;
             preview.hidden = false;
             copyBtn.disabled = schemaAssist.can_copy !== true;
             if (schemaInsertAllowed) {
-                const fingerprint = buildSchemaFingerprint(item, schemaAssist, draft);
-                const duplicate = hasSchemaFingerprint(fingerprint);
-                insertBtn.disabled = duplicate;
-                status.textContent = duplicate
-                    ? 'This draft was already inserted for the current run.'
-                    : 'Draft generated. Review it, then copy or insert.';
+                const readiness = buildSchemaInsertReadiness(item, schemaAssist, draft);
+                syncSchemaInsertButton(insertBtn, schemaInsertAllowed, readiness);
+                setSchemaAssistStatus(status, readiness.tone, readiness.message);
             } else {
-                status.textContent = isSemanticMarkupPlan
+                setSchemaAssistStatus(status, 'ready', isSemanticMarkupPlan
                     ? 'Markup plan generated. Review it, then copy.'
-                    : 'Draft generated. Review it, then copy.';
+                    : 'Schema draft generated. Review it, then copy.');
             }
             generateBtn.textContent = isSemanticMarkupPlan ? 'Refresh markup' : 'Refresh schema';
         });
@@ -925,21 +1601,21 @@
         copyBtn.addEventListener('click', () => {
             const draft = preview.value || stringifySchemaDraft(schemaAssist);
             if (!draft) {
-                status.textContent = isSemanticMarkupPlan
+                setSchemaAssistStatus(status, 'error', isSemanticMarkupPlan
                     ? 'Nothing to copy yet. Generate the markup plan first.'
-                    : 'Nothing to copy yet. Generate the schema first.';
+                    : 'Nothing to copy yet. Generate the schema first.');
                 return;
             }
             if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
-                status.textContent = 'Clipboard is not available in this browser context.';
+                setSchemaAssistStatus(status, 'error', 'Clipboard is not available in this browser context.');
                 return;
             }
             navigator.clipboard.writeText(draft).then(() => {
-                status.textContent = isSemanticMarkupPlan
+                setSchemaAssistStatus(status, 'success', isSemanticMarkupPlan
                     ? 'Markup plan copied to clipboard.'
-                    : 'Schema copied to clipboard.';
+                    : 'Schema copied to clipboard.');
             }).catch(() => {
-                status.textContent = 'Copy failed. Please copy the draft manually.';
+                setSchemaAssistStatus(status, 'error', 'Copy failed. Please copy the draft manually.');
             });
         });
 
@@ -947,33 +1623,30 @@
             insertBtn.addEventListener('click', () => {
                 const draft = preview.value || stringifySchemaDraft(schemaAssist);
                 if (!draft) {
-                    status.textContent = 'Nothing to insert yet. Generate the schema first.';
+                    setSchemaAssistStatus(status, 'error', 'Nothing to insert yet. Generate the schema first.');
                     return;
                 }
                 const result = insertSchemaAssistIntoEditor(item, schemaAssist, draft);
+                const presentation = buildSchemaInsertResultPresentation(result);
                 if (result.ok) {
                     insertBtn.disabled = true;
-                    status.textContent = 'Schema inserted as JSON-LD block in the editor.';
+                    insertBtn.textContent = result.code === 'replace_existing_ai_block' ? 'Replaced' : 'Inserted';
+                    setSchemaAssistStatus(status, presentation.tone, presentation.message);
                     setOverlayDirty(true);
                     scheduleOverlayDraftSave('review_rail_schema_insert');
-                    setMetaStatus('Schema inserted into editor.');
+                    setMetaStatus(presentation.metaMessage);
                     renderBlocks(true);
                     return;
                 }
-                if (result.code === 'duplicate') {
-                    insertBtn.disabled = true;
-                    status.textContent = 'This schema draft was already inserted for this run.';
-                    return;
+                if (result.code === 'duplicate'
+                    || result.code === 'no_op_existing_match'
+                    || result.code === 'copy_only_external_conflict') {
+                    const readiness = buildSchemaInsertReadiness(item, schemaAssist, draft);
+                    syncSchemaInsertButton(insertBtn, schemaInsertAllowed, readiness);
+                } else {
+                    syncSchemaInsertButton(insertBtn, schemaInsertAllowed, null);
                 }
-                if (result.code === 'invalid_json') {
-                    status.textContent = 'Schema draft is invalid JSON. Regenerate and try again.';
-                    return;
-                }
-                if (result.code === 'editor_unavailable' || result.code === 'insert_unavailable') {
-                    status.textContent = 'Editor insert API unavailable. Copy the schema manually.';
-                    return;
-                }
-                status.textContent = 'Insert failed. Please copy the draft manually.';
+                setSchemaAssistStatus(status, presentation.tone, presentation.message);
             });
         }
 
@@ -4058,72 +4731,64 @@
             schemaWrap.appendChild(schemaTop);
 
             const note = state.contextDoc.createElement('div');
-            note.style.cssText = 'font-size:11px;color:#4b607d;';
-            const notes = Array.isArray(schemaAssist.generation_notes)
-                ? schemaAssist.generation_notes.filter(Boolean)
-                : [];
-            if (notes[0]) {
-                note.textContent = notes[0];
-            } else if (!schemaInsertAllowed && schemaKind === 'jsonld_repair') {
-                note.textContent = 'Copy-only JSON-LD repair draft. Insert is disabled for repair mode.';
-            } else if (!schemaInsertAllowed && isSemanticMarkupPlan) {
-                note.textContent = 'Copy-only semantic markup plan. Apply these changes in your theme/editor markup.';
-            } else if (!schemaInsertAllowed) {
-                note.textContent = 'Copy-only schema draft for this recommendation.';
-            } else {
-                note.textContent = 'Deterministic schema draft generated from this recommendation.';
-            }
+            note.className = 'aivi-overlay-review-schema-note';
+            note.textContent = getSchemaAssistBaseNote(schemaAssist);
             schemaWrap.appendChild(note);
 
+            const policy = state.contextDoc.createElement('div');
+            policy.className = 'aivi-overlay-review-schema-policy';
+            policy.textContent = buildSchemaAssistPolicySummary(schemaAssist);
+            schemaWrap.appendChild(policy);
+
             const schemaPreview = state.contextDoc.createElement('textarea');
+            schemaPreview.className = 'aivi-overlay-review-schema-preview';
             schemaPreview.readOnly = true;
-            schemaPreview.style.cssText = 'display:none;width:100%;min-height:140px;font-size:11px;font-family:"IBM Plex Mono","SFMono-Regular",Consolas,monospace;padding:9px;border-radius:10px;border:1px solid #cfdbef;background:#fff;color:#15233a;resize:vertical;';
+            schemaPreview.hidden = true;
 
             const schemaStatus = state.contextDoc.createElement('div');
-            schemaStatus.style.cssText = 'font-size:11px;color:#4b607d;';
+            schemaStatus.className = 'aivi-overlay-review-schema-status';
 
             generateBtn.addEventListener('click', () => {
                 const draft = stringifySchemaDraft(schemaAssist);
                 if (!draft) {
-                    schemaStatus.textContent = 'No deterministic schema draft could be built for this item.';
+                    setSchemaAssistStatus(schemaStatus, 'error', isSemanticMarkupPlan
+                        ? 'No deterministic markup plan could be built for this item.'
+                        : 'No deterministic schema draft could be built for this item.');
                     return;
                 }
                 schemaPreview.value = draft;
-                schemaPreview.style.display = 'block';
+                schemaPreview.hidden = false;
                 copyBtn.disabled = schemaAssist.can_copy !== true;
-                let generatedMessage = schemaInsertAllowed
-                    ? 'Schema draft generated. Review, copy, or insert.'
-                    : (isSemanticMarkupPlan
-                        ? 'Semantic markup plan generated. Review and copy.'
-                        : 'Schema draft generated. Review and copy.');
                 if (schemaInsertAllowed) {
-                    const fingerprint = buildSchemaFingerprint(item, schemaAssist, draft);
-                    const duplicate = hasSchemaFingerprint(fingerprint);
-                    insertBtn.disabled = duplicate;
-                    if (duplicate) {
-                        generatedMessage = 'This schema draft was already inserted for this run/session.';
-                    }
+                    const readiness = buildSchemaInsertReadiness(item, schemaAssist, draft);
+                    syncSchemaInsertButton(insertBtn, schemaInsertAllowed, readiness);
+                    setSchemaAssistStatus(schemaStatus, readiness.tone, readiness.message);
+                } else {
+                    setSchemaAssistStatus(schemaStatus, 'ready', isSemanticMarkupPlan
+                        ? 'Markup plan generated. Review it, then copy.'
+                        : 'Schema draft generated. Review it, then copy.');
                 }
-                generateBtn.textContent = 'Refresh schema';
-                schemaStatus.textContent = generatedMessage;
+                generateBtn.textContent = isSemanticMarkupPlan ? 'Refresh markup' : 'Refresh schema';
             });
 
             copyBtn.addEventListener('click', () => {
                 const draft = schemaPreview.value || stringifySchemaDraft(schemaAssist);
                 if (!draft) {
-                    schemaStatus.textContent = isSemanticMarkupPlan
+                    setSchemaAssistStatus(schemaStatus, 'error', isSemanticMarkupPlan
                         ? 'Nothing to copy yet. Generate markup first.'
-                        : 'Nothing to copy yet. Generate schema first.';
+                        : 'Nothing to copy yet. Generate schema first.');
                     return;
                 }
                 if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
-                    schemaStatus.textContent = 'Clipboard is not available in this browser context.';
+                    setSchemaAssistStatus(schemaStatus, 'error', 'Clipboard is not available in this browser context.');
                     return;
                 }
                 navigator.clipboard.writeText(draft).then(() => {
-                    schemaStatus.textContent = 'Schema copied to clipboard.';
+                    setSchemaAssistStatus(schemaStatus, 'success', isSemanticMarkupPlan
+                        ? 'Markup plan copied to clipboard.'
+                        : 'Schema copied to clipboard.');
                 }).catch(() => {
-                    schemaStatus.textContent = 'Copy failed. Please copy the draft manually.';
+                    setSchemaAssistStatus(schemaStatus, 'error', 'Copy failed. Please copy the draft manually.');
                 });
             });
 
@@ -4131,33 +4796,30 @@
                 insertBtn.addEventListener('click', () => {
                     const draft = schemaPreview.value || stringifySchemaDraft(schemaAssist);
                     if (!draft) {
-                        schemaStatus.textContent = 'Nothing to insert yet. Generate schema first.';
+                        setSchemaAssistStatus(schemaStatus, 'error', 'Nothing to insert yet. Generate schema first.');
                         return;
                     }
                     const result = insertSchemaAssistIntoEditor(item, schemaAssist, draft);
+                    const presentation = buildSchemaInsertResultPresentation(result);
                     if (result.ok) {
                         insertBtn.disabled = true;
-                        schemaStatus.textContent = 'Schema inserted as JSON-LD block in the editor.';
+                        insertBtn.textContent = result.code === 'replace_existing_ai_block' ? 'Replaced' : 'Inserted';
+                        setSchemaAssistStatus(schemaStatus, presentation.tone, presentation.message);
                         setOverlayDirty(true);
                         scheduleOverlayDraftSave('schema_insert');
-                        setMetaStatus('Schema inserted into editor.');
+                        setMetaStatus(presentation.metaMessage);
                         renderBlocks(true);
                         return;
                     }
-                    if (result.code === 'duplicate') {
-                        insertBtn.disabled = true;
-                        schemaStatus.textContent = 'Schema already inserted for this run/session.';
-                        return;
+                    if (result.code === 'duplicate'
+                        || result.code === 'no_op_existing_match'
+                        || result.code === 'copy_only_external_conflict') {
+                        const readiness = buildSchemaInsertReadiness(item, schemaAssist, draft);
+                        syncSchemaInsertButton(insertBtn, schemaInsertAllowed, readiness);
+                    } else {
+                        syncSchemaInsertButton(insertBtn, schemaInsertAllowed, null);
                     }
-                    if (result.code === 'invalid_json') {
-                        schemaStatus.textContent = 'Schema draft is invalid JSON. Regenerate and try again.';
-                        return;
-                    }
-                    if (result.code === 'editor_unavailable' || result.code === 'insert_unavailable') {
-                        schemaStatus.textContent = 'Editor insert API unavailable. Copy schema manually.';
-                        return;
-                    }
-                    schemaStatus.textContent = 'Insert failed. Please copy and add schema manually.';
+                    setSchemaAssistStatus(schemaStatus, presentation.tone, presentation.message);
                 });
             }
 
@@ -5892,10 +6554,18 @@
                 .aivi-overlay-review-schema-title-wrap{display:flex;flex-direction:column;gap:4px;min-width:0;}
                 .aivi-overlay-review-schema-title{font-size:13px;font-weight:800;line-height:1.35;color:#153670;}
                 .aivi-overlay-review-schema-badge{border-radius:999px;padding:6px 10px;background:#f5f8fd;border:1px solid #cfdbef;color:#153670;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;}
+                .aivi-overlay-review-schema-badge[data-mode="copy_only"]{background:#fff7ea;border-color:#efd6a4;color:#8a4b00;}
+                .aivi-overlay-review-schema-badge[data-mode="unavailable"]{background:#f3f4f6;border-color:#dee3ea;color:#556070;}
                 .aivi-overlay-review-schema-note{font-size:12px;line-height:1.6;color:#4b607d;}
+                .aivi-overlay-review-schema-policy{font-size:11px;line-height:1.6;color:#51647d;border:1px solid #e0e7f2;border-radius:12px;background:#f8fbff;padding:8px 10px;}
                 .aivi-overlay-review-schema-actions{display:flex;gap:8px;flex-wrap:wrap;}
                 .aivi-overlay-review-schema-preview{width:100%;min-height:148px;font-size:11px;font-family:"IBM Plex Mono","SFMono-Regular",Consolas,monospace;padding:10px;border-radius:12px;border:1px solid #cfdbef;background:#fbfdff;color:#15233a;resize:vertical;}
                 .aivi-overlay-review-schema-status{font-size:11px;line-height:1.5;color:#4b607d;}
+                .aivi-overlay-review-schema-status:not(:empty){border:1px solid #dee3ea;border-radius:12px;background:#fbfbfc;padding:8px 10px;}
+                .aivi-overlay-review-schema-status[data-state="ready"]{border-color:#cfdbef;background:#f6faff;color:#153670;}
+                .aivi-overlay-review-schema-status[data-state="success"]{border-color:#c7ead7;background:#f1fbf5;color:#0f6b49;}
+                .aivi-overlay-review-schema-status[data-state="blocked"]{border-color:#efd6a4;background:#fff8ea;color:#8a4b00;}
+                .aivi-overlay-review-schema-status[data-state="error"]{border-color:#f0c6c6;background:#fff2f2;color:#9d2b2b;}
                 .aivi-overlay-review-metadata{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid #d9e3f1;border-radius:14px;background:#ffffff;}
                 .aivi-overlay-review-metadata-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
                 .aivi-overlay-review-metadata-title{font-size:13px;font-weight:800;line-height:1.35;color:#153670;}

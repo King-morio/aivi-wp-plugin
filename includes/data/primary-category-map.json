@@ -3,7 +3,7 @@
     "last_updated": "2026-02-23",
     "description": "Canonical Primary Category Mapping - Single Source of Truth for UI grouping. DO NOT use AEO/GEO for grouping.",
     "total_categories": 8,
-    "total_checks": 53,
+    "total_checks": 54,
     "rules": {
         "grouping": "Use ONLY these 8 categories for sidebar presentation",
         "aeo_geo": "AEO/GEO are aggregate SCORES only, never grouping labels",
@@ -16,7 +16,6 @@
             "name": "Intro Focus & Factuality",
             "display_order": 1,
             "check_ids": [
-                "intro_focus_and_factuality.v1",
                 "intro_wordcount",
                 "intro_readability",
                 "intro_factual_entities",
@@ -55,6 +54,7 @@
             "display_order": 4,
             "check_ids": [
                 "valid_jsonld_schema",
+                "article_jsonld_presence_and_completeness",
                 "schema_matches_content",
                 "canonical_clarity",
                 "semantic_html_usage",
@@ -62,7 +62,8 @@
                 "faq_jsonld_presence_and_completeness",
                 "howto_jsonld_presence_and_completeness",
                 "faq_jsonld_generation_suggestion",
-                "howto_schema_presence_and_completeness"
+                "howto_schema_presence_and_completeness",
+                "itemlist_jsonld_presence_and_completeness"
             ]
         },
         {
