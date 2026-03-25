@@ -41,6 +41,55 @@ This changelog is intentionally written for the public plugin surface. It exclud
 - kept the public repository limited to plugin-safe runtime code, tests, docs, and packaging helpers
 - preserved the release ZIP packaging allowlist so only WordPress runtime files ship in plugin packages
 
+## [1.0.16] - 2026-03-25
+
+### Temporal And Overlay Apply Clarity
+
+- tightened `temporal_claim_check` so locally anchored interval advice like `after 48 hours` no longer gets treated like a missing article-date problem
+- made `Apply Changes` the clear commit point into the WordPress editor for supported overlay edits instead of silently mirroring article text as you type
+- added a post-apply reveal flow that closes the overlay, scrolls Gutenberg to the changed block, briefly highlights it, and reminds the author to `Update` or `Publish`
+
+## [1.0.15] - 2026-03-25
+
+### Overlay And Sidebar Fidelity
+
+- improved the overlay editor so rich article blocks like tables, embeds, galleries, code, and separators stay visible in context instead of disappearing during review
+- clarified that `Apply Changes` writes into the WordPress editor and still requires the normal `Update` or `Publish` action to make changes live
+- removed unsafe paragraph-to-list coercion and tightened apply safety around unsupported rich blocks
+- refined the live analysis sidebar with a calmer progress shell, better queued-state presentation, and less duplicated messaging
+
+### Privacy And Trial Controls
+
+- stopped silently using the WordPress admin email as AiVI's default contact email
+- made the billing contact email visible and optional so free trial can begin without a hidden email fallback
+- hardened self-serve trial admission checks with exact-domain history while keeping the approach privacy-safe and explicit in the bundled privacy guide
+
+## [1.0.14] - 2026-03-25
+
+### Live Analysis And Review Rail Fixes
+
+- activated live semantic guardrails earlier so question-led list sections are less likely to misfire as FAQ opportunities during async analysis
+- restored verdict-oriented issue badges in the editor sidebar and moved `High impact`, `Recommended`, and `Polish` to the overlay review rail where they were intended to appear
+- rebalanced the live analysis progress panel and added a clearer time expectation note for longer runs
+
+### Billing Recovery And Support Controls
+
+- improved PayPal activation recovery so cancelled or invalid trial upgrade attempts can return to retry-ready state instead of remaining stuck on `Wait for activation`
+- added a safer support recovery path in the admin console with `Recheck activation` and `Clear activation hold`
+
+## [1.0.13] - 2026-03-25
+
+### Review And Score UX
+
+- added review-rail impact pills so surfaced issues now read as `High impact`, `Recommended`, or `Polish` instead of feeling equally urgent
+- added a global score quality pill so the main score is easier to interpret at a glance
+- updated AEO and GEO ring colors to use simple score bands, making weak category scores look more honest without adding extra clutter
+
+### Settings Flow Cleanup
+
+- fixed the Plans spotlight CTA so `Choose your plan` now lands directly on the Plans tab and plan grid
+- kept the rest of the in-settings routing aligned with the existing tab-state model so internal jumps land where users expect
+
 ## [1.0.12] - 2026-03-25
 
 ### Schema Insert Conflict Hardening

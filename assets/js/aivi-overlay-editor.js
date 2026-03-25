@@ -31,8 +31,6 @@
         inlinePanel: null,
         inlineItemKey: '',
         inlineDismissHandler: null,
-        editTimers: new Map(),
-        lastEditHtml: new Map(),
         activeEditableBody: null,
         activeEditableNodeRef: '',
         toolbarButtons: [],
@@ -47,7 +45,8 @@
         draftSaveTimer: null,
         draftRestoreAttempted: false,
         beforeUnloadHandler: null,
-        documentMetaCache: new Map()
+        documentMetaCache: new Map(),
+        editorRevealCleanupTimer: null
     };
 
     function debugLog(level, message, data) {
@@ -63,6 +62,66 @@
             window.AIVI_DEBUG_LOGS.push(entry);
         } catch (e) {
         }
+    }
+
+    const HIGH_IMPACT_CHECK_IDS = new Set([
+        'immediate_answer_placement',
+        'question_answer_alignment',
+        'clear_answer_formatting',
+        'lists_tables_presence',
+        'heading_topic_fulfillment',
+        'claim_provenance_and_evidence',
+        'external_authoritative_sources',
+        'factual_statements_well_formed',
+        'numeric_claim_consistency',
+        'contradictions_and_coherence',
+        'schema_matches_content',
+        'article_jsonld_presence_and_completeness',
+        'faq_jsonld_presence_and_completeness',
+        'howto_jsonld_presence_and_completeness',
+        'itemlist_jsonld_presence_and_completeness',
+        'ai_crawler_accessibility'
+    ]);
+
+    const POLISH_CHECK_IDS = new Set([
+        'appropriate_paragraph_length',
+        'readability_adaptivity',
+        'author_bio_present',
+        'intro_readability',
+        'intro_wordcount',
+        'terminology_consistency',
+        'semantic_html_usage'
+    ]);
+
+    function normalizeOverlayPriorityToken(value) {
+        return String(value || '').trim().toLowerCase();
+    }
+
+    function getOverlayIssueImpactTier(issue) {
+        if (!issue) return null;
+        const verdict = normalizeOverlayPriorityToken(issue.ui_verdict || issue.verdict || '');
+        if (verdict === 'pass') return null;
+
+        const priorityToken = normalizeOverlayPriorityToken(issue.severity || issue.impact || issue.priority || issue.importance);
+        if (priorityToken === 'critical' || priorityToken === 'high') return 'high';
+        if (priorityToken === 'low' || priorityToken === 'polish') return 'polish';
+
+        const checkId = normalizeOverlayPriorityToken(issue.check_id || issue.id || '');
+        if (POLISH_CHECK_IDS.has(checkId)) return 'polish';
+        if (HIGH_IMPACT_CHECK_IDS.has(checkId)) return 'high';
+        return 'recommended';
+    }
+
+    function buildOverlayImpactPill(issue) {
+        const tier = getOverlayIssueImpactTier(issue);
+        if (!tier || !state.contextDoc) return null;
+        const pill = state.contextDoc.createElement('span');
+        pill.className = 'aivi-overlay-review-impact-pill';
+        pill.setAttribute('data-tier', tier);
+        pill.textContent = tier === 'high'
+            ? 'High impact'
+            : (tier === 'polish' ? 'Polish' : 'Recommended');
+        return pill;
     }
 
     function getOverlaySpanMeta(span) {
@@ -123,6 +182,107 @@
             doc.querySelector('.block-editor') ||
             doc.body;
         return { doc, root };
+    }
+
+    function escapeAttributeSelectorValue(value) {
+        const normalized = String(value || '');
+        if (!normalized) return '';
+        const cssApi = typeof CSS !== 'undefined' ? CSS : null;
+        if (cssApi && typeof cssApi.escape === 'function') {
+            return cssApi.escape(normalized);
+        }
+        return normalized.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+
+    function getEditorBlockElementByClientId(doc, clientId) {
+        if (!doc || typeof doc.querySelector !== 'function' || !clientId) return null;
+        const escaped = escapeAttributeSelectorValue(clientId);
+        if (!escaped) return null;
+        const selectors = [
+            `[data-block="${escaped}"]`,
+            `[data-block-client-id="${escaped}"]`,
+            `.block-editor-block-list__block[data-block="${escaped}"]`,
+            `.wp-block[data-block="${escaped}"]`
+        ];
+        for (let i = 0; i < selectors.length; i += 1) {
+            const match = doc.querySelector(selectors[i]);
+            if (match) return match;
+        }
+        return null;
+    }
+
+    function clearEditorAppliedReveal(doc) {
+        if (!doc || typeof doc.querySelectorAll !== 'function') return;
+        const flashed = doc.querySelectorAll('.aivi-editor-apply-flash');
+        flashed.forEach((node) => node.classList.remove('aivi-editor-apply-flash'));
+        if (state.editorRevealCleanupTimer) {
+            clearTimeout(state.editorRevealCleanupTimer);
+            state.editorRevealCleanupTimer = null;
+        }
+    }
+
+    function showEditorNotice(message, status) {
+        if (!message || !wp || !wp.data || typeof wp.data.dispatch !== 'function') return;
+        try {
+            const notices = wp.data.dispatch('core/notices');
+            if (notices && typeof notices.createNotice === 'function') {
+                notices.createNotice(status || 'success', message, {
+                    type: 'snackbar',
+                    isDismissible: true
+                });
+            }
+        } catch (e) {
+        }
+    }
+
+    function revealAppliedChangesInEditor(clientIds) {
+        const ids = Array.from(new Set((Array.isArray(clientIds) ? clientIds : []).filter(Boolean)));
+        if (!ids.length) return false;
+
+        const runReveal = (attempt) => {
+            const context = getEditorContext();
+            const doc = context && context.doc ? context.doc : null;
+            if (!doc) return false;
+            const elements = ids
+                .map((clientId) => getEditorBlockElementByClientId(doc, clientId))
+                .filter(Boolean);
+
+            if (!elements.length) {
+                if ((attempt || 0) >= 8) return false;
+                const view = doc.defaultView || window;
+                if (view && typeof view.requestAnimationFrame === 'function') {
+                    view.requestAnimationFrame(() => runReveal((attempt || 0) + 1));
+                } else {
+                    setTimeout(() => runReveal((attempt || 0) + 1), 40);
+                }
+                return true;
+            }
+
+            clearEditorAppliedReveal(doc);
+
+            try {
+                const dispatcher = wp.data.dispatch('core/block-editor');
+                if (dispatcher && typeof dispatcher.selectBlock === 'function') {
+                    dispatcher.selectBlock(ids[0]);
+                }
+            } catch (e) {
+            }
+
+            elements.forEach((element) => element.classList.add('aivi-editor-apply-flash'));
+
+            const first = elements[0];
+            if (first && typeof first.scrollIntoView === 'function') {
+                first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            state.editorRevealCleanupTimer = setTimeout(() => {
+                clearEditorAppliedReveal(doc);
+            }, 1800);
+
+            return true;
+        };
+
+        return runReveal(0);
     }
 
     function queueOverlayLayoutSync() {
@@ -530,6 +690,7 @@
     ];
     const OVERLAY_FIX_WITH_AI_ENABLED = false;
     const OVERLAY_DRAFT_VERSION = 2;
+    const OVERLAY_EDITOR_PERSISTENCE_NOTE = 'Apply Changes sends your overlay edits to the WordPress editor. Then click Update or Publish to make them live.';
 
     function stableHash(value) {
         const input = String(value || '');
@@ -701,7 +862,7 @@
         if (getSchemaAssistInsertCapability(schemaAssist) !== 'conflict_aware_insert') {
             return 'Copy-only schema draft for this recommendation.';
         }
-        return 'Deterministic schema draft generated from this recommendation.';
+        return 'Deterministic schema draft generated from this recommendation. Inserted drafts stay in the editor until you save the post.';
     }
 
     function joinReadableClauses(clauses) {
@@ -1260,7 +1421,7 @@
         if (insertPolicy.action === 'replace_existing_ai_block') {
             return {
                 tone: 'ready',
-                message: 'Ready to update. AiVI will replace one matching AiVI-managed schema block.',
+                message: 'Ready to update. AiVI will replace one matching AiVI-managed schema block in the editor.',
                 insertLabel: 'Replace AiVI block',
                 allowInsert: true,
                 fingerprint,
@@ -1302,14 +1463,14 @@
             if (result.code === 'replace_existing_ai_block') {
                 return {
                     tone: 'success',
-                    message: 'Replaced existing AiVI-managed schema block in the editor.',
-                    metaMessage: 'Schema replaced in editor.'
+                    message: 'Replaced existing AiVI-managed schema block in the editor. Save the post to publish it live.',
+                    metaMessage: 'Schema replaced in editor. Save the post to make it live.'
                 };
             }
             return {
                 tone: 'success',
-                message: 'Inserted new JSON-LD block at the end of the editor.',
-                metaMessage: 'Schema inserted into editor.'
+                message: 'Inserted new JSON-LD block at the end of the editor. Save the post to publish it live.',
+                metaMessage: 'Schema inserted into editor. Save the post to make it live.'
             };
         }
         if (result.code === 'duplicate') {
@@ -1977,6 +2138,10 @@
             const figcaption = caption ? `<figcaption>${caption}</figcaption>` : '';
             return `<figure>${img}${figcaption}</figure>`;
         }
+        const richFallback = buildRichBlockFallbackHtml(block);
+        if (richFallback) {
+            return richFallback;
+        }
         if (typeof attrs.content === 'string') {
             return attrs.content;
         }
@@ -1989,12 +2154,144 @@
         return '';
     }
 
+    function buildTableSectionHtml(rows, sectionTag, cellTag) {
+        if (!Array.isArray(rows) || !rows.length) return '';
+        const renderedRows = rows.map((row) => {
+            const cells = Array.isArray(row && row.cells) ? row.cells : [];
+            if (!cells.length) return '';
+            const renderedCells = cells.map((cell) => {
+                const content = typeof cell?.content === 'string' ? cell.content : '';
+                const tag = (cell && typeof cell.tag === 'string' && /^(td|th)$/i.test(cell.tag)) ? cell.tag.toLowerCase() : cellTag;
+                return `<${tag}>${content}</${tag}>`;
+            }).join('');
+            return renderedCells ? `<tr>${renderedCells}</tr>` : '';
+        }).filter(Boolean).join('');
+        if (!renderedRows) return '';
+        return `<${sectionTag}>${renderedRows}</${sectionTag}>`;
+    }
+
+    function buildRichBlockFallbackHtml(block) {
+        if (!block || typeof block !== 'object') return '';
+        const attrs = block && block.attributes ? block.attributes : {};
+        const name = String(block.name || '').trim();
+
+        if (name === 'core/table') {
+            const sections = [
+                buildTableSectionHtml(attrs.head, 'thead', 'th'),
+                buildTableSectionHtml(attrs.body, 'tbody', 'td'),
+                buildTableSectionHtml(attrs.foot, 'tfoot', 'td')
+            ].filter(Boolean);
+            return sections.length ? `<figure class="aivi-overlay-table-wrap"><table>${sections.join('')}</table></figure>` : '';
+        }
+
+        if (name === 'core/embed') {
+            if (typeof attrs.html === 'string' && attrs.html.trim()) return attrs.html;
+            const url = typeof attrs.url === 'string' ? attrs.url.trim() : '';
+            const caption = typeof attrs.caption === 'string' ? attrs.caption : '';
+            if (!url) return '';
+            const figcaption = caption ? `<figcaption>${caption}</figcaption>` : '';
+            return `<figure class="aivi-overlay-embed-fallback"><a href="${escapeHtmlValue(url)}" target="_blank" rel="noreferrer noopener">${escapeHtmlValue(url)}</a>${figcaption}</figure>`;
+        }
+
+        if (name === 'core/video') {
+            const src = typeof attrs.src === 'string' ? attrs.src.trim() : '';
+            const caption = typeof attrs.caption === 'string' ? attrs.caption : '';
+            if (!src) return '';
+            const figcaption = caption ? `<figcaption>${caption}</figcaption>` : '';
+            return `<figure><video controls src="${escapeHtmlValue(src)}"></video>${figcaption}</figure>`;
+        }
+
+        if (name === 'core/audio') {
+            const src = typeof attrs.src === 'string' ? attrs.src.trim() : '';
+            const caption = typeof attrs.caption === 'string' ? attrs.caption : '';
+            if (!src) return '';
+            const figcaption = caption ? `<figcaption>${caption}</figcaption>` : '';
+            return `<figure><audio controls src="${escapeHtmlValue(src)}"></audio>${figcaption}</figure>`;
+        }
+
+        if (name === 'core/file') {
+            const href = typeof attrs.href === 'string' ? attrs.href.trim() : '';
+            const fileName = typeof attrs.fileName === 'string' ? attrs.fileName.trim() : '';
+            if (!href && !fileName) return '';
+            const label = fileName || href;
+            return `<div class="aivi-overlay-file-fallback"><a href="${escapeHtmlValue(href || '#')}" target="_blank" rel="noreferrer noopener">${escapeHtmlValue(label)}</a></div>`;
+        }
+
+        if (name === 'core/button') {
+            const text = htmlToText(attrs.text || '') || normalizeText(attrs.text || '');
+            const url = typeof attrs.url === 'string' ? attrs.url.trim() : '';
+            const label = text || 'Button';
+            return `<div class="aivi-overlay-button-row"><a class="aivi-overlay-button-fallback" href="${escapeHtmlValue(url || '#')}" target="_blank" rel="noreferrer noopener">${escapeHtmlValue(label)}</a></div>`;
+        }
+
+        if (name === 'core/buttons') {
+            if (Array.isArray(block.innerBlocks) && block.innerBlocks.length) {
+                return `<div class="aivi-overlay-button-group">${block.innerBlocks.map((innerBlock) => buildBlockHtml(innerBlock)).filter(Boolean).join('')}</div>`;
+            }
+            return '';
+        }
+
+        if (name === 'core/gallery') {
+            const images = Array.isArray(attrs.images) ? attrs.images : [];
+            if (images.length) {
+                return `<div class="aivi-overlay-gallery-grid">${images.map((image) => {
+                    const src = typeof image?.url === 'string' ? image.url.trim() : '';
+                    const alt = typeof image?.alt === 'string' ? image.alt : '';
+                    if (!src) return '';
+                    return `<figure><img src="${escapeHtmlValue(src)}" alt="${escapeHtmlValue(alt)}" /></figure>`;
+                }).filter(Boolean).join('')}</div>`;
+            }
+            return Array.isArray(block.innerBlocks) && block.innerBlocks.length
+                ? block.innerBlocks.map((innerBlock) => buildBlockHtml(innerBlock)).filter(Boolean).join('')
+                : '';
+        }
+
+        if (name === 'core/separator') {
+            return '<hr class="aivi-overlay-separator" />';
+        }
+
+        if (name === 'core/spacer') {
+            const height = Number.isFinite(Number(attrs.height)) ? Number(attrs.height) : 32;
+            return `<div class="aivi-overlay-spacer" style="height:${Math.max(8, height)}px"></div>`;
+        }
+
+        if (name === 'core/html' && typeof attrs.content === 'string') {
+            return attrs.content;
+        }
+
+        if (name === 'core/preformatted' && typeof attrs.content === 'string') {
+            return `<pre>${attrs.content}</pre>`;
+        }
+
+        if (name === 'core/code' && typeof attrs.content === 'string') {
+            return `<pre><code>${attrs.content}</code></pre>`;
+        }
+
+        if (name === 'core/verse' && typeof attrs.content === 'string') {
+            return `<pre class="aivi-overlay-verse">${attrs.content}</pre>`;
+        }
+
+        return '';
+    }
+
     function isEditableBlock(block) {
         if (!block || !block.name) return false;
         return block.name === 'core/paragraph' ||
             block.name === 'core/heading' ||
             block.name === 'core/list' ||
             block.name === 'core/quote';
+    }
+
+    function getOverlayBlockRenderMode(block) {
+        return isEditableBlock(block) ? 'editable' : 'readonly';
+    }
+
+    function buildOverlayBlockState(renderMode) {
+        if (!state.contextDoc || renderMode !== 'readonly') return null;
+        const chip = state.contextDoc.createElement('span');
+        chip.className = 'aivi-overlay-block-state';
+        chip.textContent = 'Read-only';
+        return chip;
     }
 
     function shouldSkipBlock(block) {
@@ -2539,6 +2836,9 @@
         railTitle.textContent = 'Review Rail';
         const actions = state.contextDoc.createElement('div');
         actions.className = 'aivi-overlay-rail-actions';
+        const note = state.contextDoc.createElement('div');
+        note.className = 'aivi-overlay-rail-note';
+        note.textContent = OVERLAY_EDITOR_PERSISTENCE_NOTE;
 
         const applyButton = state.contextDoc.createElement('button');
         applyButton.type = 'button';
@@ -2563,6 +2863,7 @@
         actions.appendChild(closeButton);
         head.appendChild(railTitle);
         head.appendChild(actions);
+        head.appendChild(note);
         state.overlayRail.appendChild(head);
 
         if (guardrail.message) {
@@ -2609,9 +2910,12 @@
             if (issue.jump_node_ref || issue.node_ref) {
                 item.setAttribute('data-jump-node-ref', issue.jump_node_ref || issue.node_ref || '');
             }
+            const header = state.contextDoc.createElement('div');
+            header.className = 'aivi-overlay-review-item-header';
             const name = state.contextDoc.createElement('div');
             name.className = 'aivi-overlay-review-item-name';
             name.textContent = issue && issue.check_name ? issue.check_name : 'Untitled issue';
+            const impactPill = buildOverlayImpactPill(issue);
             const preferredSummary = normalizeText(issue.review_summary || '');
             const sanitizedMessage = sanitizeInlineIssueMessage(
                 preferredSummary || issue.message || '',
@@ -2699,7 +3003,11 @@
                 jumpButton.title = 'No reliable block target is available for this issue.';
             }
 
-            item.appendChild(name);
+            header.appendChild(name);
+            if (impactPill) {
+                header.appendChild(impactPill);
+            }
+            item.appendChild(header);
             item.appendChild(summary);
             actions.appendChild(viewButton);
             actions.appendChild(jumpButton);
@@ -5000,16 +5308,29 @@
         renderBlocks(true);
         const applied = applyVariantToEditor(item, variant.text || '');
         if (applied !== 'applied') {
-            info.status = applied === 'skipped_title' ? 'Skipped title' : 'Apply failed';
+            if (applied === 'skipped_title') {
+                info.status = 'Skipped title';
+                setMetaStatus('AiVI skipped the title block.');
+            } else if (applied === 'unsupported_block') {
+                info.status = 'Read-only block';
+                setMetaStatus('AiVI did not rewrite a read-only block. Use the editor directly for rich content.');
+            } else if (applied === 'list_format_required') {
+                info.status = 'Needs list formatting';
+                setMetaStatus('AiVI could not safely convert that draft into a list. Use explicit list lines or edit directly.');
+            } else {
+                info.status = 'Apply failed';
+                setMetaStatus('AiVI could not apply that change safely.');
+            }
             renderBlocks(true);
             return;
         }
         setOverlayDirty(true);
         scheduleOverlayDraftSave('rewrite_accept');
+        setMetaStatus(OVERLAY_EDITOR_PERSISTENCE_NOTE);
         renderBlocks(true);
         const post = readEditorPost();
         if (!info.suggestion_id) {
-            info.status = 'Applied locally';
+            info.status = 'Applied in editor';
             renderBlocks(true);
             return;
         }
@@ -5024,10 +5345,10 @@
         };
         const result = await callRest('/apply_suggestion', 'POST', payload);
         if (result.ok) {
-            info.status = 'Applied';
+            info.status = 'Applied in editor';
             info.acceptedIndex = idx;
         } else {
-            info.status = 'Applied (tracking failed)';
+            info.status = 'Applied in editor (tracking failed)';
         }
         renderBlocks(true);
     }
@@ -5096,7 +5417,7 @@
         const explicitPrimary = String(rewriteTarget && rewriteTarget.primary_node_ref ? rewriteTarget.primary_node_ref : '').trim();
         if (explicitPrimary && nodeRefs.indexOf(explicitPrimary) !== -1) {
             const info = findBlockByNodeRef(blocks, explicitPrimary);
-            if (info && !isTitleBlock(info) && !isHeadingBlockInfo(info)) {
+            if (info && !isTitleBlock(info) && !isHeadingBlockInfo(info) && isOverlayApplySupportedBlockInfo(info)) {
                 return explicitPrimary;
             }
         }
@@ -5105,6 +5426,7 @@
             const info = findBlockByNodeRef(blocks, ref);
             if (!info) continue;
             if (isTitleBlock(info)) continue;
+            if (!isOverlayApplySupportedBlockInfo(info)) continue;
             if (!isHeadingBlockInfo(info)) return ref;
         }
         for (let i = 0; i < nodeRefs.length; i += 1) {
@@ -5112,6 +5434,7 @@
             const info = findBlockByNodeRef(blocks, ref);
             if (!info) continue;
             if (isTitleBlock(info)) continue;
+            if (!isOverlayApplySupportedBlockInfo(info)) continue;
             return ref;
         }
         return '';
@@ -5144,13 +5467,14 @@
         if (explicitBullets.length >= 2) {
             return `<ul>${explicitBullets.map((item) => `<li>${escapeHtmlValue(item)}</li>`).join('')}</ul>`;
         }
+        if (lines.length >= 2) {
+            return `<ul>${lines.map((item) => `<li>${escapeHtmlValue(item)}</li>`).join('')}</ul>`;
+        }
+        return '';
+    }
 
-        const sentenceParts = value
-            .split(/(?<=[.!?])\s+/)
-            .map((part) => part.trim())
-            .filter(Boolean);
-        const listItems = sentenceParts.length >= 2 ? sentenceParts : [value];
-        return `<ul>${listItems.map((item) => `<li>${escapeHtmlValue(item)}</li>`).join('')}</ul>`;
+    function isOverlayApplySupportedBlockInfo(blockInfo) {
+        return !!(blockInfo && blockInfo.block && isEditableBlock(blockInfo.block));
     }
 
     function applyTextToNodeRef(dispatcher, blocks, nodeRef, appliedText, options) {
@@ -5158,6 +5482,7 @@
         const blockInfo = findBlockByNodeRef(blocks, nodeRef);
         if (!blockInfo) return 'apply_failed';
         if (isTitleBlock(blockInfo)) return 'skipped_title';
+        if (!isOverlayApplySupportedBlockInfo(blockInfo)) return 'unsupported_block';
         const { block, clientId } = blockInfo;
         const attrKey = getBlockTextKey(block);
         if (!attrKey) return 'apply_failed';
@@ -5168,7 +5493,7 @@
             ? replaceText(currentValue, originalText, appliedText)
             : String(appliedText || '');
         if (!candidateValue || candidateValue === currentValue) {
-            return 'apply_failed';
+            return 'unchanged';
         }
         dispatcher.updateBlockAttributes(clientId, { [attrKey]: candidateValue });
         if (isAutoStaleDetectionEnabled()) {
@@ -5210,11 +5535,17 @@
             const targetNodeRefs = resolveTargetNodeRefsForApply(item, rewriteTarget, applyMode);
             if (!targetNodeRefs.length) return 'apply_failed';
             const primaryNodeRef = selectPrimaryApplyNodeRef(blocks, targetNodeRefs, rewriteTarget);
-            if (!primaryNodeRef) return 'apply_failed';
-            const listMarkup = convertTextToListMarkup(appliedText) || String(appliedText || '');
+            if (!primaryNodeRef) {
+                const hasUnsupportedTarget = targetNodeRefs.some((ref) => {
+                    const info = findBlockByNodeRef(blocks, ref);
+                    return info && !isTitleBlock(info) && !isOverlayApplySupportedBlockInfo(info);
+                });
+                return hasUnsupportedTarget ? 'unsupported_block' : 'apply_failed';
+            }
+            const listMarkup = convertTextToListMarkup(appliedText);
+            if (!listMarkup) return 'list_format_required';
             const primaryResult = applyTextToNodeRef(dispatcher, blocks, primaryNodeRef, listMarkup, { useReplace: false });
-            if (primaryResult === 'applied') return 'applied';
-            return applyTextToNodeRef(dispatcher, blocks, primaryNodeRef, String(appliedText || ''), { useReplace: false });
+            return primaryResult;
         }
 
         const targetNodeRefs = resolveTargetNodeRefsForApply(item, rewriteTarget, applyMode);
@@ -5224,10 +5555,17 @@
         const segments = splitRewriteSegments(appliedText);
         let appliedCount = 0;
         let skippedTitleCount = 0;
+        let unsupportedCount = 0;
 
         if (applyMode === 'replace_block' || applyMode === 'insert_after_heading' || applyMode === 'append_support') {
             const primaryNodeRef = selectPrimaryApplyNodeRef(blocks, uniqueRefs, rewriteTarget);
-            if (!primaryNodeRef) return 'apply_failed';
+            if (!primaryNodeRef) {
+                const hasUnsupportedTarget = uniqueRefs.some((ref) => {
+                    const info = findBlockByNodeRef(blocks, ref);
+                    return info && !isTitleBlock(info) && !isOverlayApplySupportedBlockInfo(info);
+                });
+                return hasUnsupportedTarget ? 'unsupported_block' : 'apply_failed';
+            }
             const mappedSegments = segments.length >= 2 && segments.length >= uniqueRefs.length;
             if (!mappedSegments) {
                 const combinedText = String(appliedText || '').trim();
@@ -5247,11 +5585,14 @@
                 appliedCount += 1;
             } else if (result === 'skipped_title') {
                 skippedTitleCount += 1;
+            } else if (result === 'unsupported_block') {
+                unsupportedCount += 1;
             }
         });
 
         if (appliedCount > 0) return 'applied';
         if (skippedTitleCount > 0) return 'skipped_title';
+        if (unsupportedCount > 0) return 'unsupported_block';
         return 'apply_failed';
     }
 
@@ -5374,25 +5715,15 @@
             : '';
         if (nextValue === currentValue) return 'unchanged';
         dispatcher.updateBlockAttributes(blockInfo.clientId, { [attrKey]: nextValue });
-        state.lastEditHtml.set(nodeRef, nextValue);
         if (isAutoStaleDetectionEnabled()) {
             state.isStale = true;
         }
         return 'updated';
     }
 
-    function scheduleBlockUpdate(nodeRef, body) {
-        if (!nodeRef || !body) return;
+    function markOverlayEditableChanged(reason) {
         setOverlayDirty(true);
-        scheduleOverlayDraftSave('input');
-        if (state.editTimers.has(nodeRef)) {
-            clearTimeout(state.editTimers.get(nodeRef));
-        }
-        const handle = setTimeout(() => {
-            state.editTimers.delete(nodeRef);
-            updateBlockFromEditable(nodeRef, body);
-        }, 300);
-        state.editTimers.set(nodeRef, handle);
+        scheduleOverlayDraftSave(reason || 'input');
     }
 
     function setActiveEditableBody(body, nodeRef) {
@@ -5414,11 +5745,6 @@
     }
 
     function flushPendingBlockUpdates() {
-        const pending = Array.from(state.editTimers.entries());
-        pending.forEach(([nodeRef, handle]) => {
-            try { clearTimeout(handle); } catch (e) { }
-            state.editTimers.delete(nodeRef);
-        });
         if (!state.overlayContent) return { updated: 0, unchanged: 0, failed: 0, total: 0 };
         const bodies = Array.from(state.overlayContent.querySelectorAll('.aivi-overlay-block-body[data-editable="true"]'));
         const blocks = getBlocks();
@@ -5427,17 +5753,18 @@
             const snapshotHtml = buildOverlayEditedHtmlSnapshot();
             const fallbackResult = applyHtmlToNonBlockEditor(snapshotHtml);
             if (fallbackResult === 'applied') {
-                return { updated: Math.max(1, bodies.length), unchanged: 0, failed: 0, total: Math.max(1, bodies.length) };
+                return { updated: Math.max(1, bodies.length), unchanged: 0, failed: 0, total: Math.max(1, bodies.length), updatedClientIds: [] };
             }
             if (fallbackResult === 'unchanged') {
-                return { updated: 0, unchanged: Math.max(1, bodies.length), failed: 0, total: Math.max(1, bodies.length) };
+                return { updated: 0, unchanged: Math.max(1, bodies.length), failed: 0, total: Math.max(1, bodies.length), updatedClientIds: [] };
             }
-            return { updated: 0, unchanged: 0, failed: Math.max(1, bodies.length), total: Math.max(1, bodies.length) };
+            return { updated: 0, unchanged: 0, failed: Math.max(1, bodies.length), total: Math.max(1, bodies.length), updatedClientIds: [] };
         }
 
         let updated = 0;
         let unchanged = 0;
         let failed = 0;
+        const updatedClientIds = [];
         bodies.forEach((body) => {
             const wrapper = body.closest('.aivi-overlay-block');
             const nodeRef = wrapper ? wrapper.getAttribute('data-node-ref') : '';
@@ -5446,11 +5773,17 @@
                 return;
             }
             const result = updateBlockFromEditable(nodeRef, body);
-            if (result === 'updated') updated += 1;
+            if (result === 'updated') {
+                updated += 1;
+                const info = findBlockByNodeRef(blocks, nodeRef);
+                if (info && info.clientId) {
+                    updatedClientIds.push(info.clientId);
+                }
+            }
             else if (result === 'unchanged' || result === 'skipped_title') unchanged += 1;
             else failed += 1;
         });
-        return { updated, unchanged, failed, total: bodies.length };
+        return { updated, unchanged, failed, total: bodies.length, updatedClientIds };
     }
 
     function enableEditableBody(body, block, nodeRef) {
@@ -5461,12 +5794,12 @@
         body.addEventListener('focus', () => setActiveEditableBody(body, nodeRef));
         body.addEventListener('click', () => setActiveEditableBody(body, nodeRef));
         body.addEventListener('keyup', () => setActiveEditableBody(body, nodeRef));
-        body.addEventListener('input', () => scheduleBlockUpdate(nodeRef, body));
+        body.addEventListener('input', () => markOverlayEditableChanged('input'));
         body.addEventListener('blur', () => {
-            updateBlockFromEditable(nodeRef, body);
             setActiveEditableBody(body, nodeRef);
-            setOverlayDirty(true);
-            scheduleOverlayDraftSave('blur');
+            if (state.overlayDirty) {
+                scheduleOverlayDraftSave('blur');
+            }
         });
         const wrapper = typeof body.closest === 'function' ? body.closest('.aivi-overlay-block') : null;
         if (wrapper && !wrapper._aiviBlockShellBound) {
@@ -5977,9 +6310,12 @@
             wrapper.className = 'aivi-overlay-block';
             wrapper.setAttribute('data-block-name', block.name || '');
             wrapper.setAttribute('data-node-ref', nodeRef);
+            const renderMode = getOverlayBlockRenderMode(block);
+            wrapper.setAttribute('data-editability', renderMode);
 
             const body = state.contextDoc.createElement('div');
             body.className = 'aivi-overlay-block-body';
+            body.setAttribute('data-editability', renderMode);
             const html = buildBlockHtml(block);
             if (html) {
                 body.innerHTML = html;
@@ -5991,12 +6327,14 @@
             applyHighlightsToBody(body, items, useV2);
             enableEditableBody(body, block, nodeRef);
             const handle = buildBlockHandle(nodeRef, body);
+            const blockState = buildOverlayBlockState(renderMode);
 
             const panel = state.contextDoc.createElement('div');
             panel.className = 'aivi-overlay-inline-panel';
             panel.style.cssText = 'display:none;flex-direction:column;gap:10px;margin-top:10px;padding:12px;border:1px solid #d7dfec;border-radius:12px;background:#fff;box-shadow:0 8px 18px rgba(15,23,42,.06);';
 
             if (handle) wrapper.appendChild(handle);
+            if (blockState) wrapper.appendChild(blockState);
             wrapper.appendChild(body);
             wrapper.appendChild(panel);
             state.overlayContent.appendChild(wrapper);
@@ -6176,10 +6514,8 @@
                 setMetaStatus('Command not supported for this selection');
                 return false;
             }
-            updateBlockFromEditable(active.nodeRef, active.body);
-            setOverlayDirty(true);
-            scheduleOverlayDraftSave('format_command');
-            setMetaStatus('Formatting applied');
+            markOverlayEditableChanged('format_command');
+            setMetaStatus('Formatting staged in AiVI. Click Apply Changes to send it to the WordPress editor.');
             queueToolbarActiveRefresh();
             return true;
         } catch (e) {
@@ -6241,7 +6577,7 @@
 
     function confirmApplyOverlayOverwrite() {
         const title = 'Apply overlay edits to WordPress editor?';
-        const message = 'This will replace the current WordPress editor content with what you edited in the overlay. You can still undo after applying.';
+        const message = 'Your article edits stay inside AiVI until you apply them. This sends those edits to the WordPress editor state. Use Update or Publish afterward to make them live. You can still undo after applying.';
         if (!state.contextDoc || !state.overlayRoot) {
             return Promise.resolve(false);
         }
@@ -6289,7 +6625,7 @@
 
     function confirmOverlayCloseDiscard() {
         const title = 'Close editor with unsaved overlay edits?';
-        const message = "Changes you've made may be lost if you close now. Consider Apply Changes first.";
+        const message = "Your article edits stay inside AiVI until you click Apply Changes. If you close now, those unapplied edits may be lost.";
         if (!state.contextDoc || !state.overlayRoot) {
             return Promise.resolve(false);
         }
@@ -6349,13 +6685,22 @@
         if (sync.updated > 0) {
             setOverlayDirty(false);
             clearOverlayDraft();
-            setMetaStatus(`Applied ${sync.updated} block${sync.updated === 1 ? '' : 's'} to WordPress editor`);
+            const noticeMessage = sync.failed > 0
+                ? `Applied ${sync.updated} block${sync.updated === 1 ? '' : 's'} to the WordPress editor. ${sync.failed} block${sync.failed === 1 ? '' : 's'} stayed untouched. Review the changed blocks, then click Update or Publish.`
+                : `Applied ${sync.updated} block${sync.updated === 1 ? '' : 's'} to the WordPress editor. Review the changed blocks, then click Update or Publish.`;
+            if (sync.failed === 0) {
+                closeOverlayInternal();
+                revealAppliedChangesInEditor(sync.updatedClientIds);
+                showEditorNotice(noticeMessage, 'success');
+                return;
+            }
+            setMetaStatus(`Applied ${sync.updated} block${sync.updated === 1 ? '' : 's'} to the WordPress editor. ${sync.failed} block${sync.failed === 1 ? '' : 's'} stayed untouched.`);
             return;
         }
         if (sync.failed > 0) {
             setOverlayDirty(true);
             scheduleOverlayDraftSave('apply_failed');
-            setMetaStatus(`Apply completed with ${sync.failed} block${sync.failed === 1 ? '' : 's'} skipped`);
+            setMetaStatus(`Apply completed with ${sync.failed} block${sync.failed === 1 ? '' : 's'} skipped. Rich/read-only blocks stay untouched.`);
             return;
         }
         if (sync.unchanged > 0) {
@@ -6508,6 +6853,7 @@
                 font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#69707d;
             }
             .aivi-overlay-rail-actions{display:flex;gap:8px;flex-wrap:wrap;}
+            .aivi-overlay-rail-note{font-size:11px;line-height:1.5;color:#69707d;}
             .aivi-overlay-rail-btn{
                 border:1px solid #dee3ea;background:#fff;color:#171a21;padding:9px 12px;border-radius:999px;font-size:12px;font-weight:700;line-height:1.2;cursor:pointer;
                 font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;
@@ -6538,7 +6884,12 @@
             .aivi-overlay-review-preview-item,.aivi-overlay-review-item{padding:12px 14px;border:1px solid #dee3ea;border-radius:18px;background:#fbfbfc;}
             .aivi-overlay-review-item[data-verdict="fail"]{border-color:#f0c6c6;box-shadow:inset 3px 0 0 #d14343;}
             .aivi-overlay-review-item[data-verdict="partial"]{border-color:#efd6a4;box-shadow:inset 3px 0 0 #b56a07;}
-            .aivi-overlay-review-preview-name,.aivi-overlay-review-item-name{font-size:14px;font-weight:700;line-height:1.35;color:#171a21;}
+            .aivi-overlay-review-preview-name,.aivi-overlay-review-item-name{font-size:14px;font-weight:700;line-height:1.35;color:#171a21;flex:1 1 auto;min-width:0;}
+            .aivi-overlay-review-item-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+            .aivi-overlay-review-impact-pill{display:inline-flex;align-items:center;justify-content:center;padding:4px 9px;border-radius:999px;border:1px solid #dee3ea;background:#fff;color:#4b5563;font-size:11px;font-weight:700;line-height:1.1;white-space:nowrap;flex:0 0 auto;}
+            .aivi-overlay-review-impact-pill[data-tier="high"]{background:#fff1ef;border-color:#f3c2c7;color:#7c2532;}
+            .aivi-overlay-review-impact-pill[data-tier="recommended"]{background:#fff6dd;border-color:#e2b86a;color:#8a4b00;}
+            .aivi-overlay-review-impact-pill[data-tier="polish"]{background:#edfdf3;border-color:#bde7c9;color:#0f6b49;}
             .aivi-overlay-review-item-summary{margin-top:8px;font-size:13px;line-height:1.6;color:#69707d;}
             .aivi-overlay-review-item-actions{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;}
             .aivi-overlay-review-btn{
@@ -6598,6 +6949,7 @@
                 border:0;border-radius:0;padding:0 28px 0 20px;background:transparent;
                 box-shadow:none;transition:background .16s ease;position:relative;margin:0 0 18px;
             }
+            .aivi-overlay-block[data-editability="readonly"]{padding-right:96px;}
             .aivi-overlay-block::before{
                 content:"";position:absolute;left:0;top:10px;width:6px;height:calc(100% - 18px);border-radius:999px;background:#2563eb;opacity:0;transition:opacity .18s ease;
             }
@@ -6605,6 +6957,12 @@
             .aivi-overlay-block-body{
                 font-size:18px;line-height:1.72;color:#1b2940;padding:0;border-radius:0;border:1px solid transparent;
                 background:transparent;transition:border-color .16s ease,background .16s ease,box-shadow .16s ease;outline:none;
+            }
+            .aivi-overlay-block-body[data-editability="readonly"]{border-color:rgba(23,26,33,.06);}
+            .aivi-overlay-block-state{
+                position:absolute;top:8px;right:42px;display:inline-flex;align-items:center;justify-content:center;
+                padding:4px 9px;border-radius:999px;border:1px solid rgba(23,26,33,.08);background:rgba(255,255,255,.95);
+                color:#5e6f86;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;z-index:2;
             }
             .aivi-overlay-block-handle{
                 position:absolute;top:6px;right:8px;width:28px;height:28px;border:1px solid #d4deef;border-radius:999px;background:rgba(255,255,255,.96);
@@ -6643,7 +7001,22 @@
             .aivi-overlay-block-menu-action:hover{background:#eef4ff;border-color:#cfe0ff;}
             .aivi-overlay-block-menu-action.wide{grid-column:1 / -1;min-height:0;}
             .aivi-overlay-block-body img{max-width:100%;border-radius:10px;display:block;margin-bottom:10px;}
+            .aivi-overlay-block-body figure{margin:0 0 12px;}
             .aivi-overlay-block-body figcaption{font-size:12px;color:#5e6f86;}
+            .aivi-overlay-block-body table{width:100%;border-collapse:collapse;margin:6px 0 14px;font-size:16px;line-height:1.55;background:#fff;}
+            .aivi-overlay-block-body th,.aivi-overlay-block-body td{border:1px solid #d9e3f1;padding:10px 12px;vertical-align:top;}
+            .aivi-overlay-block-body th{background:#f6f9ff;color:#13233d;font-weight:800;}
+            .aivi-overlay-block-body iframe,.aivi-overlay-block-body video{width:100%;max-width:100%;border:0;border-radius:12px;display:block;background:#0f172a;margin:4px 0 12px;}
+            .aivi-overlay-block-body audio{width:100%;display:block;margin:4px 0 12px;}
+            .aivi-overlay-button-group,.aivi-overlay-button-row{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0 12px;}
+            .aivi-overlay-button-fallback{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:10px 16px;border-radius:999px;background:#171a21;color:#fff;text-decoration:none;font-size:13px;font-weight:800;line-height:1.2;}
+            .aivi-overlay-file-fallback{margin:6px 0 12px;}
+            .aivi-overlay-file-fallback a,.aivi-overlay-embed-fallback a{color:#1d4ed8;font-weight:700;word-break:break-word;}
+            .aivi-overlay-gallery-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:6px 0 12px;}
+            .aivi-overlay-gallery-grid figure{margin:0;}
+            .aivi-overlay-separator{border:0;border-top:1px solid #d9e3f1;margin:10px 0 16px;}
+            .aivi-overlay-spacer{width:100%;display:block;}
+            .aivi-overlay-verse{white-space:pre-wrap;}
             .aivi-overlay-block-editing{
                 background:transparent;
             }
@@ -6738,6 +7111,11 @@
                 70%{box-shadow:0 0 0 14px rgba(34,113,177,0);}
                 100%{box-shadow:0 0 0 0 rgba(34,113,177,0);}
             }
+            @keyframes aiviEditorApplyPulse{
+                0%{box-shadow:0 0 0 0 rgba(34,113,177,.24);}
+                50%{box-shadow:0 0 0 10px rgba(34,113,177,.10);}
+                100%{box-shadow:0 0 0 0 rgba(34,113,177,0);}
+            }
             .aivi-overlay-block-jump-focus{
                 position:relative;border-radius:12px;background:linear-gradient(180deg,rgba(222,235,255,.66) 0%,rgba(222,235,255,.20) 100%);
                 box-shadow:inset 0 0 0 2px rgba(34,113,177,.62),0 10px 24px rgba(16,42,87,.16);transition:box-shadow .25s ease,background .25s ease;
@@ -6747,6 +7125,11 @@
             }
             .aivi-overlay-block-jump-flash{animation:aiviOverlayJumpPulse 1.2s ease-out 1;}
             .aivi-overlay-block-focus{outline:2px solid #2271b1;outline-offset:2px;border-radius:10px;}
+            .aivi-editor-apply-flash{
+                position:relative;border-radius:12px;
+                box-shadow:0 0 0 2px rgba(34,113,177,.58),0 14px 34px rgba(34,113,177,.14);
+                animation:aiviEditorApplyPulse 1.8s ease-out 1;
+            }
             @media (max-width: 980px){
                 .aivi-overlay-panel{width:calc(100vw - 12px);max-height:calc(100vh - 12px);}
                 .aivi-overlay-content{padding:10px;}
