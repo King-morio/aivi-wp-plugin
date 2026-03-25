@@ -8,19 +8,29 @@
         contextDoc: null,
         overlayRoot: null,
         overlayPanel: null,
+        overlayViewport: null,
         overlayContent: null,
+        overlayRail: null,
+        overlayRailViewport: null,
+        overlayShell: null,
+        overlayDocTitle: null,
+        blockMenu: null,
+        blockMenuNodeRef: '',
+        blockMenuDismissHandler: null,
+        overlayScrollHandler: null,
+        overlayRailScrollHandler: null,
+        overlayResizeHandler: null,
+        overlayLayoutRaf: null,
+        scrollLockTargets: [],
         keyHandler: null,
         issueMap: null,
         suggestions: {},
         metaStatus: '',
         isStale: false,
         lastBlocksKey: '',
-        lastGuardrailKey: '',
         inlinePanel: null,
         inlineItemKey: '',
         inlineDismissHandler: null,
-        editTimers: new Map(),
-        lastEditHtml: new Map(),
         activeEditableBody: null,
         activeEditableNodeRef: '',
         toolbarButtons: [],
@@ -34,7 +44,9 @@
         overlayDirty: false,
         draftSaveTimer: null,
         draftRestoreAttempted: false,
-        beforeUnloadHandler: null
+        beforeUnloadHandler: null,
+        documentMetaCache: new Map(),
+        editorRevealCleanupTimer: null
     };
 
     function debugLog(level, message, data) {
@@ -50,6 +62,66 @@
             window.AIVI_DEBUG_LOGS.push(entry);
         } catch (e) {
         }
+    }
+
+    const HIGH_IMPACT_CHECK_IDS = new Set([
+        'immediate_answer_placement',
+        'question_answer_alignment',
+        'clear_answer_formatting',
+        'lists_tables_presence',
+        'heading_topic_fulfillment',
+        'claim_provenance_and_evidence',
+        'external_authoritative_sources',
+        'factual_statements_well_formed',
+        'numeric_claim_consistency',
+        'contradictions_and_coherence',
+        'schema_matches_content',
+        'article_jsonld_presence_and_completeness',
+        'faq_jsonld_presence_and_completeness',
+        'howto_jsonld_presence_and_completeness',
+        'itemlist_jsonld_presence_and_completeness',
+        'ai_crawler_accessibility'
+    ]);
+
+    const POLISH_CHECK_IDS = new Set([
+        'appropriate_paragraph_length',
+        'readability_adaptivity',
+        'author_bio_present',
+        'intro_readability',
+        'intro_wordcount',
+        'terminology_consistency',
+        'semantic_html_usage'
+    ]);
+
+    function normalizeOverlayPriorityToken(value) {
+        return String(value || '').trim().toLowerCase();
+    }
+
+    function getOverlayIssueImpactTier(issue) {
+        if (!issue) return null;
+        const verdict = normalizeOverlayPriorityToken(issue.ui_verdict || issue.verdict || '');
+        if (verdict === 'pass') return null;
+
+        const priorityToken = normalizeOverlayPriorityToken(issue.severity || issue.impact || issue.priority || issue.importance);
+        if (priorityToken === 'critical' || priorityToken === 'high') return 'high';
+        if (priorityToken === 'low' || priorityToken === 'polish') return 'polish';
+
+        const checkId = normalizeOverlayPriorityToken(issue.check_id || issue.id || '');
+        if (POLISH_CHECK_IDS.has(checkId)) return 'polish';
+        if (HIGH_IMPACT_CHECK_IDS.has(checkId)) return 'high';
+        return 'recommended';
+    }
+
+    function buildOverlayImpactPill(issue) {
+        const tier = getOverlayIssueImpactTier(issue);
+        if (!tier || !state.contextDoc) return null;
+        const pill = state.contextDoc.createElement('span');
+        pill.className = 'aivi-overlay-review-impact-pill';
+        pill.setAttribute('data-tier', tier);
+        pill.textContent = tier === 'high'
+            ? 'High impact'
+            : (tier === 'polish' ? 'Polish' : 'Recommended');
+        return pill;
     }
 
     function getOverlaySpanMeta(span) {
@@ -112,6 +184,203 @@
         return { doc, root };
     }
 
+    function escapeAttributeSelectorValue(value) {
+        const normalized = String(value || '');
+        if (!normalized) return '';
+        const cssApi = typeof CSS !== 'undefined' ? CSS : null;
+        if (cssApi && typeof cssApi.escape === 'function') {
+            return cssApi.escape(normalized);
+        }
+        return normalized.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+
+    function getEditorBlockElementByClientId(doc, clientId) {
+        if (!doc || typeof doc.querySelector !== 'function' || !clientId) return null;
+        const escaped = escapeAttributeSelectorValue(clientId);
+        if (!escaped) return null;
+        const selectors = [
+            `[data-block="${escaped}"]`,
+            `[data-block-client-id="${escaped}"]`,
+            `.block-editor-block-list__block[data-block="${escaped}"]`,
+            `.wp-block[data-block="${escaped}"]`
+        ];
+        for (let i = 0; i < selectors.length; i += 1) {
+            const match = doc.querySelector(selectors[i]);
+            if (match) return match;
+        }
+        return null;
+    }
+
+    function clearEditorAppliedReveal(doc) {
+        if (!doc || typeof doc.querySelectorAll !== 'function') return;
+        const flashed = doc.querySelectorAll('.aivi-editor-apply-flash');
+        flashed.forEach((node) => node.classList.remove('aivi-editor-apply-flash'));
+        if (state.editorRevealCleanupTimer) {
+            clearTimeout(state.editorRevealCleanupTimer);
+            state.editorRevealCleanupTimer = null;
+        }
+    }
+
+    function showEditorNotice(message, status) {
+        if (!message || !wp || !wp.data || typeof wp.data.dispatch !== 'function') return;
+        try {
+            const notices = wp.data.dispatch('core/notices');
+            if (notices && typeof notices.createNotice === 'function') {
+                notices.createNotice(status || 'success', message, {
+                    type: 'snackbar',
+                    isDismissible: true
+                });
+            }
+        } catch (e) {
+        }
+    }
+
+    function revealAppliedChangesInEditor(clientIds) {
+        const ids = Array.from(new Set((Array.isArray(clientIds) ? clientIds : []).filter(Boolean)));
+        if (!ids.length) return false;
+
+        const runReveal = (attempt) => {
+            const context = getEditorContext();
+            const doc = context && context.doc ? context.doc : null;
+            if (!doc) return false;
+            const elements = ids
+                .map((clientId) => getEditorBlockElementByClientId(doc, clientId))
+                .filter(Boolean);
+
+            if (!elements.length) {
+                if ((attempt || 0) >= 8) return false;
+                const view = doc.defaultView || window;
+                if (view && typeof view.requestAnimationFrame === 'function') {
+                    view.requestAnimationFrame(() => runReveal((attempt || 0) + 1));
+                } else {
+                    setTimeout(() => runReveal((attempt || 0) + 1), 40);
+                }
+                return true;
+            }
+
+            clearEditorAppliedReveal(doc);
+
+            try {
+                const dispatcher = wp.data.dispatch('core/block-editor');
+                if (dispatcher && typeof dispatcher.selectBlock === 'function') {
+                    dispatcher.selectBlock(ids[0]);
+                }
+            } catch (e) {
+            }
+
+            elements.forEach((element) => element.classList.add('aivi-editor-apply-flash'));
+
+            const first = elements[0];
+            if (first && typeof first.scrollIntoView === 'function') {
+                first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            state.editorRevealCleanupTimer = setTimeout(() => {
+                clearEditorAppliedReveal(doc);
+            }, 1800);
+
+            return true;
+        };
+
+        return runReveal(0);
+    }
+
+    function queueOverlayLayoutSync() {
+        if (!state.contextDoc || state.overlayLayoutRaf) return;
+        const raf = state.contextDoc.defaultView && typeof state.contextDoc.defaultView.requestAnimationFrame === 'function'
+            ? state.contextDoc.defaultView.requestAnimationFrame
+            : window.requestAnimationFrame;
+        state.overlayLayoutRaf = raf(() => {
+            state.overlayLayoutRaf = null;
+            syncOverlayLayout();
+        });
+    }
+
+    function syncOverlayLayout() {
+        if (!state.overlayPanel || !state.overlayViewport || !state.overlayRail || !state.contextDoc) {
+            return;
+        }
+        const view = state.contextDoc.defaultView || window;
+        const viewportLimit = Math.max(520, (view.innerHeight || window.innerHeight || 900) - 28);
+        const panelStyles = view.getComputedStyle(state.overlayPanel);
+        const contentNode = state.overlayPanel.firstElementChild;
+        const contentStyles = contentNode ? view.getComputedStyle(contentNode) : null;
+        const panelChrome =
+            (parseFloat(panelStyles.borderTopWidth || '0') || 0) +
+            (parseFloat(panelStyles.borderBottomWidth || '0') || 0) +
+            (contentStyles ? ((parseFloat(contentStyles.paddingTop || '0') || 0) + (parseFloat(contentStyles.paddingBottom || '0') || 0)) : 0);
+        const desiredHeight = Math.max(state.overlayRail.scrollHeight, state.overlayViewport.scrollHeight) + panelChrome;
+        const resolvedHeight = Math.min(viewportLimit, Math.max(460, Math.ceil(desiredHeight)));
+        state.overlayPanel.style.height = `${resolvedHeight}px`;
+        syncReviewRailScrollControls();
+    }
+
+    function syncReviewRailScrollControls() {
+        if (!state.overlayRailViewport || !state.overlayRail) return;
+        const viewport = state.overlayRailViewport;
+        const controls = state.overlayRail.querySelector('.aivi-overlay-review-scroll-controls');
+        const upButton = state.overlayRail.querySelector('[data-rail-scroll="up"]');
+        const downButton = state.overlayRail.querySelector('[data-rail-scroll="down"]');
+        if (!controls || !upButton || !downButton) return;
+        const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+        const overflowActive = maxScrollTop > 6;
+        controls.hidden = !overflowActive;
+        controls.setAttribute('aria-hidden', overflowActive ? 'false' : 'true');
+        upButton.disabled = !overflowActive || viewport.scrollTop <= 4;
+        downButton.disabled = !overflowActive || viewport.scrollTop >= (maxScrollTop - 4);
+    }
+
+    function scrollReviewRail(direction) {
+        if (!state.overlayRailViewport) return;
+        const viewport = state.overlayRailViewport;
+        const delta = Math.max(180, Math.round(viewport.clientHeight * 0.72));
+        const top = Math.max(0, viewport.scrollTop + (direction === 'up' ? -delta : delta));
+        if (typeof viewport.scrollTo === 'function') {
+            viewport.scrollTo({ top, behavior: 'smooth' });
+        } else {
+            viewport.scrollTop = top;
+        }
+        const raf = state.contextDoc && state.contextDoc.defaultView && typeof state.contextDoc.defaultView.requestAnimationFrame === 'function'
+            ? state.contextDoc.defaultView.requestAnimationFrame
+            : window.requestAnimationFrame;
+        raf(() => syncReviewRailScrollControls());
+    }
+
+    function setOverlayScrollLock(locked) {
+        const targets = [];
+        const registerTargets = (doc) => {
+            if (!doc) return;
+            [doc.documentElement, doc.body].forEach((node) => {
+                if (!node || targets.some((entry) => entry.node === node)) return;
+                targets.push({
+                    node,
+                    overflow: node.style.overflow || '',
+                    overscrollBehavior: node.style.overscrollBehavior || ''
+                });
+            });
+        };
+
+        if (locked) {
+            registerTargets(document);
+            if (state.contextDoc && state.contextDoc !== document) {
+                registerTargets(state.contextDoc);
+            }
+            state.scrollLockTargets = targets;
+            state.scrollLockTargets.forEach((entry) => {
+                entry.node.style.overflow = 'hidden';
+                entry.node.style.overscrollBehavior = 'none';
+            });
+            return;
+        }
+
+        (state.scrollLockTargets || []).forEach((entry) => {
+            if (!entry || !entry.node) return;
+            entry.node.style.overflow = entry.overflow;
+            entry.node.style.overscrollBehavior = entry.overscrollBehavior;
+        });
+        state.scrollLockTargets = [];
+    }
+
     function ensureOverlay() {
         const context = getEditorContext();
         if (!context.root || !context.doc) {
@@ -120,12 +389,24 @@
         if (state.overlayRoot && state.contextDoc && state.contextDoc !== context.doc) {
             detachEscListener();
             detachToolbarStateListeners();
+            if (state.blockMenuDismissHandler) {
+                state.contextDoc.removeEventListener('click', state.blockMenuDismissHandler);
+                state.blockMenuDismissHandler = null;
+            }
             if (state.overlayRoot.parentNode) {
                 state.overlayRoot.parentNode.removeChild(state.overlayRoot);
             }
             state.overlayRoot = null;
             state.overlayPanel = null;
+            state.overlayViewport = null;
             state.overlayContent = null;
+            state.overlayRail = null;
+            state.overlayRailViewport = null;
+            state.overlayDocTitle = null;
+            state.blockMenu = null;
+            state.blockMenuNodeRef = '';
+            state.overlayScrollHandler = null;
+            state.overlayRailScrollHandler = null;
         }
         if (state.overlayRoot && state.contextDoc === context.doc && context.doc.contains(state.overlayRoot)) {
             return state.overlayRoot;
@@ -133,10 +414,6 @@
 
         state.contextDoc = context.doc;
         const root = context.root;
-        const rootStyle = context.doc.defaultView.getComputedStyle(root);
-        if (rootStyle.position === 'static') {
-            root.style.position = 'relative';
-        }
 
         injectStyles(context.doc);
 
@@ -155,38 +432,46 @@
         const panel = context.doc.createElement('div');
         panel.className = 'aivi-overlay-panel';
 
-        const header = context.doc.createElement('div');
-        header.className = 'aivi-overlay-header';
-
-        const title = context.doc.createElement('div');
-        title.className = 'aivi-overlay-title';
-        title.textContent = 'AiVI Overlay Editor';
-
-        const closeButton = context.doc.createElement('button');
-        closeButton.type = 'button';
-        closeButton.className = 'aivi-overlay-close';
-        closeButton.textContent = 'Close';
-        closeButton.addEventListener('click', closeOverlay);
-
-        header.appendChild(title);
-        header.appendChild(closeButton);
-
         const content = context.doc.createElement('div');
         content.className = 'aivi-overlay-content';
 
-        const meta = context.doc.createElement('div');
-        meta.className = 'aivi-overlay-meta';
+        const shell = context.doc.createElement('div');
+        shell.className = 'aivi-overlay-shell';
 
-        panel.appendChild(header);
-        panel.appendChild(meta);
+        const rail = context.doc.createElement('aside');
+        rail.className = 'aivi-overlay-review-rail';
+
+        const stage = context.doc.createElement('div');
+        stage.className = 'aivi-overlay-stage';
+        const docHeader = context.doc.createElement('div');
+        docHeader.className = 'aivi-overlay-doc-header';
+        const docTitle = context.doc.createElement('h1');
+        docTitle.className = 'aivi-overlay-doc-title';
+        docHeader.appendChild(docTitle);
+        const canvas = context.doc.createElement('div');
+        canvas.className = 'aivi-overlay-canvas';
+        stage.appendChild(docHeader);
+        stage.appendChild(canvas);
+
+        shell.appendChild(rail);
+        shell.appendChild(stage);
+        content.appendChild(shell);
+
         panel.appendChild(content);
         backdrop.appendChild(panel);
         overlayRoot.appendChild(backdrop);
-        root.appendChild(overlayRoot);
+        (context.doc.body || root).appendChild(overlayRoot);
 
         state.overlayRoot = overlayRoot;
         state.overlayPanel = panel;
-        state.overlayContent = content;
+        state.overlayViewport = stage;
+        state.overlayContent = canvas;
+        state.overlayRail = rail;
+        state.overlayRailViewport = null;
+        state.overlayShell = shell;
+        state.overlayDocTitle = docTitle;
+        state.blockMenu = null;
+        state.blockMenuNodeRef = '';
         if (!state.inlineDismissHandler) {
             state.inlineDismissHandler = (event) => {
                 if (!state.inlinePanel) return;
@@ -197,6 +482,33 @@
                 hideInlinePanel();
             };
             state.contextDoc.addEventListener('click', state.inlineDismissHandler);
+        }
+        if (!state.blockMenuDismissHandler) {
+            state.blockMenuDismissHandler = (event) => {
+                if (!state.blockMenu) return;
+                const target = event.target;
+                if (target && (target.closest('.aivi-overlay-block-menu') || target.closest('.aivi-overlay-block-handle'))) {
+                    return;
+                }
+                hideBlockMenu();
+            };
+            state.contextDoc.addEventListener('click', state.blockMenuDismissHandler);
+        }
+        if (!state.overlayScrollHandler && state.overlayViewport) {
+            state.overlayScrollHandler = () => {
+                if (state.blockMenu && !state.blockMenu.hidden) {
+                    hideBlockMenu();
+                }
+            };
+            state.overlayViewport.addEventListener('scroll', state.overlayScrollHandler, { passive: true });
+        }
+        if (state.overlayRailScrollHandler && state.overlayRailViewport) {
+            state.overlayRailViewport.removeEventListener('scroll', state.overlayRailScrollHandler);
+            state.overlayRailScrollHandler = null;
+        }
+        if (!state.overlayResizeHandler) {
+            state.overlayResizeHandler = () => queueOverlayLayoutSync();
+            (state.contextDoc.defaultView || window).addEventListener('resize', state.overlayResizeHandler, { passive: true });
         }
 
         return overlayRoot;
@@ -221,11 +533,13 @@
         state.draftRestoreAttempted = false;
         setOverlayDirty(false);
         root.setAttribute('data-open', 'true');
+        setOverlayScrollLock(true);
         const raf = state.contextDoc && state.contextDoc.defaultView && typeof state.contextDoc.defaultView.requestAnimationFrame === 'function'
             ? state.contextDoc.defaultView.requestAnimationFrame
             : window.requestAnimationFrame;
         raf(() => {
             renderBlocks(true);
+            queueOverlayLayoutSync();
         });
         attachEscListener();
         attachToolbarStateListeners();
@@ -244,8 +558,30 @@
         clearJumpFocus(true);
         state.overlayRoot.removeAttribute('data-open');
         hideInlinePanel();
+        hideBlockMenu();
         detachEscListener();
         detachToolbarStateListeners();
+        if (state.blockMenuDismissHandler && state.contextDoc) {
+            state.contextDoc.removeEventListener('click', state.blockMenuDismissHandler);
+            state.blockMenuDismissHandler = null;
+        }
+        if (state.overlayScrollHandler && state.overlayViewport) {
+            state.overlayViewport.removeEventListener('scroll', state.overlayScrollHandler);
+            state.overlayScrollHandler = null;
+        }
+        if (state.overlayRailScrollHandler && state.overlayRailViewport) {
+            state.overlayRailViewport.removeEventListener('scroll', state.overlayRailScrollHandler);
+            state.overlayRailScrollHandler = null;
+        }
+        if (state.overlayResizeHandler) {
+            (state.contextDoc && state.contextDoc.defaultView ? state.contextDoc.defaultView : window).removeEventListener('resize', state.overlayResizeHandler);
+            state.overlayResizeHandler = null;
+        }
+        if (state.overlayLayoutRaf && state.contextDoc && state.contextDoc.defaultView && typeof state.contextDoc.defaultView.cancelAnimationFrame === 'function') {
+            state.contextDoc.defaultView.cancelAnimationFrame(state.overlayLayoutRaf);
+            state.overlayLayoutRaf = null;
+        }
+        setOverlayScrollLock(false);
         detachBeforeUnloadGuard();
     }
 
@@ -353,6 +689,8 @@
         ({ checkName }) => `This portion relates to ${checkName}. Refine wording and evidence so AI answer systems can ground citations correctly.`
     ];
     const OVERLAY_FIX_WITH_AI_ENABLED = false;
+    const OVERLAY_DRAFT_VERSION = 2;
+    const OVERLAY_EDITOR_PERSISTENCE_NOTE = 'Apply Changes sends your overlay edits to the WordPress editor. Then click Update or Publish to make them live.';
 
     function stableHash(value) {
         const input = String(value || '');
@@ -472,8 +810,10 @@
 
     function getSchemaAssistLabel(schemaKind) {
         const kind = String(schemaKind || '').toLowerCase().trim();
+        if (kind === 'article_jsonld') return 'Article JSON-LD';
         if (kind === 'faq_jsonld') return 'FAQ JSON-LD';
         if (kind === 'howto_jsonld') return 'HowTo JSON-LD';
+        if (kind === 'itemlist_jsonld') return 'ItemList JSON-LD';
         if (kind === 'intro_schema_jsonld') return 'Intro Schema';
         if (kind === 'schema_alignment_jsonld') return 'Schema Alignment JSON-LD';
         if (kind === 'semantic_markup_plan') return 'Semantic Markup Plan';
@@ -491,15 +831,101 @@
         }
     }
 
+    function getSchemaAssistInsertCapability(schemaAssist) {
+        const capability = normalizeText(String(schemaAssist && schemaAssist.insert_capability || ''));
+        if (capability) return capability;
+        if (schemaAssist && schemaAssist.can_insert === true) return 'conflict_aware_insert';
+        if (schemaAssist && schemaAssist.can_copy === true) return 'copy_only';
+        return 'unavailable';
+    }
+
+    function getSchemaAssistBadgeText(schemaAssist) {
+        const capability = getSchemaAssistInsertCapability(schemaAssist);
+        if (capability === 'conflict_aware_insert') return 'Conflict-aware insert';
+        if (capability === 'copy_only') return 'Copy only';
+        return 'Unavailable';
+    }
+
+    function getSchemaAssistBaseNote(schemaAssist) {
+        const schemaKind = normalizeSchemaKind(schemaAssist && schemaAssist.schema_kind);
+        const isSemanticMarkupPlan = schemaKind === 'semantic_markup_plan';
+        const notes = Array.isArray(schemaAssist && schemaAssist.generation_notes)
+            ? schemaAssist.generation_notes.filter(Boolean)
+            : [];
+        if (notes[0]) return notes[0];
+        if (schemaKind === 'jsonld_repair') {
+            return 'Copy-only JSON-LD repair draft. Insert is disabled for repair mode.';
+        }
+        if (getSchemaAssistInsertCapability(schemaAssist) !== 'conflict_aware_insert' && isSemanticMarkupPlan) {
+            return 'Copy-only semantic markup plan. Apply these changes in your theme/editor markup.';
+        }
+        if (getSchemaAssistInsertCapability(schemaAssist) !== 'conflict_aware_insert') {
+            return 'Copy-only schema draft for this recommendation.';
+        }
+        return 'Deterministic schema draft generated from this recommendation. Inserted drafts stay in the editor until you save the post.';
+    }
+
+    function joinReadableClauses(clauses) {
+        const list = (Array.isArray(clauses) ? clauses : []).filter(Boolean);
+        if (!list.length) return '';
+        if (list.length === 1) return list[0];
+        if (list.length === 2) return `${list[0]} and ${list[1]}`;
+        return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`;
+    }
+
+    function buildSchemaAssistPolicySummary(schemaAssist) {
+        const capability = getSchemaAssistInsertCapability(schemaAssist);
+        if (capability === 'copy_only') {
+            return 'Insert behavior: copy only. AiVI will not change editor or external schema blocks for this draft.';
+        }
+        if (capability !== 'conflict_aware_insert') {
+            return 'Insert behavior: unavailable. Copy this draft into your publishing workflow manually.';
+        }
+        const hints = schemaAssist && schemaAssist.insert_policy_hints && typeof schemaAssist.insert_policy_hints === 'object'
+            ? schemaAssist.insert_policy_hints
+            : {};
+        const clauses = [];
+        if (hints.default_insert_action === 'append_new_block') {
+            clauses.push('adds a new JSON-LD block when no match exists');
+        }
+        if (hints.managed_target_action === 'replace_existing_ai_block_when_single_clear_match') {
+            clauses.push('updates one clear AiVI-managed match');
+        }
+        if (hints.exact_match_action === 'no_op_existing_match') {
+            clauses.push('skips exact matches');
+        }
+        if (hints.external_conflict_action === 'copy_only_external_conflict') {
+            clauses.push('switches to copy-only when another schema source conflicts');
+        }
+        if (!clauses.length) {
+            return 'Insert behavior: AiVI uses conflict-aware insert rules for this draft.';
+        }
+        return `Insert behavior: AiVI ${joinReadableClauses(clauses)}.`;
+    }
+
+    function setSchemaAssistStatus(statusNode, tone, message) {
+        if (!statusNode) return;
+        const resolvedMessage = normalizeText(String(message || ''));
+        const resolvedTone = normalizeText(String(tone || 'neutral')) || 'neutral';
+        statusNode.textContent = resolvedMessage;
+        if (resolvedMessage) {
+            statusNode.dataset.state = resolvedTone;
+        } else if (statusNode.dataset) {
+            delete statusNode.dataset.state;
+        }
+    }
+
     function normalizeSchemaKind(schemaKind) {
         return String(schemaKind || '').toLowerCase().trim();
     }
 
     function canInsertSchemaKind(schemaKind) {
         const kind = normalizeSchemaKind(schemaKind);
-        return kind === 'faq_jsonld'
+        return kind === 'article_jsonld'
+            || kind === 'faq_jsonld'
             || kind === 'howto_jsonld'
             || kind === 'intro_schema_jsonld'
+            || kind === 'itemlist_jsonld'
             || kind === 'schema_alignment_jsonld';
     }
 
@@ -544,9 +970,549 @@
         ensureSchemaFingerprintSet().add(fingerprint);
     }
 
-    function buildSchemaScriptTag(draft) {
+    const AIVI_SCHEMA_BLOCK_MARKER = 'AIVI_SCHEMA_ASSIST';
+
+    function buildManagedSchemaMarker(schemaAssist, fingerprint) {
+        const payload = {
+            schema_kind: normalizeSchemaKind(schemaAssist && schemaAssist.schema_kind),
+            fingerprint: String(fingerprint || '').trim()
+        };
+        return `<!-- ${AIVI_SCHEMA_BLOCK_MARKER} ${JSON.stringify(payload)} -->`;
+    }
+
+    function parseManagedSchemaMarker(content) {
+        const source = String(content || '');
+        if (!source) return null;
+        const match = source.match(/<!--\s*AIVI_SCHEMA_ASSIST\s+({[\s\S]*?})\s*-->/i);
+        if (!match || !match[1]) return null;
+        try {
+            const payload = JSON.parse(match[1]);
+            if (!payload || typeof payload !== 'object') return null;
+            return {
+                schema_kind: normalizeSchemaKind(payload.schema_kind),
+                fingerprint: String(payload.fingerprint || '').trim()
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function extractJsonLdScriptContents(content) {
+        const source = String(content || '');
+        if (!source) return [];
+        const pattern = /<script[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/ig;
+        const matches = [];
+        let match;
+        while ((match = pattern.exec(source)) !== null) {
+            const raw = String(match[1] || '').trim();
+            if (raw) {
+                matches.push(raw);
+            }
+        }
+        return matches;
+    }
+
+    function normalizeJsonLdObjects(value) {
+        if (!value || typeof value !== 'object') return [];
+        if (Array.isArray(value)) {
+            return value.flatMap((entry) => normalizeJsonLdObjects(entry));
+        }
+        const graphEntries = Array.isArray(value['@graph'])
+            ? value['@graph'].flatMap((entry) => normalizeJsonLdObjects(entry))
+            : [];
+        return graphEntries.length ? graphEntries : [value];
+    }
+
+    function extractJsonLdSchemaTypes(value) {
+        const source = value && typeof value === 'object' ? value['@type'] : null;
+        const rawTypes = Array.isArray(source) ? source : [source];
+        return rawTypes
+            .map((item) => normalizeText(String(item || '')))
+            .filter(Boolean);
+    }
+
+    function collectNamedValues(list, keyResolver, limit) {
+        const maxItems = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Number(limit) : 8;
+        const seen = new Set();
+        const output = [];
+        (Array.isArray(list) ? list : []).forEach((item) => {
+            if (output.length >= maxItems) return;
+            const value = normalizeText(String(keyResolver(item) || ''));
+            const key = value.toLowerCase();
+            if (!value || seen.has(key)) return;
+            seen.add(key);
+            output.push(value);
+        });
+        return output;
+    }
+
+    function buildJsonLdComparisonSignature(jsonldObject) {
+        const normalizedObjects = normalizeJsonLdObjects(jsonldObject);
+        const primaryObject = normalizedObjects[0] || null;
+        const schemaTypes = primaryObject ? extractJsonLdSchemaTypes(primaryObject) : [];
+        const nameOrHeadline = primaryObject
+            ? normalizeText(String(primaryObject.headline || primaryObject.name || primaryObject.alternateName || ''))
+            : '';
+        const url = primaryObject ? normalizeText(String(primaryObject.url || '')) : '';
+        const mainEntityOfPage = primaryObject
+            ? normalizeText(String(primaryObject.mainEntityOfPage || primaryObject.mainEntityofpage || ''))
+            : '';
+        const faqQuestionNames = primaryObject && Array.isArray(primaryObject.mainEntity)
+            ? collectNamedValues(primaryObject.mainEntity, (entry) => entry && entry.name, 8)
+            : [];
+        const howToStepNames = primaryObject && Array.isArray(primaryObject.step)
+            ? collectNamedValues(primaryObject.step, (entry) => entry && (entry.name || entry.text), 12)
+            : [];
+        const itemListItemNames = primaryObject && Array.isArray(primaryObject.itemListElement)
+            ? collectNamedValues(primaryObject.itemListElement, (entry) => entry && (entry.name || (entry.item && entry.item.name)), 12)
+            : [];
+        return {
+            schema_types: schemaTypes,
+            primary_schema_type: schemaTypes[0] || '',
+            name_or_headline: nameOrHeadline,
+            url,
+            main_entity_of_page: mainEntityOfPage,
+            faq_question_names: faqQuestionNames,
+            howto_step_names: howToStepNames,
+            itemlist_item_names: itemListItemNames
+        };
+    }
+
+    function getBlockHtmlContent(block) {
+        if (!block || typeof block !== 'object') return '';
+        const attrs = block.attributes && typeof block.attributes === 'object' ? block.attributes : {};
+        return String(attrs.content || attrs.html || '');
+    }
+
+    function buildEditorSchemaBlockEntry(block) {
+        if (!block || typeof block !== 'object') return null;
+        const blockName = normalizeText(String(block.name || block.blockName || ''));
+        if (blockName !== 'core/html') return null;
+        const content = getBlockHtmlContent(block);
+        const scripts = extractJsonLdScriptContents(content);
+        if (!scripts.length) return null;
+
+        const marker = parseManagedSchemaMarker(content);
+        const parsedScripts = scripts.map((scriptContent) => {
+            try {
+                const parsed = JSON.parse(scriptContent);
+                return {
+                    valid: true,
+                    parsed,
+                    signature: buildJsonLdComparisonSignature(parsed),
+                    content_hash: buildCanonicalJsonHash(parsed)
+                };
+            } catch (e) {
+                return {
+                    valid: false,
+                    parsed: null,
+                    signature: null,
+                    content_hash: ''
+                };
+            }
+        });
+
+        return {
+            source: 'editor_block',
+            management: marker ? 'aivi_managed' : 'manual',
+            client_id: String(block.clientId || '').trim(),
+            block_name: blockName,
+            marker: marker || null,
+            script_count: scripts.length,
+            valid_script_count: parsedScripts.filter((entry) => entry.valid === true).length,
+            invalid_script_count: parsedScripts.filter((entry) => entry.valid !== true).length,
+            signatures: parsedScripts.filter((entry) => entry.signature).map((entry) => entry.signature),
+            content_hashes: parsedScripts.map((entry) => String(entry.content_hash || '')).filter(Boolean)
+        };
+    }
+
+    function collectExistingEditorSchemaBlocks(blocksInput) {
+        const blocks = Array.isArray(blocksInput) ? blocksInput : getBlocks();
+        return blocks
+            .map((block) => buildEditorSchemaBlockEntry(block))
+            .filter(Boolean);
+    }
+
+    function summarizeExistingEditorSchemaBlocks(entries) {
+        const list = Array.isArray(entries) ? entries : [];
+        return {
+            total: list.length,
+            aivi_managed_total: list.filter((entry) => entry.management === 'aivi_managed').length,
+            manual_total: list.filter((entry) => entry.management === 'manual').length,
+            valid_total: list.reduce((sum, entry) => sum + Number(entry.valid_script_count || 0), 0),
+            invalid_total: list.reduce((sum, entry) => sum + Number(entry.invalid_script_count || 0), 0)
+        };
+    }
+
+    function normalizeSchemaTypeValue(value) {
+        return normalizeText(String(value || '')).toLowerCase();
+    }
+
+    function buildCanonicalJsonHash(value) {
+        if (!value || typeof value !== 'object') return '';
+        try {
+            return stableHash(JSON.stringify(value, null, 2));
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function buildRenderedManifestSchemaEntries(manifest) {
+        const entries = manifest && Array.isArray(manifest.jsonld) ? manifest.jsonld : [];
+        return entries.map((entry) => {
+            if (!entry || entry.valid === false) return null;
+            const parsed = entry.parsed && typeof entry.parsed === 'object'
+                ? entry.parsed
+                : (entry.content && typeof entry.content === 'object' ? entry.content : null);
+            if (!parsed) return null;
+            return {
+                source: 'rendered_page',
+                management: 'external',
+                signatures: normalizeJsonLdObjects(parsed).map((objectValue) => buildJsonLdComparisonSignature(objectValue)),
+                content_hash: buildCanonicalJsonHash(parsed)
+            };
+        }).filter(Boolean);
+    }
+
+    function summarizeRenderedManifestSchemaEntries(entries) {
+        const list = Array.isArray(entries) ? entries : [];
+        return {
+            total: list.length,
+            valid_total: list.filter((entry) => entry && entry.content_hash).length
+        };
+    }
+
+    function normalizeSignatureValue(value) {
+        return normalizeText(String(value || '')).toLowerCase();
+    }
+
+    function countNormalizedOverlap(leftValues, rightValues) {
+        const left = new Set((Array.isArray(leftValues) ? leftValues : []).map((value) => normalizeSignatureValue(value)).filter(Boolean));
+        const right = new Set((Array.isArray(rightValues) ? rightValues : []).map((value) => normalizeSignatureValue(value)).filter(Boolean));
+        let overlap = 0;
+        left.forEach((value) => {
+            if (right.has(value)) overlap += 1;
+        });
+        return overlap;
+    }
+
+    function buildSignatureTypeSet(signature) {
+        return new Set((Array.isArray(signature && signature.schema_types) ? signature.schema_types : [])
+            .map((type) => normalizeSchemaTypeValue(type))
+            .filter(Boolean));
+    }
+
+    function isArticleSchemaType(type) {
+        return type === 'article' || type === 'blogposting' || type === 'newsarticle';
+    }
+
+    function areSchemaTypesCompatible(draftSignature, candidateSignature) {
+        const draftTypes = buildSignatureTypeSet(draftSignature);
+        const candidateTypes = buildSignatureTypeSet(candidateSignature);
+        if (!draftTypes.size || !candidateTypes.size) return false;
+
+        for (const type of draftTypes) {
+            if (candidateTypes.has(type)) return true;
+        }
+
+        const draftHasArticleFamily = Array.from(draftTypes).some((type) => isArticleSchemaType(type));
+        const candidateHasArticleFamily = Array.from(candidateTypes).some((type) => isArticleSchemaType(type));
+        return draftHasArticleFamily && candidateHasArticleFamily;
+    }
+
+    function hasSignatureAnchorMatch(draftSignature, candidateSignature) {
+        const draftUrls = [
+            normalizeSignatureValue(draftSignature && draftSignature.url),
+            normalizeSignatureValue(draftSignature && draftSignature.main_entity_of_page)
+        ].filter(Boolean);
+        const candidateUrls = new Set([
+            normalizeSignatureValue(candidateSignature && candidateSignature.url),
+            normalizeSignatureValue(candidateSignature && candidateSignature.main_entity_of_page)
+        ].filter(Boolean));
+        if (draftUrls.some((value) => candidateUrls.has(value))) {
+            return true;
+        }
+
+        const draftName = normalizeSignatureValue(draftSignature && draftSignature.name_or_headline);
+        const candidateName = normalizeSignatureValue(candidateSignature && candidateSignature.name_or_headline);
+        if (draftName && candidateName && draftName === candidateName) {
+            return true;
+        }
+
+        if (countNormalizedOverlap(draftSignature && draftSignature.faq_question_names, candidateSignature && candidateSignature.faq_question_names) >= 2) {
+            return true;
+        }
+        if (countNormalizedOverlap(draftSignature && draftSignature.howto_step_names, candidateSignature && candidateSignature.howto_step_names) >= 2) {
+            return true;
+        }
+        if (countNormalizedOverlap(draftSignature && draftSignature.itemlist_item_names, candidateSignature && candidateSignature.itemlist_item_names) >= 2) {
+            return true;
+        }
+
+        return false;
+    }
+
+    function findMatchingSchemaSignature(entries, predicate) {
+        const list = Array.isArray(entries) ? entries : [];
+        for (let index = 0; index < list.length; index += 1) {
+            const entry = list[index];
+            const signatures = Array.isArray(entry && entry.signatures) ? entry.signatures : [];
+            for (let sigIndex = 0; sigIndex < signatures.length; sigIndex += 1) {
+                const signature = signatures[sigIndex];
+                if (predicate(entry, signature)) {
+                    return { entry, signature };
+                }
+            }
+        }
+        return null;
+    }
+
+    function resolveSchemaInsertPolicy(schemaAssist, canonicalDraft, draftSignature, draftHash) {
+        const schemaKind = normalizeSchemaKind(schemaAssist && schemaAssist.schema_kind);
+        const editorEntries = collectExistingEditorSchemaBlocks();
+        const manifestEntries = buildRenderedManifestSchemaEntries(state.lastManifest);
+        const editorSummary = summarizeExistingEditorSchemaBlocks(editorEntries);
+        const manifestSummary = summarizeRenderedManifestSchemaEntries(manifestEntries);
+        const summary = {
+            existing_editor_schema_total: editorSummary.total,
+            existing_editor_aivi_schema_total: editorSummary.aivi_managed_total,
+            existing_editor_manual_schema_total: editorSummary.manual_total,
+            existing_rendered_schema_total: manifestSummary.total
+        };
+
+        const identicalEditorMatch = findMatchingSchemaSignature(editorEntries, (entry) => {
+            return Array.isArray(entry && entry.content_hashes) && entry.content_hashes.includes(draftHash);
+        });
+        if (identicalEditorMatch) {
+            return {
+                action: 'no_op_existing_match',
+                summary
+            };
+        }
+
+        const compatibleManagedEntries = (Array.isArray(editorEntries) ? editorEntries : []).filter((entry) => {
+            if (!entry || entry.management !== 'aivi_managed') return false;
+            if (normalizeSchemaKind(entry.marker && entry.marker.schema_kind) !== schemaKind) return false;
+            return Array.isArray(entry.signatures) && entry.signatures.some((signature) =>
+                areSchemaTypesCompatible(draftSignature, signature) && hasSignatureAnchorMatch(draftSignature, signature)
+            );
+        });
+
+        if (compatibleManagedEntries.length === 1) {
+            return {
+                action: 'replace_existing_ai_block',
+                target: compatibleManagedEntries[0],
+                summary
+            };
+        }
+
+        if (compatibleManagedEntries.length > 1) {
+            return {
+                action: 'copy_only_external_conflict',
+                reason: 'multiple_aivi_targets',
+                summary
+            };
+        }
+
+        const manualEditorConflict = findMatchingSchemaSignature(editorEntries, (entry, signature) => {
+            if (!entry || entry.management !== 'manual') return false;
+            return areSchemaTypesCompatible(draftSignature, signature) && hasSignatureAnchorMatch(draftSignature, signature);
+        });
+        if (manualEditorConflict) {
+            return {
+                action: 'copy_only_external_conflict',
+                reason: 'manual_editor_conflict',
+                summary
+            };
+        }
+
+        const renderedConflict = findMatchingSchemaSignature(manifestEntries, (_entry, signature) => {
+            return areSchemaTypesCompatible(draftSignature, signature) && hasSignatureAnchorMatch(draftSignature, signature);
+        });
+        if (renderedConflict) {
+            return {
+                action: 'copy_only_external_conflict',
+                reason: 'rendered_schema_conflict',
+                summary
+            };
+        }
+
+        return {
+            action: 'append_new_block',
+            summary
+        };
+    }
+
+    function buildSchemaScriptTag(draft, schemaAssist, fingerprint) {
         const safeDraft = String(draft || '').replace(/<\/script/gi, '<\\/script');
-        return `<script type="application/ld+json">\n${safeDraft}\n</script>`;
+        const marker = buildManagedSchemaMarker(schemaAssist, fingerprint);
+        return `${marker}\n<script type="application/ld+json">\n${safeDraft}\n</script>`;
+    }
+
+    function buildSchemaConflictStatusMessage(reason) {
+        if (reason === 'multiple_aivi_targets') {
+            return 'Conflict detected. More than one AiVI-managed schema block matches this draft, so insert is blocked.';
+        }
+        return 'Conflict detected. Another schema source already covers this area, so this draft is copy-only.';
+    }
+
+    function buildSchemaInsertReadiness(item, schemaAssist, draftInput) {
+        const rawDraft = String(draftInput || stringifySchemaDraft(schemaAssist)).trim();
+        if (!rawDraft) {
+            return {
+                tone: 'error',
+                message: 'Nothing to insert yet. Generate schema first.',
+                insertLabel: 'Insert schema',
+                allowInsert: false
+            };
+        }
+
+        let parsed;
+        try {
+            parsed = JSON.parse(rawDraft);
+        } catch (e) {
+            return {
+                tone: 'error',
+                message: 'Schema draft is invalid JSON. Regenerate and try again.',
+                insertLabel: 'Insert schema',
+                allowInsert: false
+            };
+        }
+
+        const canonicalDraft = JSON.stringify(parsed, null, 2);
+        const fingerprint = buildSchemaFingerprint(item, schemaAssist, canonicalDraft);
+        const draftHash = buildCanonicalJsonHash(parsed);
+        const draftSignature = buildJsonLdComparisonSignature(parsed);
+        const insertPolicy = resolveSchemaInsertPolicy(schemaAssist, canonicalDraft, draftSignature, draftHash);
+
+        if (insertPolicy.action === 'no_op_existing_match') {
+            return {
+                tone: 'blocked',
+                message: 'Already present. Equivalent schema already exists in the editor.',
+                insertLabel: 'Already present',
+                allowInsert: false,
+                fingerprint,
+                insertPolicy
+            };
+        }
+
+        if (insertPolicy.action === 'copy_only_external_conflict') {
+            return {
+                tone: 'blocked',
+                message: buildSchemaConflictStatusMessage(insertPolicy.reason),
+                insertLabel: 'Insert blocked',
+                allowInsert: false,
+                fingerprint,
+                insertPolicy
+            };
+        }
+
+        if (hasSchemaFingerprint(fingerprint)) {
+            return {
+                tone: 'blocked',
+                message: 'Inserted earlier in this run/session. AiVI will skip a duplicate block.',
+                insertLabel: 'Already inserted',
+                allowInsert: false,
+                fingerprint,
+                insertPolicy
+            };
+        }
+
+        if (insertPolicy.action === 'replace_existing_ai_block') {
+            return {
+                tone: 'ready',
+                message: 'Ready to update. AiVI will replace one matching AiVI-managed schema block in the editor.',
+                insertLabel: 'Replace AiVI block',
+                allowInsert: true,
+                fingerprint,
+                insertPolicy
+            };
+        }
+
+        return {
+            tone: 'ready',
+            message: 'Ready to insert. AiVI will add a new JSON-LD block at the end of the editor.',
+            insertLabel: 'Insert new block',
+            allowInsert: true,
+            fingerprint,
+            insertPolicy
+        };
+    }
+
+    function syncSchemaInsertButton(insertBtn, schemaInsertAllowed, readiness) {
+        if (!insertBtn) return;
+        insertBtn.textContent = 'Insert schema';
+        insertBtn.disabled = true;
+        insertBtn.hidden = !schemaInsertAllowed;
+        if (!schemaInsertAllowed || !readiness) {
+            return;
+        }
+        insertBtn.textContent = readiness.insertLabel || 'Insert schema';
+        insertBtn.disabled = readiness.allowInsert !== true;
+    }
+
+    function buildSchemaInsertResultPresentation(result) {
+        if (!result || typeof result !== 'object') {
+            return {
+                tone: 'error',
+                message: 'Insert failed. Please copy and add schema manually.',
+                metaMessage: 'Schema insert failed.'
+            };
+        }
+        if (result.ok) {
+            if (result.code === 'replace_existing_ai_block') {
+                return {
+                    tone: 'success',
+                    message: 'Replaced existing AiVI-managed schema block in the editor. Save the post to publish it live.',
+                    metaMessage: 'Schema replaced in editor. Save the post to make it live.'
+                };
+            }
+            return {
+                tone: 'success',
+                message: 'Inserted new JSON-LD block at the end of the editor. Save the post to publish it live.',
+                metaMessage: 'Schema inserted into editor. Save the post to make it live.'
+            };
+        }
+        if (result.code === 'duplicate') {
+            return {
+                tone: 'blocked',
+                message: 'Inserted earlier in this run/session. AiVI skipped a duplicate block.',
+                metaMessage: 'Schema already present from this run.'
+            };
+        }
+        if (result.code === 'no_op_existing_match') {
+            return {
+                tone: 'blocked',
+                message: 'Already present. Equivalent schema already exists in the editor.',
+                metaMessage: 'Equivalent schema already present.'
+            };
+        }
+        if (result.code === 'copy_only_external_conflict') {
+            return {
+                tone: 'blocked',
+                message: buildSchemaConflictStatusMessage(result.reason),
+                metaMessage: 'Schema insert blocked by existing schema.'
+            };
+        }
+        if (result.code === 'invalid_json') {
+            return {
+                tone: 'error',
+                message: 'Schema draft is invalid JSON. Regenerate and try again.',
+                metaMessage: 'Schema draft is invalid JSON.'
+            };
+        }
+        if (result.code === 'editor_unavailable' || result.code === 'insert_unavailable') {
+            return {
+                tone: 'error',
+                message: 'Editor insert API unavailable. Copy the schema manually.',
+                metaMessage: 'Schema insert API unavailable.'
+            };
+        }
+        return {
+            tone: 'error',
+            message: 'Insert failed. Please copy and add schema manually.',
+            metaMessage: 'Schema insert failed.'
+        };
     }
 
     function insertSchemaAssistIntoEditor(item, schemaAssist, draftInput) {
@@ -567,12 +1533,38 @@
         }
         const canonicalDraft = JSON.stringify(parsed, null, 2);
         const fingerprint = buildSchemaFingerprint(item, schemaAssist, canonicalDraft);
+        const draftHash = buildCanonicalJsonHash(parsed);
+        const draftSignature = buildJsonLdComparisonSignature(parsed);
+        const insertPolicy = resolveSchemaInsertPolicy(schemaAssist, canonicalDraft, draftSignature, draftHash);
+        const policySummary = insertPolicy && insertPolicy.summary ? insertPolicy.summary : {};
+        if (insertPolicy.action === 'no_op_existing_match') {
+            emitHighlightTelemetry('overlay_schema_insert_blocked_existing_match', {
+                run_id: (state.lastReport && state.lastReport.run_id) || '',
+                check_id: item && item.check ? item.check.check_id || '' : '',
+                schema_kind: normalizeSchemaKind(schemaAssist.schema_kind),
+                fingerprint,
+                ...policySummary
+            });
+            return { ok: false, code: 'no_op_existing_match', fingerprint, reason: insertPolicy.reason || '' };
+        }
+        if (insertPolicy.action === 'copy_only_external_conflict') {
+            emitHighlightTelemetry('overlay_schema_insert_blocked_conflict', {
+                run_id: (state.lastReport && state.lastReport.run_id) || '',
+                check_id: item && item.check ? item.check.check_id || '' : '',
+                schema_kind: normalizeSchemaKind(schemaAssist.schema_kind),
+                fingerprint,
+                reason: insertPolicy.reason || 'schema_conflict',
+                ...policySummary
+            });
+            return { ok: false, code: 'copy_only_external_conflict', fingerprint, reason: insertPolicy.reason || '' };
+        }
         if (hasSchemaFingerprint(fingerprint)) {
             emitHighlightTelemetry('overlay_schema_insert_blocked_duplicate', {
                 run_id: (state.lastReport && state.lastReport.run_id) || '',
                 check_id: item && item.check ? item.check.check_id || '' : '',
                 schema_kind: normalizeSchemaKind(schemaAssist.schema_kind),
-                fingerprint
+                fingerprint,
+                ...policySummary
             });
             return { ok: false, code: 'duplicate', fingerprint };
         }
@@ -586,13 +1578,41 @@
         }
 
         const block = wp.blocks.createBlock('core/html', {
-            content: buildSchemaScriptTag(canonicalDraft)
+            content: buildSchemaScriptTag(canonicalDraft, schemaAssist, fingerprint)
         });
         if (!block) {
             return { ok: false, code: 'block_create_failed' };
         }
 
         try {
+            if (insertPolicy.action === 'replace_existing_ai_block') {
+                const targetClientId = insertPolicy.target && insertPolicy.target.client_id
+                    ? String(insertPolicy.target.client_id).trim()
+                    : '';
+                if (!targetClientId) {
+                    return { ok: false, code: 'insert_failed' };
+                }
+                if (typeof dispatcher.updateBlockAttributes === 'function') {
+                    dispatcher.updateBlockAttributes(targetClientId, {
+                        content: buildSchemaScriptTag(canonicalDraft, schemaAssist, fingerprint)
+                    });
+                } else if (typeof dispatcher.replaceBlocks === 'function') {
+                    dispatcher.replaceBlocks(targetClientId, block);
+                } else {
+                    return { ok: false, code: 'insert_unavailable' };
+                }
+                rememberSchemaFingerprint(fingerprint);
+                emitHighlightTelemetry('overlay_schema_replaced', {
+                    run_id: (state.lastReport && state.lastReport.run_id) || '',
+                    check_id: item && item.check ? item.check.check_id || '' : '',
+                    schema_kind: normalizeSchemaKind(schemaAssist.schema_kind),
+                    fingerprint,
+                    target_client_id: targetClientId,
+                    ...policySummary
+                });
+                return { ok: true, code: 'replace_existing_ai_block', fingerprint };
+            }
+
             const blocks = getBlocks();
             const insertIndex = Array.isArray(blocks) ? blocks.length : undefined;
             if (Number.isFinite(insertIndex)) {
@@ -606,7 +1626,8 @@
                 check_id: item && item.check ? item.check.check_id || '' : '',
                 schema_kind: normalizeSchemaKind(schemaAssist.schema_kind),
                 insert_index: Number.isFinite(insertIndex) ? insertIndex : -1,
-                fingerprint
+                fingerprint,
+                ...policySummary
             });
             return { ok: true, code: 'inserted', fingerprint };
         } catch (e) {
@@ -614,7 +1635,8 @@
                 run_id: (state.lastReport && state.lastReport.run_id) || '',
                 check_id: item && item.check ? item.check.check_id || '' : '',
                 schema_kind: normalizeSchemaKind(schemaAssist.schema_kind),
-                reason: e && e.message ? e.message : 'insert_failed'
+                reason: e && e.message ? e.message : 'insert_failed',
+                ...policySummary
             });
             return { ok: false, code: 'insert_failed' };
         }
@@ -623,6 +1645,383 @@
     function buildExplanationPackNode(pack, extraClass) {
         if (!state.contextDoc || !pack || typeof pack !== 'object') return null;
         const narrative = composeIssueExplanationNarrative(pack);
+        if (!narrative) return null;
+
+        const wrap = state.contextDoc.createElement('div');
+        wrap.className = `aivi-overlay-guidance ${extraClass || ''}`.trim();
+        const body = state.contextDoc.createElement('div');
+        body.className = 'aivi-overlay-guidance-text';
+        body.textContent = narrative;
+        wrap.appendChild(body);
+        return wrap;
+    }
+
+    function buildReviewRailSchemaAssistNode(item) {
+        if (!state.contextDoc || !item || typeof item !== 'object') return null;
+        const schemaAssist = resolveSchemaAssist(item);
+        if (!schemaAssist) return null;
+
+        const schemaKind = normalizeSchemaKind(schemaAssist.schema_kind);
+        const isSemanticMarkupPlan = schemaKind === 'semantic_markup_plan';
+        const schemaInsertAllowed = isSchemaAssistInsertAllowed(schemaAssist);
+
+        const wrap = state.contextDoc.createElement('div');
+        wrap.className = 'aivi-overlay-review-schema-assist';
+
+        const head = state.contextDoc.createElement('div');
+        head.className = 'aivi-overlay-review-schema-head';
+
+        const titleWrap = state.contextDoc.createElement('div');
+        titleWrap.className = 'aivi-overlay-review-schema-title-wrap';
+        const title = state.contextDoc.createElement('div');
+        title.className = 'aivi-overlay-review-schema-title';
+        title.textContent = `${getSchemaAssistLabel(schemaAssist.schema_kind)} available`;
+        titleWrap.appendChild(title);
+
+        const badge = state.contextDoc.createElement('div');
+        badge.className = 'aivi-overlay-review-schema-badge';
+        badge.dataset.mode = getSchemaAssistInsertCapability(schemaAssist);
+        badge.textContent = getSchemaAssistBadgeText(schemaAssist);
+
+        head.appendChild(titleWrap);
+        head.appendChild(badge);
+        wrap.appendChild(head);
+
+        const note = state.contextDoc.createElement('div');
+        note.className = 'aivi-overlay-review-schema-note';
+        note.textContent = getSchemaAssistBaseNote(schemaAssist);
+        wrap.appendChild(note);
+
+        const policy = state.contextDoc.createElement('div');
+        policy.className = 'aivi-overlay-review-schema-policy';
+        policy.textContent = buildSchemaAssistPolicySummary(schemaAssist);
+        wrap.appendChild(policy);
+
+        const actions = state.contextDoc.createElement('div');
+        actions.className = 'aivi-overlay-review-schema-actions';
+
+        const generateBtn = state.contextDoc.createElement('button');
+        generateBtn.type = 'button';
+        generateBtn.className = 'aivi-overlay-review-btn primary';
+        generateBtn.textContent = isSemanticMarkupPlan ? 'Generate markup' : 'Generate schema';
+
+        const copyBtn = state.contextDoc.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'aivi-overlay-review-btn';
+        copyBtn.textContent = isSemanticMarkupPlan ? 'Copy markup' : 'Copy schema';
+        copyBtn.disabled = true;
+
+        const insertBtn = state.contextDoc.createElement('button');
+        insertBtn.type = 'button';
+        insertBtn.className = 'aivi-overlay-review-btn';
+        insertBtn.textContent = 'Insert schema';
+        insertBtn.disabled = true;
+        insertBtn.hidden = !schemaInsertAllowed;
+
+        actions.appendChild(generateBtn);
+        actions.appendChild(copyBtn);
+        if (schemaInsertAllowed) {
+            actions.appendChild(insertBtn);
+        }
+        wrap.appendChild(actions);
+
+        const preview = state.contextDoc.createElement('textarea');
+        preview.className = 'aivi-overlay-review-schema-preview';
+        preview.hidden = true;
+        preview.readOnly = true;
+        preview.setAttribute('spellcheck', 'false');
+        wrap.appendChild(preview);
+
+        const status = state.contextDoc.createElement('div');
+        status.className = 'aivi-overlay-review-schema-status';
+        wrap.appendChild(status);
+
+        generateBtn.addEventListener('click', () => {
+            const draft = stringifySchemaDraft(schemaAssist);
+            if (!draft) {
+                setSchemaAssistStatus(status, 'error', isSemanticMarkupPlan
+                    ? 'No deterministic markup plan could be generated for this issue.'
+                    : 'No deterministic schema draft could be generated for this issue.');
+                return;
+            }
+            preview.value = draft;
+            preview.hidden = false;
+            copyBtn.disabled = schemaAssist.can_copy !== true;
+            if (schemaInsertAllowed) {
+                const readiness = buildSchemaInsertReadiness(item, schemaAssist, draft);
+                syncSchemaInsertButton(insertBtn, schemaInsertAllowed, readiness);
+                setSchemaAssistStatus(status, readiness.tone, readiness.message);
+            } else {
+                setSchemaAssistStatus(status, 'ready', isSemanticMarkupPlan
+                    ? 'Markup plan generated. Review it, then copy.'
+                    : 'Schema draft generated. Review it, then copy.');
+            }
+            generateBtn.textContent = isSemanticMarkupPlan ? 'Refresh markup' : 'Refresh schema';
+        });
+
+        copyBtn.addEventListener('click', () => {
+            const draft = preview.value || stringifySchemaDraft(schemaAssist);
+            if (!draft) {
+                setSchemaAssistStatus(status, 'error', isSemanticMarkupPlan
+                    ? 'Nothing to copy yet. Generate the markup plan first.'
+                    : 'Nothing to copy yet. Generate the schema first.');
+                return;
+            }
+            if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+                setSchemaAssistStatus(status, 'error', 'Clipboard is not available in this browser context.');
+                return;
+            }
+            navigator.clipboard.writeText(draft).then(() => {
+                setSchemaAssistStatus(status, 'success', isSemanticMarkupPlan
+                    ? 'Markup plan copied to clipboard.'
+                    : 'Schema copied to clipboard.');
+            }).catch(() => {
+                setSchemaAssistStatus(status, 'error', 'Copy failed. Please copy the draft manually.');
+            });
+        });
+
+        if (schemaInsertAllowed) {
+            insertBtn.addEventListener('click', () => {
+                const draft = preview.value || stringifySchemaDraft(schemaAssist);
+                if (!draft) {
+                    setSchemaAssistStatus(status, 'error', 'Nothing to insert yet. Generate the schema first.');
+                    return;
+                }
+                const result = insertSchemaAssistIntoEditor(item, schemaAssist, draft);
+                const presentation = buildSchemaInsertResultPresentation(result);
+                if (result.ok) {
+                    insertBtn.disabled = true;
+                    insertBtn.textContent = result.code === 'replace_existing_ai_block' ? 'Replaced' : 'Inserted';
+                    setSchemaAssistStatus(status, presentation.tone, presentation.message);
+                    setOverlayDirty(true);
+                    scheduleOverlayDraftSave('review_rail_schema_insert');
+                    setMetaStatus(presentation.metaMessage);
+                    renderBlocks(true);
+                    return;
+                }
+                if (result.code === 'duplicate'
+                    || result.code === 'no_op_existing_match'
+                    || result.code === 'copy_only_external_conflict') {
+                    const readiness = buildSchemaInsertReadiness(item, schemaAssist, draft);
+                    syncSchemaInsertButton(insertBtn, schemaInsertAllowed, readiness);
+                } else {
+                    syncSchemaInsertButton(insertBtn, schemaInsertAllowed, null);
+                }
+                setSchemaAssistStatus(status, presentation.tone, presentation.message);
+            });
+        }
+
+        return wrap;
+    }
+
+    function buildReviewRailMetadataNode(item) {
+        if (!state.contextDoc || !item || typeof item !== 'object') return null;
+        if (String(item.check_id || '').trim() !== 'metadata_checks') return null;
+
+        const post = readEditorPost();
+        const postId = post && post.id ? Number(post.id) : 0;
+
+        const wrap = state.contextDoc.createElement('div');
+        wrap.className = 'aivi-overlay-review-metadata';
+
+        const head = state.contextDoc.createElement('div');
+        head.className = 'aivi-overlay-review-metadata-head';
+        const title = state.contextDoc.createElement('div');
+        title.className = 'aivi-overlay-review-metadata-title';
+        title.textContent = 'Document metadata';
+        const badge = state.contextDoc.createElement('div');
+        badge.className = 'aivi-overlay-review-metadata-badge';
+        badge.textContent = 'Manual';
+        head.appendChild(title);
+        head.appendChild(badge);
+        wrap.appendChild(head);
+
+        const note = state.contextDoc.createElement('div');
+        note.className = 'aivi-overlay-review-metadata-note';
+        note.textContent = 'Fill in the missing document metadata here. These values are saved with the post and reused by future analysis runs.';
+        wrap.appendChild(note);
+
+        const form = state.contextDoc.createElement('div');
+        form.className = 'aivi-overlay-review-metadata-form';
+
+        const buildField = (labelText, tagName, className, inputType) => {
+            const field = state.contextDoc.createElement('label');
+            field.className = 'aivi-overlay-review-metadata-field';
+            const label = state.contextDoc.createElement('span');
+            label.className = 'aivi-overlay-review-metadata-label';
+            label.textContent = labelText;
+            const control = state.contextDoc.createElement(tagName);
+            control.className = `aivi-overlay-review-metadata-input ${className || ''}`.trim();
+            if (inputType) control.type = inputType;
+            field.appendChild(label);
+            field.appendChild(control);
+            form.appendChild(field);
+            return control;
+        };
+
+        const titleInput = buildField('Meta title', 'input', 'is-title', 'text');
+        const descriptionInput = buildField('Meta description', 'textarea', 'is-description');
+        descriptionInput.rows = 4;
+        const canonicalInput = buildField('Canonical URL', 'input', 'is-canonical', 'url');
+        const langInput = buildField('Language', 'input', 'is-lang', 'text');
+        langInput.placeholder = 'en, en-us, sw';
+
+        wrap.appendChild(form);
+
+        const actions = state.contextDoc.createElement('div');
+        actions.className = 'aivi-overlay-review-metadata-actions';
+        const saveBtn = state.contextDoc.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.className = 'aivi-overlay-review-btn primary';
+        saveBtn.textContent = 'Save metadata';
+        const reloadBtn = state.contextDoc.createElement('button');
+        reloadBtn.type = 'button';
+        reloadBtn.className = 'aivi-overlay-review-btn';
+        reloadBtn.textContent = 'Reload values';
+        actions.appendChild(saveBtn);
+        actions.appendChild(reloadBtn);
+        wrap.appendChild(actions);
+
+        const status = state.contextDoc.createElement('div');
+        status.className = 'aivi-overlay-review-metadata-status';
+        wrap.appendChild(status);
+
+        const setFormValues = (documentMeta) => {
+            const source = documentMeta && typeof documentMeta === 'object' ? documentMeta : {};
+            titleInput.value = normalizeText(source.title || (post && post.title) || '');
+            descriptionInput.value = normalizeText(source.meta_description || '');
+            canonicalInput.value = normalizeText(source.canonical_url || '');
+            langInput.value = normalizeText(source.lang || '');
+        };
+
+        const setPending = (pending) => {
+            saveBtn.disabled = pending;
+            reloadBtn.disabled = pending;
+            titleInput.disabled = pending;
+            descriptionInput.disabled = pending;
+            canonicalInput.disabled = pending;
+            langInput.disabled = pending;
+        };
+
+        const loadValues = async (force) => {
+            if (!postId) {
+                setFormValues({ title: post && post.title ? post.title : '' });
+                status.textContent = 'Save the post first so AiVI can store document metadata.';
+                saveBtn.disabled = true;
+                reloadBtn.disabled = true;
+                return;
+            }
+            try {
+                setPending(true);
+                status.textContent = 'Loading saved metadata…';
+                let documentMeta = force ? null : getCachedDocumentMeta(postId);
+                if (!documentMeta) {
+                    documentMeta = await fetchDocumentMeta(postId);
+                }
+                setFormValues(documentMeta || { title: post && post.title ? post.title : '' });
+                status.textContent = documentMeta
+                    ? 'Loaded current metadata values.'
+                    : 'No saved metadata yet. Fill in the fields you need.';
+            } catch (e) {
+                setFormValues({ title: post && post.title ? post.title : '' });
+                status.textContent = 'Could not load saved metadata. You can still fill the fields manually.';
+            } finally {
+                setPending(false);
+            }
+        };
+
+        saveBtn.addEventListener('click', async () => {
+            if (!postId) {
+                status.textContent = 'Save the post first so AiVI can store document metadata.';
+                return;
+            }
+            const payload = {
+                title: normalizeText(titleInput.value),
+                meta_description: normalizeText(descriptionInput.value),
+                canonical_url: normalizeText(canonicalInput.value),
+                lang: normalizeText(langInput.value)
+            };
+            try {
+                setPending(true);
+                status.textContent = 'Saving metadata…';
+                const result = await saveDocumentMeta(postId, payload);
+                if (!result.ok || !result.documentMeta) {
+                    status.textContent = 'Save failed. Please try again.';
+                    return;
+                }
+                setFormValues(result.documentMeta);
+                syncEditorTitleValue(result.documentMeta.title || payload.title || '');
+                status.textContent = 'Metadata saved for this post.';
+                setMetaStatus('Metadata saved');
+            } catch (e) {
+                status.textContent = 'Save failed. Please try again.';
+            } finally {
+                setPending(false);
+            }
+        });
+
+        reloadBtn.addEventListener('click', () => {
+            state.documentMetaCache.delete(String(postId));
+            loadValues(true);
+        });
+
+        setFormValues({ title: post && post.title ? post.title : '' });
+        loadValues(false);
+
+        return wrap;
+    }
+
+    function normalizeGuidanceComparisonText(value) {
+        return normalizeText(value || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function areGuidanceTextsEquivalent(a, b) {
+        const left = normalizeGuidanceComparisonText(a);
+        const right = normalizeGuidanceComparisonText(b);
+        if (!left || !right) return false;
+        if (left === right) return true;
+        return left.includes(right) || right.includes(left);
+    }
+
+    function splitGuidanceSentences(value) {
+        const text = normalizeText(value || '');
+        if (!text) return [];
+        const matches = text.match(/[^.!?]+[.!?]?/g);
+        if (!Array.isArray(matches) || !matches.length) {
+            return text ? [text] : [];
+        }
+        return matches.map((part) => normalizeText(part)).filter(Boolean);
+    }
+
+    function resolveRecommendationDetailText(issue, explanationPack, summaryText) {
+        const canonical = normalizeText(
+            (issue && issue.issue_explanation)
+            || (explanationPack && explanationPack.issue_explanation)
+            || ''
+        );
+        const fallback = canonical || composeIssueExplanationNarrative(explanationPack);
+        if (!fallback) return '';
+        if (!summaryText) return fallback;
+        if (areGuidanceTextsEquivalent(fallback, summaryText)) return '';
+
+        const sentences = splitGuidanceSentences(fallback);
+        if (sentences.length > 1 && areGuidanceTextsEquivalent(sentences[0], summaryText)) {
+            const trimmed = normalizeText(sentences.slice(1).join(' '));
+            if (trimmed && !areGuidanceTextsEquivalent(trimmed, summaryText)) {
+                return trimmed;
+            }
+        }
+
+        return fallback;
+    }
+
+    function buildGuidanceTextNode(text, extraClass) {
+        if (!state.contextDoc) return null;
+        const narrative = stripGuidanceScaffold(text || '');
         if (!narrative) return null;
 
         const wrap = state.contextDoc.createElement('div');
@@ -739,6 +2138,10 @@
             const figcaption = caption ? `<figcaption>${caption}</figcaption>` : '';
             return `<figure>${img}${figcaption}</figure>`;
         }
+        const richFallback = buildRichBlockFallbackHtml(block);
+        if (richFallback) {
+            return richFallback;
+        }
         if (typeof attrs.content === 'string') {
             return attrs.content;
         }
@@ -751,6 +2154,126 @@
         return '';
     }
 
+    function buildTableSectionHtml(rows, sectionTag, cellTag) {
+        if (!Array.isArray(rows) || !rows.length) return '';
+        const renderedRows = rows.map((row) => {
+            const cells = Array.isArray(row && row.cells) ? row.cells : [];
+            if (!cells.length) return '';
+            const renderedCells = cells.map((cell) => {
+                const content = typeof cell?.content === 'string' ? cell.content : '';
+                const tag = (cell && typeof cell.tag === 'string' && /^(td|th)$/i.test(cell.tag)) ? cell.tag.toLowerCase() : cellTag;
+                return `<${tag}>${content}</${tag}>`;
+            }).join('');
+            return renderedCells ? `<tr>${renderedCells}</tr>` : '';
+        }).filter(Boolean).join('');
+        if (!renderedRows) return '';
+        return `<${sectionTag}>${renderedRows}</${sectionTag}>`;
+    }
+
+    function buildRichBlockFallbackHtml(block) {
+        if (!block || typeof block !== 'object') return '';
+        const attrs = block && block.attributes ? block.attributes : {};
+        const name = String(block.name || '').trim();
+
+        if (name === 'core/table') {
+            const sections = [
+                buildTableSectionHtml(attrs.head, 'thead', 'th'),
+                buildTableSectionHtml(attrs.body, 'tbody', 'td'),
+                buildTableSectionHtml(attrs.foot, 'tfoot', 'td')
+            ].filter(Boolean);
+            return sections.length ? `<figure class="aivi-overlay-table-wrap"><table>${sections.join('')}</table></figure>` : '';
+        }
+
+        if (name === 'core/embed') {
+            if (typeof attrs.html === 'string' && attrs.html.trim()) return attrs.html;
+            const url = typeof attrs.url === 'string' ? attrs.url.trim() : '';
+            const caption = typeof attrs.caption === 'string' ? attrs.caption : '';
+            if (!url) return '';
+            const figcaption = caption ? `<figcaption>${caption}</figcaption>` : '';
+            return `<figure class="aivi-overlay-embed-fallback"><a href="${escapeHtmlValue(url)}" target="_blank" rel="noreferrer noopener">${escapeHtmlValue(url)}</a>${figcaption}</figure>`;
+        }
+
+        if (name === 'core/video') {
+            const src = typeof attrs.src === 'string' ? attrs.src.trim() : '';
+            const caption = typeof attrs.caption === 'string' ? attrs.caption : '';
+            if (!src) return '';
+            const figcaption = caption ? `<figcaption>${caption}</figcaption>` : '';
+            return `<figure><video controls src="${escapeHtmlValue(src)}"></video>${figcaption}</figure>`;
+        }
+
+        if (name === 'core/audio') {
+            const src = typeof attrs.src === 'string' ? attrs.src.trim() : '';
+            const caption = typeof attrs.caption === 'string' ? attrs.caption : '';
+            if (!src) return '';
+            const figcaption = caption ? `<figcaption>${caption}</figcaption>` : '';
+            return `<figure><audio controls src="${escapeHtmlValue(src)}"></audio>${figcaption}</figure>`;
+        }
+
+        if (name === 'core/file') {
+            const href = typeof attrs.href === 'string' ? attrs.href.trim() : '';
+            const fileName = typeof attrs.fileName === 'string' ? attrs.fileName.trim() : '';
+            if (!href && !fileName) return '';
+            const label = fileName || href;
+            return `<div class="aivi-overlay-file-fallback"><a href="${escapeHtmlValue(href || '#')}" target="_blank" rel="noreferrer noopener">${escapeHtmlValue(label)}</a></div>`;
+        }
+
+        if (name === 'core/button') {
+            const text = htmlToText(attrs.text || '') || normalizeText(attrs.text || '');
+            const url = typeof attrs.url === 'string' ? attrs.url.trim() : '';
+            const label = text || 'Button';
+            return `<div class="aivi-overlay-button-row"><a class="aivi-overlay-button-fallback" href="${escapeHtmlValue(url || '#')}" target="_blank" rel="noreferrer noopener">${escapeHtmlValue(label)}</a></div>`;
+        }
+
+        if (name === 'core/buttons') {
+            if (Array.isArray(block.innerBlocks) && block.innerBlocks.length) {
+                return `<div class="aivi-overlay-button-group">${block.innerBlocks.map((innerBlock) => buildBlockHtml(innerBlock)).filter(Boolean).join('')}</div>`;
+            }
+            return '';
+        }
+
+        if (name === 'core/gallery') {
+            const images = Array.isArray(attrs.images) ? attrs.images : [];
+            if (images.length) {
+                return `<div class="aivi-overlay-gallery-grid">${images.map((image) => {
+                    const src = typeof image?.url === 'string' ? image.url.trim() : '';
+                    const alt = typeof image?.alt === 'string' ? image.alt : '';
+                    if (!src) return '';
+                    return `<figure><img src="${escapeHtmlValue(src)}" alt="${escapeHtmlValue(alt)}" /></figure>`;
+                }).filter(Boolean).join('')}</div>`;
+            }
+            return Array.isArray(block.innerBlocks) && block.innerBlocks.length
+                ? block.innerBlocks.map((innerBlock) => buildBlockHtml(innerBlock)).filter(Boolean).join('')
+                : '';
+        }
+
+        if (name === 'core/separator') {
+            return '<hr class="aivi-overlay-separator" />';
+        }
+
+        if (name === 'core/spacer') {
+            const height = Number.isFinite(Number(attrs.height)) ? Number(attrs.height) : 32;
+            return `<div class="aivi-overlay-spacer" style="height:${Math.max(8, height)}px"></div>`;
+        }
+
+        if (name === 'core/html' && typeof attrs.content === 'string') {
+            return attrs.content;
+        }
+
+        if (name === 'core/preformatted' && typeof attrs.content === 'string') {
+            return `<pre>${attrs.content}</pre>`;
+        }
+
+        if (name === 'core/code' && typeof attrs.content === 'string') {
+            return `<pre><code>${attrs.content}</code></pre>`;
+        }
+
+        if (name === 'core/verse' && typeof attrs.content === 'string') {
+            return `<pre class="aivi-overlay-verse">${attrs.content}</pre>`;
+        }
+
+        return '';
+    }
+
     function isEditableBlock(block) {
         if (!block || !block.name) return false;
         return block.name === 'core/paragraph' ||
@@ -759,8 +2282,773 @@
             block.name === 'core/quote';
     }
 
+    function getOverlayBlockRenderMode(block) {
+        return isEditableBlock(block) ? 'editable' : 'readonly';
+    }
+
+    function buildOverlayBlockState(renderMode) {
+        if (!state.contextDoc || renderMode !== 'readonly') return null;
+        const chip = state.contextDoc.createElement('span');
+        chip.className = 'aivi-overlay-block-state';
+        chip.textContent = 'Read-only';
+        return chip;
+    }
+
     function shouldSkipBlock(block) {
-        return !block;
+        if (!block) return true;
+        const isHeading = String(block.name || '') === 'core/heading';
+        const level = block && block.attributes && block.attributes.level ? Number(block.attributes.level) : 1;
+        if (!isHeading || level !== 1) return false;
+        const title = normalizeText(getOverlayDocumentTitle([]));
+        if (!title) return false;
+        const blockText = normalizeText(htmlToText(buildBlockHtml(block) || block?.attributes?.content || ''));
+        return blockText === title;
+    }
+
+    function hideBlockMenu() {
+        if (!state.blockMenu) return;
+        state.blockMenu.hidden = true;
+        state.blockMenuNodeRef = '';
+        state.blockMenu.style.left = '';
+        state.blockMenu.style.top = '';
+    }
+
+    function ensureBlockMenu() {
+        if (!state.contextDoc || !state.overlayPanel) return null;
+        if (state.blockMenu && state.blockMenu.parentNode) {
+            return state.blockMenu;
+        }
+        const menu = state.contextDoc.createElement('div');
+        menu.className = 'aivi-overlay-block-menu';
+        menu.hidden = true;
+        state.overlayPanel.appendChild(menu);
+        state.blockMenu = menu;
+        return menu;
+    }
+
+    function buildBlockMenuHeader() {
+        if (!state.contextDoc) return null;
+        const header = state.contextDoc.createElement('div');
+        header.className = 'aivi-overlay-block-menu-header';
+        const kicker = state.contextDoc.createElement('div');
+        kicker.className = 'aivi-overlay-block-menu-kicker';
+        kicker.textContent = 'AiVI block actions';
+        const title = state.contextDoc.createElement('div');
+        title.className = 'aivi-overlay-block-menu-title';
+        title.textContent = 'Choose what to improve here';
+        header.appendChild(kicker);
+        header.appendChild(title);
+        return header;
+    }
+
+    function setBlockMenuTitle(text) {
+        if (!state.blockMenu) return;
+        const title = state.blockMenu.querySelector('.aivi-overlay-block-menu-title');
+        if (title) {
+            title.textContent = String(text || 'Choose what to improve here');
+        }
+    }
+
+    function buildBlockMenuAction(label, onClick, options) {
+        if (!state.contextDoc) return null;
+        const button = state.contextDoc.createElement('button');
+        button.type = 'button';
+        button.className = `aivi-overlay-block-menu-action${options && options.wide ? ' wide' : ''}`;
+        button.textContent = label;
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onClick();
+        });
+        return button;
+    }
+
+    function buildBlockMenuSection(config) {
+        if (!state.contextDoc || !config) return null;
+        const section = state.contextDoc.createElement('div');
+        section.className = 'aivi-overlay-block-menu-section';
+        section.setAttribute('data-section', String(config.id || ''));
+
+        const toggle = state.contextDoc.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'aivi-overlay-block-menu-btn aivi-overlay-block-menu-toggle';
+
+        const body = state.contextDoc.createElement('span');
+        body.className = 'aivi-overlay-block-menu-item-body';
+
+        const label = state.contextDoc.createElement('span');
+        label.className = 'aivi-overlay-block-menu-item-label';
+        label.textContent = String(config.label || '');
+
+        const copy = state.contextDoc.createElement('span');
+        copy.className = 'aivi-overlay-block-menu-item-copy';
+        copy.textContent = String(config.copy || '');
+
+        body.appendChild(label);
+        body.appendChild(copy);
+
+        const chevron = state.contextDoc.createElement('span');
+        chevron.className = 'aivi-overlay-block-menu-chevron';
+        chevron.textContent = '>';
+
+        toggle.appendChild(body);
+        toggle.appendChild(chevron);
+        toggle.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const nextOpen = !section.classList.contains('open');
+            if (state.blockMenu) {
+                state.blockMenu.querySelectorAll('.aivi-overlay-block-menu-section.open').forEach((node) => {
+                    node.classList.remove('open');
+                });
+            }
+            if (nextOpen) {
+                section.classList.add('open');
+            }
+        });
+        section.appendChild(toggle);
+
+        const submenu = state.contextDoc.createElement('div');
+        submenu.className = 'aivi-overlay-block-menu-submenu';
+        (config.actions || []).forEach((action) => {
+            const actionButton = buildBlockMenuAction(action.label, action.run, action);
+            if (actionButton) submenu.appendChild(actionButton);
+        });
+        section.appendChild(submenu);
+        return section;
+    }
+
+    function getActiveBlockInfo() {
+        const blocks = getBlocks();
+        const nodeRef = state.activeEditableNodeRef || '';
+        return nodeRef ? findBlockByNodeRef(blocks, nodeRef) : null;
+    }
+
+    function getActiveBlockText(info) {
+        if (!info || !info.block) return '';
+        const body = state.activeEditableBody;
+        if (body) {
+            const html = extractEditableHtml(body);
+            if (html && html.trim()) return html;
+        }
+        return buildBlockHtml(info.block) || '';
+    }
+
+    function replaceActiveBlockWith(nextBlock) {
+        const info = getActiveBlockInfo();
+        if (!info || !info.clientId || !nextBlock || !wp || !wp.data || typeof wp.data.dispatch !== 'function') {
+            setMetaStatus('Block action unavailable');
+            return false;
+        }
+        const dispatcher = wp.data.dispatch('core/block-editor');
+        if (!dispatcher || typeof dispatcher.replaceBlocks !== 'function') {
+            setMetaStatus('Replace block action unavailable');
+            return false;
+        }
+        try {
+            dispatcher.replaceBlocks(info.clientId, nextBlock);
+            if (isAutoStaleDetectionEnabled()) {
+                state.isStale = true;
+            }
+            setOverlayDirty(true);
+            scheduleOverlayDraftSave('replace_block_type');
+            renderBlocks(true);
+            setMetaStatus('Block updated');
+            return true;
+        } catch (e) {
+            setMetaStatus('Block update failed');
+            return false;
+        }
+    }
+
+    function setActiveBlockType(mode) {
+        const info = getActiveBlockInfo();
+        if (!info || !info.block || isTitleBlock(info) || !wp || !wp.blocks || typeof wp.blocks.createBlock !== 'function') {
+            setMetaStatus('Select a block in the canvas first');
+            return;
+        }
+        const html = getActiveBlockText(info);
+        let nextBlock = null;
+        if (mode === 'paragraph') {
+            nextBlock = wp.blocks.createBlock('core/paragraph', { content: html });
+        } else if (mode === 'h2') {
+            nextBlock = wp.blocks.createBlock('core/heading', { level: 2, content: htmlToText(html) || normalizeText(html) });
+        } else if (mode === 'h3') {
+            nextBlock = wp.blocks.createBlock('core/heading', { level: 3, content: htmlToText(html) || normalizeText(html) });
+        } else if (mode === 'quote') {
+            nextBlock = wp.blocks.createBlock('core/quote', { value: html || normalizeText(html) });
+        } else if (mode === 'bulleted-list') {
+            nextBlock = wp.blocks.createBlock('core/list', { ordered: false, values: convertTextToListMarkup(htmlToText(html) || normalizeText(html)) });
+        } else if (mode === 'numbered-list') {
+            nextBlock = wp.blocks.createBlock('core/list', { ordered: true, values: convertTextToListMarkup(htmlToText(html) || normalizeText(html)) });
+        }
+        if (!nextBlock) {
+            setMetaStatus('Block type not supported');
+            return;
+        }
+        replaceActiveBlockWith(nextBlock);
+    }
+
+    function insertBlocksAfterActive(blocksToInsert) {
+        if (!wp || !wp.data || !wp.data.dispatch) {
+            setMetaStatus('WordPress block editor API unavailable');
+            return;
+        }
+        const dispatcher = wp.data.dispatch('core/block-editor');
+        if (!dispatcher || typeof dispatcher.insertBlocks !== 'function') {
+            setMetaStatus('Insert action unavailable');
+            return;
+        }
+        const allBlocks = getBlocks();
+        const activeNodeRef = state.activeEditableNodeRef || '';
+        const activeInfo = activeNodeRef ? findBlockByNodeRef(allBlocks, activeNodeRef) : null;
+        const insertIndex = activeInfo && Number.isFinite(activeInfo.blockIndex)
+            ? activeInfo.blockIndex + 1
+            : (Array.isArray(allBlocks) ? allBlocks.length : undefined);
+        try {
+            dispatcher.insertBlocks(blocksToInsert, Number.isFinite(insertIndex) ? insertIndex : undefined);
+            if (isAutoStaleDetectionEnabled()) {
+                state.isStale = true;
+            }
+            setOverlayDirty(true);
+            scheduleOverlayDraftSave('insert_block');
+            renderBlocks(true);
+            setMetaStatus('Block inserted');
+        } catch (e) {
+            setMetaStatus('Insert failed');
+        }
+    }
+
+    function appendTextToActiveBlock(text) {
+        const info = getActiveBlockInfo();
+        if (!info || !info.block || isTitleBlock(info)) {
+            setMetaStatus('Select a block in the canvas first');
+            return;
+        }
+        const dispatcher = wp.data.dispatch('core/block-editor');
+        if (!dispatcher || typeof dispatcher.updateBlockAttributes !== 'function') {
+            setMetaStatus('Block update unavailable');
+            return;
+        }
+        const attrKey = getBlockTextKey(info.block);
+        if (!attrKey) {
+            setMetaStatus('This block cannot accept inline text additions');
+            return;
+        }
+        const currentValue = info.block.attributes && typeof info.block.attributes[attrKey] === 'string'
+            ? info.block.attributes[attrKey]
+            : '';
+        try {
+            dispatcher.updateBlockAttributes(info.clientId, { [attrKey]: `${currentValue}${text}`.trim() });
+            if (isAutoStaleDetectionEnabled()) {
+                state.isStale = true;
+            }
+            setOverlayDirty(true);
+            scheduleOverlayDraftSave('append_block_text');
+            renderBlocks(true);
+            setMetaStatus('Block updated');
+        } catch (e) {
+            setMetaStatus('Block update failed');
+        }
+    }
+
+    function copyActiveBlockLink() {
+        const nodeRef = state.blockMenuNodeRef || state.activeEditableNodeRef || '';
+        if (!nodeRef) {
+            setMetaStatus('No block selected');
+            return;
+        }
+        const value = `#${nodeRef}`;
+        const complete = () => setMetaStatus(`Copied ${value}`);
+        if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            navigator.clipboard.writeText(value).then(complete).catch(() => setMetaStatus('Copy failed'));
+            return;
+        }
+        try {
+            if (state.contextDoc && typeof state.contextDoc.execCommand === 'function') {
+                const input = state.contextDoc.createElement('textarea');
+                input.value = value;
+                state.contextDoc.body.appendChild(input);
+                input.select();
+                state.contextDoc.execCommand('copy');
+                input.remove();
+                complete();
+                return;
+            }
+        } catch (e) {
+        }
+        setMetaStatus(value);
+    }
+
+    function moveActiveBlock(direction) {
+        const info = getActiveBlockInfo();
+        if (!info || !info.clientId || typeof info.blockIndex !== 'number' || isTitleBlock(info) || !wp || !wp.data || typeof wp.data.dispatch !== 'function') {
+            setMetaStatus('Select a movable block first');
+            return;
+        }
+        const dispatcher = wp.data.dispatch('core/block-editor');
+        if (!dispatcher || typeof dispatcher.moveBlocksToPosition !== 'function') {
+            setMetaStatus('Move action unavailable');
+            return;
+        }
+        const allBlocks = getBlocks();
+        const targetIndex = info.blockIndex + (direction < 0 ? -1 : 1);
+        if (targetIndex < 0 || targetIndex >= allBlocks.length) {
+            setMetaStatus('Block is already at the edge');
+            return;
+        }
+        try {
+            dispatcher.moveBlocksToPosition([info.clientId], '', '', targetIndex);
+            if (isAutoStaleDetectionEnabled()) {
+                state.isStale = true;
+            }
+            setOverlayDirty(true);
+            scheduleOverlayDraftSave('move_block');
+            renderBlocks(true);
+            setMetaStatus(direction < 0 ? 'Block moved up' : 'Block moved down');
+        } catch (e) {
+            setMetaStatus('Move failed');
+        }
+    }
+
+    function duplicateActiveBlock() {
+        const info = getActiveBlockInfo();
+        if (!info || !info.block || !info.clientId || isTitleBlock(info) || !wp || !wp.data || typeof wp.data.dispatch !== 'function' || !wp.blocks || typeof wp.blocks.cloneBlock !== 'function') {
+            setMetaStatus('Select a duplicable block first');
+            return;
+        }
+        const dispatcher = wp.data.dispatch('core/block-editor');
+        if (!dispatcher || typeof dispatcher.insertBlocks !== 'function') {
+            setMetaStatus('Duplicate action unavailable');
+            return;
+        }
+        try {
+            const clone = wp.blocks.cloneBlock(info.block);
+            dispatcher.insertBlocks([clone], info.blockIndex + 1);
+            if (isAutoStaleDetectionEnabled()) {
+                state.isStale = true;
+            }
+            setOverlayDirty(true);
+            scheduleOverlayDraftSave('duplicate_block');
+            renderBlocks(true);
+            setMetaStatus('Block duplicated');
+        } catch (e) {
+            setMetaStatus('Duplicate failed');
+        }
+    }
+
+    function deleteActiveBlock() {
+        const info = getActiveBlockInfo();
+        if (!info || !info.clientId || isTitleBlock(info) || !wp || !wp.data || typeof wp.data.dispatch !== 'function') {
+            setMetaStatus('Select a removable block first');
+            return;
+        }
+        const dispatcher = wp.data.dispatch('core/block-editor');
+        if (!dispatcher || typeof dispatcher.removeBlocks !== 'function') {
+            setMetaStatus('Delete action unavailable');
+            return;
+        }
+        try {
+            dispatcher.removeBlocks([info.clientId], false);
+            if (isAutoStaleDetectionEnabled()) {
+                state.isStale = true;
+            }
+            setOverlayDirty(true);
+            scheduleOverlayDraftSave('delete_block');
+            hideBlockMenu();
+            renderBlocks(true);
+            setMetaStatus('Block removed');
+        } catch (e) {
+            setMetaStatus('Delete failed');
+        }
+    }
+
+    function returnToIssueForActiveBlock() {
+        const nodeRef = state.blockMenuNodeRef || state.activeEditableNodeRef || '';
+        if (!nodeRef || !state.overlayRail) {
+            setMetaStatus('No related issue found');
+            return;
+        }
+        const card = state.overlayRail.querySelector(`[data-jump-node-ref="${String(nodeRef).replace(/"/g, '\\"')}"]`);
+        if (!card) {
+            setMetaStatus('No related issue found');
+            return;
+        }
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setMetaStatus('Returned to related issue');
+        hideBlockMenu();
+    }
+
+    function buildBlockMenu(nodeRef) {
+        const menu = ensureBlockMenu();
+        if (!menu || !state.contextDoc) return null;
+        menu.innerHTML = '';
+        state.toolbarButtons = [];
+
+        const menuSections = [
+            {
+                id: 'block-type',
+                label: 'Block type',
+                copy: 'Paragraph, H2, H3, quote, bulleted list, numbered list',
+                actions: [
+                    { label: 'Paragraph', run: () => setActiveBlockType('paragraph') },
+                    { label: 'H2 heading', run: () => setActiveBlockType('h2') },
+                    { label: 'H3 heading', run: () => setActiveBlockType('h3') },
+                    { label: 'Quote', run: () => setActiveBlockType('quote') },
+                    { label: 'Bulleted list', run: () => setActiveBlockType('bulleted-list') },
+                    { label: 'Numbered list', run: () => setActiveBlockType('numbered-list') }
+                ]
+            },
+            {
+                id: 'insert-nearby',
+                label: 'Insert nearby',
+                copy: 'Insert paragraph, heading, list, FAQ pair, or HowTo step',
+                actions: [
+                    { label: 'Paragraph', run: () => insertBlocksAfterActive([createOverlayBlock('core/paragraph')].filter(Boolean)) },
+                    { label: 'Heading', run: () => insertBlocksAfterActive([createOverlayBlock('core/heading')].filter(Boolean)) },
+                    { label: 'List', run: () => insertBlocksAfterActive([createOverlayBlock('core/list')].filter(Boolean)) },
+                    {
+                        label: 'FAQ pair',
+                        run: () => insertBlocksAfterActive([
+                            wp.blocks.createBlock('core/heading', { level: 3, content: 'What question should this section answer?' }),
+                            wp.blocks.createBlock('core/paragraph', { content: 'Lead with one direct answer sentence, then add one support detail.' })
+                        ])
+                    },
+                    {
+                        label: 'HowTo step',
+                        run: () => insertBlocksAfterActive([
+                            wp.blocks.createBlock('core/list', { ordered: true, values: '<li>Step one with one clear action.</li><li>Step two with one supporting detail.</li>' })
+                        ])
+                    }
+                ]
+            },
+            {
+                id: 'links-evidence',
+                label: 'Links and evidence',
+                copy: 'Add internal link, citation placeholder, or copy block link',
+                actions: [
+                    {
+                        label: 'Add internal link',
+                        run: () => {
+                            const view = (state.contextDoc && state.contextDoc.defaultView) ? state.contextDoc.defaultView : window;
+                            const input = view.prompt('Enter internal link URL');
+                            if (!input) return;
+                            runOverlayFormatCommand('createLink', input.trim());
+                        }
+                    },
+                    { label: 'Citation placeholder', run: () => appendTextToActiveBlock(' [Source needed: authoritative citation].') },
+                    { label: 'Copy block link', run: () => copyActiveBlockLink(), wide: true }
+                ]
+            },
+            {
+                id: 'block-actions',
+                label: 'Block actions',
+                copy: 'Move up, move down, duplicate, delete, or return to issue',
+                actions: [
+                    { label: 'Move up', run: () => moveActiveBlock(-1) },
+                    { label: 'Move down', run: () => moveActiveBlock(1) },
+                    { label: 'Duplicate', run: () => duplicateActiveBlock() },
+                    { label: 'Delete', run: () => deleteActiveBlock() },
+                    { label: 'Return to issue', run: () => returnToIssueForActiveBlock(), wide: true }
+                ]
+            }
+        ];
+
+        const header = buildBlockMenuHeader();
+        if (header) menu.appendChild(header);
+        menuSections.forEach((sectionConfig) => {
+            const section = buildBlockMenuSection(sectionConfig);
+            if (section) menu.appendChild(section);
+        });
+
+        state.blockMenuNodeRef = nodeRef || '';
+        setBlockMenuTitle(`Actions for ${state.blockMenuNodeRef || 'block'}`);
+        return menu;
+    }
+
+    function positionBlockMenuForWrapper(wrapper) {
+        if (!wrapper || !state.blockMenu || !state.overlayPanel || !state.contextDoc) return;
+        const view = state.contextDoc.defaultView || window;
+        const panelRect = state.overlayPanel.getBoundingClientRect();
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const menuWidth = 320;
+        const top = Math.max(panelRect.top + 20, Math.min(wrapperRect.top - 6, panelRect.bottom - 220));
+        const left = Math.max(panelRect.left + 16, panelRect.right - menuWidth - 18);
+        state.blockMenu.style.position = 'fixed';
+        state.blockMenu.style.top = `${Math.round(top)}px`;
+        state.blockMenu.style.left = `${Math.round(left)}px`;
+        state.blockMenu.style.maxHeight = `${Math.max(220, Math.floor(view.innerHeight - top - 24))}px`;
+    }
+
+    function openBlockMenuForBody(body, nodeRef) {
+        if (!body) return;
+        const wrapper = body.closest('.aivi-overlay-block');
+        if (!wrapper) return;
+        setActiveEditableBody(body, nodeRef || wrapper.getAttribute('data-node-ref') || '');
+        body.focus();
+        const menu = buildBlockMenu(nodeRef || wrapper.getAttribute('data-node-ref') || '');
+        if (!menu) return;
+        positionBlockMenuForWrapper(wrapper);
+        menu.hidden = false;
+    }
+
+    function getOverlayDocumentTitle(blocks) {
+        const current = readEditorPost();
+        const postTitle = normalizeText(current && current.title ? current.title : '');
+        if (postTitle) return postTitle;
+        const sourceBlocks = Array.isArray(blocks) ? blocks : getBlocks();
+        for (let index = 0; index < sourceBlocks.length; index += 1) {
+            const block = sourceBlocks[index];
+            if (!block || String(block.name || '') !== 'core/heading') continue;
+            const level = block && block.attributes && block.attributes.level ? Number(block.attributes.level) : 1;
+            if (level !== 1) continue;
+            const headingText = normalizeText(htmlToText(buildBlockHtml(block) || block?.attributes?.content || ''));
+            if (headingText) return headingText;
+        }
+        const manifestTitle = normalizeText(
+            state.overlayContentData && typeof state.overlayContentData.title === 'string'
+                ? state.overlayContentData.title
+                : ''
+        );
+        return manifestTitle || 'Untitled draft';
+    }
+
+    function renderOverlayDocumentHeader(blocks) {
+        if (!state.overlayDocTitle) return;
+        state.overlayDocTitle.textContent = getOverlayDocumentTitle(blocks);
+    }
+
+    function renderReviewRail(recommendations) {
+        if (!state.overlayRail || !state.contextDoc) return;
+        const issues = Array.isArray(recommendations) ? recommendations : [];
+        const guardrail = getGuardrailState();
+        if (state.overlayRailScrollHandler && state.overlayRailViewport) {
+            state.overlayRailViewport.removeEventListener('scroll', state.overlayRailScrollHandler);
+            state.overlayRailScrollHandler = null;
+        }
+        state.overlayRail.innerHTML = '';
+        state.overlayRailViewport = null;
+
+        const head = state.contextDoc.createElement('div');
+        head.className = 'aivi-overlay-rail-head';
+        const railTitle = state.contextDoc.createElement('div');
+        railTitle.className = 'aivi-overlay-review-rail-title';
+        railTitle.textContent = 'Review Rail';
+        const actions = state.contextDoc.createElement('div');
+        actions.className = 'aivi-overlay-rail-actions';
+        const note = state.contextDoc.createElement('div');
+        note.className = 'aivi-overlay-rail-note';
+        note.textContent = OVERLAY_EDITOR_PERSISTENCE_NOTE;
+
+        const applyButton = state.contextDoc.createElement('button');
+        applyButton.type = 'button';
+        applyButton.className = 'aivi-overlay-rail-btn primary';
+        applyButton.textContent = 'Apply Changes';
+        applyButton.addEventListener('click', () => handleApplyChangesClick());
+
+        const copyButton = state.contextDoc.createElement('button');
+        copyButton.type = 'button';
+        copyButton.className = 'aivi-overlay-rail-btn';
+        copyButton.textContent = 'Copy';
+        copyButton.addEventListener('click', () => copyToClipboard());
+
+        const closeButton = state.contextDoc.createElement('button');
+        closeButton.type = 'button';
+        closeButton.className = 'aivi-overlay-rail-btn subtle';
+        closeButton.textContent = 'Close';
+        closeButton.addEventListener('click', () => closeOverlay());
+
+        actions.appendChild(applyButton);
+        actions.appendChild(copyButton);
+        actions.appendChild(closeButton);
+        head.appendChild(railTitle);
+        head.appendChild(actions);
+        head.appendChild(note);
+        state.overlayRail.appendChild(head);
+
+        if (guardrail.message) {
+            const banner = state.contextDoc.createElement('div');
+            banner.className = `aivi-overlay-rail-banner ${guardrail.type === 'error' ? 'is-error' : 'is-warning'}`;
+            banner.textContent = guardrail.message;
+            state.overlayRail.appendChild(banner);
+        }
+
+        const status = state.contextDoc.createElement('div');
+        status.id = 'aivi-overlay-rail-status';
+        status.className = 'aivi-overlay-rail-status';
+        status.textContent = state.metaStatus || '';
+        status.hidden = !state.metaStatus;
+        state.overlayRail.appendChild(status);
+
+        const summary = state.contextDoc.createElement('div');
+        summary.className = 'aivi-overlay-review-summary';
+        const count = state.contextDoc.createElement('div');
+        count.className = 'aivi-overlay-review-count';
+        count.textContent = `${issues.length} issue${issues.length === 1 ? '' : 's'} in focus`;
+        summary.appendChild(count);
+        state.overlayRail.appendChild(summary);
+
+        if (!issues.length) {
+            const empty = state.contextDoc.createElement('div');
+            empty.className = 'aivi-overlay-review-empty';
+            empty.textContent = 'No failed or partial issues were released into this review pass.';
+            state.overlayRail.appendChild(empty);
+            queueOverlayLayoutSync();
+            return;
+        }
+
+        const viewport = state.contextDoc.createElement('div');
+        viewport.className = 'aivi-overlay-review-viewport';
+        const list = state.contextDoc.createElement('div');
+        list.className = 'aivi-overlay-review-list';
+        issues.forEach((issue) => {
+            if (!issue) return;
+            const item = state.contextDoc.createElement('div');
+            item.className = 'aivi-overlay-review-item';
+            const verdict = normalizeOverlayVerdictValue(issue.ui_verdict || issue.verdict) || 'fail';
+            item.setAttribute('data-verdict', verdict);
+            if (issue.jump_node_ref || issue.node_ref) {
+                item.setAttribute('data-jump-node-ref', issue.jump_node_ref || issue.node_ref || '');
+            }
+            const header = state.contextDoc.createElement('div');
+            header.className = 'aivi-overlay-review-item-header';
+            const name = state.contextDoc.createElement('div');
+            name.className = 'aivi-overlay-review-item-name';
+            name.textContent = issue && issue.check_name ? issue.check_name : 'Untitled issue';
+            const impactPill = buildOverlayImpactPill(issue);
+            const preferredSummary = normalizeText(issue.review_summary || '');
+            const sanitizedMessage = sanitizeInlineIssueMessage(
+                preferredSummary || issue.message || '',
+                { name: issue.check_name || issue.check_id || '' }
+            );
+            const summaryText = sanitizedMessage || preferredSummary || 'Issue detected.';
+            const summary = state.contextDoc.createElement('div');
+            summary.className = 'aivi-overlay-review-item-summary';
+            summary.textContent = summaryText;
+
+            const actions = state.contextDoc.createElement('div');
+            actions.className = 'aivi-overlay-review-item-actions';
+            const viewButton = state.contextDoc.createElement('button');
+            viewButton.type = 'button';
+            viewButton.className = 'aivi-overlay-review-btn';
+            viewButton.textContent = 'View details';
+            const jumpButton = state.contextDoc.createElement('button');
+            jumpButton.type = 'button';
+            jumpButton.className = 'aivi-overlay-review-btn';
+            jumpButton.textContent = 'Jump to block';
+            const details = state.contextDoc.createElement('div');
+            details.className = 'aivi-overlay-review-details';
+            details.hidden = true;
+
+            const explanationPack = resolveExplanationPack(
+                clonePlainObject(issue.explanation_pack),
+                {
+                    what_failed: summaryText,
+                    how_to_fix_step: issue.action_suggestion || 'Update the referenced section directly from the editor canvas.',
+                    issue_explanation: issue.issue_explanation || ''
+                }
+            );
+            const detailText = resolveRecommendationDetailText(issue, explanationPack, summaryText);
+            const explanationNode = buildGuidanceTextNode(detailText, 'aivi-overlay-guidance-recommendation');
+            if (explanationNode) {
+                details.appendChild(explanationNode);
+            }
+            if (issue.snippet) {
+                const snippet = state.contextDoc.createElement('div');
+                snippet.className = 'aivi-overlay-review-item-snippet';
+                snippet.textContent = issue.snippet;
+                details.appendChild(snippet);
+            }
+            const schemaAssistNode = buildReviewRailSchemaAssistNode(issue);
+            if (schemaAssistNode) {
+                details.appendChild(schemaAssistNode);
+            }
+            const metadataNode = buildReviewRailMetadataNode(issue);
+            if (metadataNode) {
+                details.appendChild(metadataNode);
+            }
+            const hasReviewDetails = details.childNodes.length > 0;
+            if (!hasReviewDetails) {
+                viewButton.disabled = true;
+                viewButton.title = 'No additional details are available for this issue.';
+            }
+
+            viewButton.addEventListener('click', () => {
+                if (!hasReviewDetails) return;
+                const nextHidden = !details.hidden;
+                details.hidden = nextHidden;
+                viewButton.textContent = nextHidden ? 'View details' : 'Hide details';
+                queueOverlayLayoutSync();
+            });
+
+            const syntheticReasons = new Set([
+                'synthetic_fallback',
+                'missing_ai_checks',
+                'chunk_parse_failure',
+                'time_budget_exceeded',
+                'truncated_response'
+            ]);
+            const normalizedFailureReason = String(issue.failure_reason || '').trim().toLowerCase();
+            const jumpNodeRef = issue.jump_node_ref || issue.node_ref || '';
+            const allowJump = !!jumpNodeRef && !syntheticReasons.has(normalizedFailureReason);
+            if (allowJump) {
+                jumpButton.addEventListener('click', () => {
+                    const jumped = jumpToOverlayNode(jumpNodeRef);
+                    if (!jumped) {
+                        setMetaStatus('Could not locate block for this recommendation');
+                    }
+                });
+            } else {
+                jumpButton.disabled = true;
+                jumpButton.title = 'No reliable block target is available for this issue.';
+            }
+
+            header.appendChild(name);
+            if (impactPill) {
+                header.appendChild(impactPill);
+            }
+            item.appendChild(header);
+            item.appendChild(summary);
+            actions.appendChild(viewButton);
+            actions.appendChild(jumpButton);
+            item.appendChild(actions);
+            item.appendChild(details);
+            list.appendChild(item);
+        });
+        viewport.appendChild(list);
+        state.overlayRail.appendChild(viewport);
+        state.overlayRailViewport = viewport;
+
+        const controls = state.contextDoc.createElement('div');
+        controls.className = 'aivi-overlay-review-scroll-controls';
+        controls.hidden = true;
+
+        const upButton = state.contextDoc.createElement('button');
+        upButton.type = 'button';
+        upButton.className = 'aivi-overlay-review-scroll-btn';
+        upButton.setAttribute('data-rail-scroll', 'up');
+        upButton.setAttribute('aria-label', 'Scroll review rail up');
+        upButton.innerHTML = '<span aria-hidden="true">↑</span>';
+        upButton.addEventListener('click', () => scrollReviewRail('up'));
+
+        const downButton = state.contextDoc.createElement('button');
+        downButton.type = 'button';
+        downButton.className = 'aivi-overlay-review-scroll-btn';
+        downButton.setAttribute('data-rail-scroll', 'down');
+        downButton.setAttribute('aria-label', 'Scroll review rail down');
+        downButton.innerHTML = '<span aria-hidden="true">↓</span>';
+        downButton.addEventListener('click', () => scrollReviewRail('down'));
+
+        controls.appendChild(upButton);
+        controls.appendChild(downButton);
+        state.overlayRail.appendChild(controls);
+
+        if (state.overlayRailScrollHandler && state.overlayRailViewport) {
+            state.overlayRailViewport.removeEventListener('scroll', state.overlayRailScrollHandler);
+        }
+        state.overlayRailScrollHandler = () => syncReviewRailScrollControls();
+        state.overlayRailViewport.addEventListener('scroll', state.overlayRailScrollHandler, { passive: true });
+        queueOverlayLayoutSync();
     }
 
     function getConfig() {
@@ -806,6 +3094,45 @@
             : 'unknown-path';
         const identity = postId ? `post:${postId}` : `path:${pathKey}`;
         return `aivi.overlay.draft.v1:${identity}`;
+    }
+
+    function getOverlayDraftCompatibilityState() {
+        const post = readEditorPost();
+        const overlayMeta = state.overlayContentData && typeof state.overlayContentData === 'object'
+            ? state.overlayContentData
+            : {};
+        const reportMeta = state.lastReport && typeof state.lastReport === 'object'
+            ? state.lastReport
+            : {};
+        const editorContent = post && typeof post.content === 'string' ? post.content : '';
+        return {
+            post_id: post && post.id ? String(post.id) : '',
+            run_id: String(overlayMeta.run_id || reportMeta.run_id || '').trim(),
+            analysis_content_hash: String(overlayMeta.content_hash || reportMeta.content_hash || '').trim(),
+            editor_signature: editorContent ? String(stableHash(editorContent)) : '',
+            overlay_schema_version: String(overlayMeta.schema_version || '').trim()
+        };
+    }
+
+    function isOverlayDraftCompatible(payload) {
+        if (!payload || typeof payload !== 'object') return false;
+        const payloadVersion = Number(payload.version || 0);
+        if (payloadVersion !== OVERLAY_DRAFT_VERSION) return false;
+
+        const current = getOverlayDraftCompatibilityState();
+        const savedPostId = String(payload.post_id || '').trim();
+        const savedRunId = String(payload.run_id || '').trim();
+        const savedAnalysisHash = String(payload.analysis_content_hash || '').trim();
+        const savedEditorSignature = String(payload.editor_signature || '').trim();
+        const savedSchemaVersion = String(payload.overlay_schema_version || '').trim();
+
+        if (current.post_id && savedPostId && current.post_id !== savedPostId) return false;
+        if (current.run_id && savedRunId && current.run_id !== savedRunId) return false;
+        if (current.analysis_content_hash && savedAnalysisHash && current.analysis_content_hash !== savedAnalysisHash) return false;
+        if (current.editor_signature && savedEditorSignature && current.editor_signature !== savedEditorSignature) return false;
+        if (current.overlay_schema_version && savedSchemaVersion && current.overlay_schema_version !== savedSchemaVersion) return false;
+
+        return true;
     }
 
     function attachBeforeUnloadGuard() {
@@ -874,11 +3201,15 @@
             });
         });
         if (!blocks.length) return null;
+        const compatibility = getOverlayDraftCompatibilityState();
         return {
-            version: 1,
+            version: OVERLAY_DRAFT_VERSION,
             saved_at: new Date().toISOString(),
             post_id: post && post.id ? String(post.id) : '',
-            run_id: state.lastReport && state.lastReport.run_id ? String(state.lastReport.run_id) : '',
+            run_id: compatibility.run_id,
+            analysis_content_hash: compatibility.analysis_content_hash,
+            editor_signature: compatibility.editor_signature,
+            overlay_schema_version: compatibility.overlay_schema_version,
             blocks: blocks
         };
     }
@@ -907,6 +3238,10 @@
             if (!raw) return;
             const parsed = JSON.parse(raw);
             if (!parsed || !Array.isArray(parsed.blocks) || !parsed.blocks.length) return;
+            if (!isOverlayDraftCompatible(parsed)) {
+                clearOverlayDraft();
+                return;
+            }
             const editableBodies = Array.from(state.overlayContent.querySelectorAll('.aivi-overlay-block-body[data-editable="true"]'));
             if (!editableBodies.length) return;
             let restored = 0;
@@ -937,16 +3272,26 @@
     function getGuardrailState() {
         const cfg = getConfig();
         const text = getUiText();
+        const report = state.lastReport || {};
+        const accountState = (cfg.accountState && typeof cfg.accountState === 'object') ? cfg.accountState : {};
+        const hasCompletedReport = !!(
+            report.run_id ||
+            report.analysis_summary ||
+            report.overlay_content ||
+            report.result ||
+            report.completed_at
+        );
+        const hasConnectedAccount = accountState.connected === true &&
+            String(accountState.connectionStatus || accountState.connection_status || '').toLowerCase() === 'connected';
         if (state.isStale && isAutoStaleDetectionEnabled()) {
             return { message: 'Analysis results stale — please re-run analysis', type: 'warning', blockAi: true };
         }
         if (cfg.isEnabled === false) {
             return { message: text.plugin_disabled || 'AiVI is currently disabled for this site. Contact support if this was unexpected.', type: 'error', blockAi: true };
         }
-        if (!cfg.backendConfigured) {
+        if (!cfg.backendConfigured && !hasCompletedReport && !hasConnectedAccount) {
             return { message: text.backend_not_configured || 'AiVI is not ready on this site yet. Connect your AiVI account or contact support.', type: 'error', blockAi: true };
         }
-        const report = state.lastReport || {};
         const aiUnavailable = report.error === 'ai_unavailable' || report.status === 'unavailable' || report.aiAvailable === false || report.ai_available === false;
         if (aiUnavailable) {
             return { message: text.ai_unavailable || 'AI analysis unavailable. Please check your backend configuration.', type: 'warning', blockAi: true };
@@ -970,6 +3315,86 @@
         return { ok: resp.ok, status: resp.status, data };
     }
 
+    function getDocumentMetaPath(postId) {
+        const normalized = Number(postId || 0);
+        if (!Number.isFinite(normalized) || normalized <= 0) return '';
+        return `/document-meta/${normalized}`;
+    }
+
+    function getCachedDocumentMeta(postId) {
+        const normalized = Number(postId || 0);
+        if (!Number.isFinite(normalized) || normalized <= 0) return null;
+        return state.documentMetaCache.get(String(normalized)) || null;
+    }
+
+    function setCachedDocumentMeta(postId, documentMeta) {
+        const normalized = Number(postId || 0);
+        if (!Number.isFinite(normalized) || normalized <= 0) return null;
+        const value = documentMeta && typeof documentMeta === 'object'
+            ? {
+                post_id: normalized,
+                title: normalizeText(documentMeta.title || ''),
+                meta_description: normalizeText(documentMeta.meta_description || ''),
+                canonical_url: normalizeText(documentMeta.canonical_url || ''),
+                lang: normalizeText(documentMeta.lang || '')
+            }
+            : null;
+        if (value) {
+            state.documentMetaCache.set(String(normalized), value);
+        } else {
+            state.documentMetaCache.delete(String(normalized));
+        }
+        return value;
+    }
+
+    async function fetchDocumentMeta(postId) {
+        const path = getDocumentMetaPath(postId);
+        if (!path) return null;
+        const cached = getCachedDocumentMeta(postId);
+        if (cached) return cached;
+        const response = await callRest(path, 'GET');
+        if (!response.ok || !response.data || response.data.ok !== true || !response.data.document_meta) {
+            return null;
+        }
+        return setCachedDocumentMeta(postId, response.data.document_meta);
+    }
+
+    async function saveDocumentMeta(postId, payload) {
+        const path = getDocumentMetaPath(postId);
+        if (!path) return { ok: false, error: 'missing_post_id' };
+        const response = await callRest(path, 'POST', payload);
+        if (!response.ok || !response.data || response.data.ok !== true || !response.data.document_meta) {
+            return { ok: false, error: 'save_failed', response };
+        }
+        return { ok: true, documentMeta: setCachedDocumentMeta(postId, response.data.document_meta) };
+    }
+
+    function syncEditorTitleValue(nextTitle) {
+        const title = normalizeText(nextTitle || '');
+        if (!title) return;
+        try {
+            if (wp && wp.data && typeof wp.data.dispatch === 'function') {
+                const editorDispatcher = wp.data.dispatch('core/editor');
+                if (editorDispatcher && typeof editorDispatcher.editPost === 'function') {
+                    editorDispatcher.editPost({ title });
+                }
+            }
+        } catch (e) {
+        }
+        try {
+            const titleEl = document.getElementById('title');
+            if (titleEl) {
+                titleEl.value = title;
+                dispatchDomInputEvents(titleEl);
+            }
+        } catch (e) {
+        }
+        if (state.overlayContentData && typeof state.overlayContentData === 'object') {
+            state.overlayContentData.title = title;
+        }
+        renderOverlayDocumentHeader(getBlocks());
+    }
+
     function readEditorPost() {
         try {
             if (select && select('core/editor') && typeof select('core/editor').getCurrentPost === 'function') {
@@ -977,14 +3402,33 @@
                 if (post) {
                     const content = (typeof post.content === 'string') ? post.content : (post.content && post.content.raw ? post.content.raw : (post.raw || ''));
                     const title = (post.title && (typeof post.title === 'string' ? post.title : (post.title.raw || ''))) || '';
-                    return { id: post.id || null, title: title || '', content: content || '', author: post.author || 0 };
+                    const cachedMeta = getCachedDocumentMeta(post.id || 0);
+                    return {
+                        id: post.id || null,
+                        title: title || '',
+                        content: content || '',
+                        author: post.author || 0,
+                        metaDescription: cachedMeta && cachedMeta.meta_description ? cachedMeta.meta_description : '',
+                        canonicalUrl: cachedMeta && cachedMeta.canonical_url ? cachedMeta.canonical_url : '',
+                        lang: cachedMeta && cachedMeta.lang ? cachedMeta.lang : ''
+                    };
                 }
             }
         } catch (e) { }
         try {
             const titleEl = document.getElementById('title');
             const contentEl = document.getElementById('content');
-            return { id: (document.getElementById('post_ID') ? parseInt(document.getElementById('post_ID').value, 10) : null), title: titleEl ? titleEl.value : '', content: contentEl ? contentEl.value : '', author: 0 };
+            const postId = document.getElementById('post_ID') ? parseInt(document.getElementById('post_ID').value, 10) : null;
+            const cachedMeta = getCachedDocumentMeta(postId || 0);
+            return {
+                id: postId,
+                title: titleEl ? titleEl.value : '',
+                content: contentEl ? contentEl.value : '',
+                author: 0,
+                metaDescription: cachedMeta && cachedMeta.meta_description ? cachedMeta.meta_description : '',
+                canonicalUrl: cachedMeta && cachedMeta.canonical_url ? cachedMeta.canonical_url : '',
+                lang: cachedMeta && cachedMeta.lang ? cachedMeta.lang : ''
+            };
         } catch (e) {
             return null;
         }
@@ -1729,6 +4173,13 @@
         const clientSuppressed = Array.isArray(state.inlineSuppressedRecommendations)
             ? state.inlineSuppressedRecommendations
             : [];
+        const syntheticReasons = new Set([
+            'synthetic_fallback',
+            'missing_ai_checks',
+            'chunk_parse_failure',
+            'time_budget_exceeded',
+            'truncated_response'
+        ]);
         const seen = new Set();
         const buildRecommendationDedupKey = (issue) => {
             if (!issue || typeof issue !== 'object') return '';
@@ -1745,6 +4196,8 @@
             if (!issue || typeof issue !== 'object') return false;
             const verdict = normalizeOverlayVerdictValue(issue.ui_verdict || issue.verdict);
             if (verdict === 'pass') return false;
+            const normalizedFailureReason = String(issue.failure_reason || '').trim().toLowerCase();
+            if (syntheticReasons.has(normalizedFailureReason)) return false;
             const dedupKey = buildRecommendationDedupKey(issue);
             if (!dedupKey) return true;
             if (seen.has(dedupKey)) return false;
@@ -2586,72 +5039,64 @@
             schemaWrap.appendChild(schemaTop);
 
             const note = state.contextDoc.createElement('div');
-            note.style.cssText = 'font-size:11px;color:#4b607d;';
-            const notes = Array.isArray(schemaAssist.generation_notes)
-                ? schemaAssist.generation_notes.filter(Boolean)
-                : [];
-            if (notes[0]) {
-                note.textContent = notes[0];
-            } else if (!schemaInsertAllowed && schemaKind === 'jsonld_repair') {
-                note.textContent = 'Copy-only JSON-LD repair draft. Insert is disabled for repair mode.';
-            } else if (!schemaInsertAllowed && isSemanticMarkupPlan) {
-                note.textContent = 'Copy-only semantic markup plan. Apply these changes in your theme/editor markup.';
-            } else if (!schemaInsertAllowed) {
-                note.textContent = 'Copy-only schema draft for this recommendation.';
-            } else {
-                note.textContent = 'Deterministic schema draft generated from this recommendation.';
-            }
+            note.className = 'aivi-overlay-review-schema-note';
+            note.textContent = getSchemaAssistBaseNote(schemaAssist);
             schemaWrap.appendChild(note);
 
+            const policy = state.contextDoc.createElement('div');
+            policy.className = 'aivi-overlay-review-schema-policy';
+            policy.textContent = buildSchemaAssistPolicySummary(schemaAssist);
+            schemaWrap.appendChild(policy);
+
             const schemaPreview = state.contextDoc.createElement('textarea');
+            schemaPreview.className = 'aivi-overlay-review-schema-preview';
             schemaPreview.readOnly = true;
-            schemaPreview.style.cssText = 'display:none;width:100%;min-height:140px;font-size:11px;font-family:"IBM Plex Mono","SFMono-Regular",Consolas,monospace;padding:9px;border-radius:10px;border:1px solid #cfdbef;background:#fff;color:#15233a;resize:vertical;';
+            schemaPreview.hidden = true;
 
             const schemaStatus = state.contextDoc.createElement('div');
-            schemaStatus.style.cssText = 'font-size:11px;color:#4b607d;';
+            schemaStatus.className = 'aivi-overlay-review-schema-status';
 
             generateBtn.addEventListener('click', () => {
                 const draft = stringifySchemaDraft(schemaAssist);
                 if (!draft) {
-                    schemaStatus.textContent = 'No deterministic schema draft could be built for this item.';
+                    setSchemaAssistStatus(schemaStatus, 'error', isSemanticMarkupPlan
+                        ? 'No deterministic markup plan could be built for this item.'
+                        : 'No deterministic schema draft could be built for this item.');
                     return;
                 }
                 schemaPreview.value = draft;
-                schemaPreview.style.display = 'block';
+                schemaPreview.hidden = false;
                 copyBtn.disabled = schemaAssist.can_copy !== true;
-                let generatedMessage = schemaInsertAllowed
-                    ? 'Schema draft generated. Review, copy, or insert.'
-                    : (isSemanticMarkupPlan
-                        ? 'Semantic markup plan generated. Review and copy.'
-                        : 'Schema draft generated. Review and copy.');
                 if (schemaInsertAllowed) {
-                    const fingerprint = buildSchemaFingerprint(item, schemaAssist, draft);
-                    const duplicate = hasSchemaFingerprint(fingerprint);
-                    insertBtn.disabled = duplicate;
-                    if (duplicate) {
-                        generatedMessage = 'This schema draft was already inserted for this run/session.';
-                    }
+                    const readiness = buildSchemaInsertReadiness(item, schemaAssist, draft);
+                    syncSchemaInsertButton(insertBtn, schemaInsertAllowed, readiness);
+                    setSchemaAssistStatus(schemaStatus, readiness.tone, readiness.message);
+                } else {
+                    setSchemaAssistStatus(schemaStatus, 'ready', isSemanticMarkupPlan
+                        ? 'Markup plan generated. Review it, then copy.'
+                        : 'Schema draft generated. Review it, then copy.');
                 }
-                generateBtn.textContent = 'Refresh schema';
-                schemaStatus.textContent = generatedMessage;
+                generateBtn.textContent = isSemanticMarkupPlan ? 'Refresh markup' : 'Refresh schema';
             });
 
             copyBtn.addEventListener('click', () => {
                 const draft = schemaPreview.value || stringifySchemaDraft(schemaAssist);
                 if (!draft) {
-                    schemaStatus.textContent = isSemanticMarkupPlan
+                    setSchemaAssistStatus(schemaStatus, 'error', isSemanticMarkupPlan
                         ? 'Nothing to copy yet. Generate markup first.'
-                        : 'Nothing to copy yet. Generate schema first.';
+                        : 'Nothing to copy yet. Generate schema first.');
                     return;
                 }
                 if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
-                    schemaStatus.textContent = 'Clipboard is not available in this browser context.';
+                    setSchemaAssistStatus(schemaStatus, 'error', 'Clipboard is not available in this browser context.');
                     return;
                 }
                 navigator.clipboard.writeText(draft).then(() => {
-                    schemaStatus.textContent = 'Schema copied to clipboard.';
+                    setSchemaAssistStatus(schemaStatus, 'success', isSemanticMarkupPlan
+                        ? 'Markup plan copied to clipboard.'
+                        : 'Schema copied to clipboard.');
                 }).catch(() => {
-                    schemaStatus.textContent = 'Copy failed. Please copy the draft manually.';
+                    setSchemaAssistStatus(schemaStatus, 'error', 'Copy failed. Please copy the draft manually.');
                 });
             });
 
@@ -2659,33 +5104,30 @@
                 insertBtn.addEventListener('click', () => {
                     const draft = schemaPreview.value || stringifySchemaDraft(schemaAssist);
                     if (!draft) {
-                        schemaStatus.textContent = 'Nothing to insert yet. Generate schema first.';
+                        setSchemaAssistStatus(schemaStatus, 'error', 'Nothing to insert yet. Generate schema first.');
                         return;
                     }
                     const result = insertSchemaAssistIntoEditor(item, schemaAssist, draft);
+                    const presentation = buildSchemaInsertResultPresentation(result);
                     if (result.ok) {
                         insertBtn.disabled = true;
-                        schemaStatus.textContent = 'Schema inserted as JSON-LD block in the editor.';
+                        insertBtn.textContent = result.code === 'replace_existing_ai_block' ? 'Replaced' : 'Inserted';
+                        setSchemaAssistStatus(schemaStatus, presentation.tone, presentation.message);
                         setOverlayDirty(true);
                         scheduleOverlayDraftSave('schema_insert');
-                        setMetaStatus('Schema inserted into editor.');
+                        setMetaStatus(presentation.metaMessage);
                         renderBlocks(true);
                         return;
                     }
-                    if (result.code === 'duplicate') {
-                        insertBtn.disabled = true;
-                        schemaStatus.textContent = 'Schema already inserted for this run/session.';
-                        return;
+                    if (result.code === 'duplicate'
+                        || result.code === 'no_op_existing_match'
+                        || result.code === 'copy_only_external_conflict') {
+                        const readiness = buildSchemaInsertReadiness(item, schemaAssist, draft);
+                        syncSchemaInsertButton(insertBtn, schemaInsertAllowed, readiness);
+                    } else {
+                        syncSchemaInsertButton(insertBtn, schemaInsertAllowed, null);
                     }
-                    if (result.code === 'invalid_json') {
-                        schemaStatus.textContent = 'Schema draft is invalid JSON. Regenerate and try again.';
-                        return;
-                    }
-                    if (result.code === 'editor_unavailable' || result.code === 'insert_unavailable') {
-                        schemaStatus.textContent = 'Editor insert API unavailable. Copy schema manually.';
-                        return;
-                    }
-                    schemaStatus.textContent = 'Insert failed. Please copy and add schema manually.';
+                    setSchemaAssistStatus(schemaStatus, presentation.tone, presentation.message);
                 });
             }
 
@@ -2866,16 +5308,29 @@
         renderBlocks(true);
         const applied = applyVariantToEditor(item, variant.text || '');
         if (applied !== 'applied') {
-            info.status = applied === 'skipped_title' ? 'Skipped title' : 'Apply failed';
+            if (applied === 'skipped_title') {
+                info.status = 'Skipped title';
+                setMetaStatus('AiVI skipped the title block.');
+            } else if (applied === 'unsupported_block') {
+                info.status = 'Read-only block';
+                setMetaStatus('AiVI did not rewrite a read-only block. Use the editor directly for rich content.');
+            } else if (applied === 'list_format_required') {
+                info.status = 'Needs list formatting';
+                setMetaStatus('AiVI could not safely convert that draft into a list. Use explicit list lines or edit directly.');
+            } else {
+                info.status = 'Apply failed';
+                setMetaStatus('AiVI could not apply that change safely.');
+            }
             renderBlocks(true);
             return;
         }
         setOverlayDirty(true);
         scheduleOverlayDraftSave('rewrite_accept');
+        setMetaStatus(OVERLAY_EDITOR_PERSISTENCE_NOTE);
         renderBlocks(true);
         const post = readEditorPost();
         if (!info.suggestion_id) {
-            info.status = 'Applied locally';
+            info.status = 'Applied in editor';
             renderBlocks(true);
             return;
         }
@@ -2890,10 +5345,10 @@
         };
         const result = await callRest('/apply_suggestion', 'POST', payload);
         if (result.ok) {
-            info.status = 'Applied';
+            info.status = 'Applied in editor';
             info.acceptedIndex = idx;
         } else {
-            info.status = 'Applied (tracking failed)';
+            info.status = 'Applied in editor (tracking failed)';
         }
         renderBlocks(true);
     }
@@ -2962,7 +5417,7 @@
         const explicitPrimary = String(rewriteTarget && rewriteTarget.primary_node_ref ? rewriteTarget.primary_node_ref : '').trim();
         if (explicitPrimary && nodeRefs.indexOf(explicitPrimary) !== -1) {
             const info = findBlockByNodeRef(blocks, explicitPrimary);
-            if (info && !isTitleBlock(info) && !isHeadingBlockInfo(info)) {
+            if (info && !isTitleBlock(info) && !isHeadingBlockInfo(info) && isOverlayApplySupportedBlockInfo(info)) {
                 return explicitPrimary;
             }
         }
@@ -2971,6 +5426,7 @@
             const info = findBlockByNodeRef(blocks, ref);
             if (!info) continue;
             if (isTitleBlock(info)) continue;
+            if (!isOverlayApplySupportedBlockInfo(info)) continue;
             if (!isHeadingBlockInfo(info)) return ref;
         }
         for (let i = 0; i < nodeRefs.length; i += 1) {
@@ -2978,6 +5434,7 @@
             const info = findBlockByNodeRef(blocks, ref);
             if (!info) continue;
             if (isTitleBlock(info)) continue;
+            if (!isOverlayApplySupportedBlockInfo(info)) continue;
             return ref;
         }
         return '';
@@ -3010,13 +5467,14 @@
         if (explicitBullets.length >= 2) {
             return `<ul>${explicitBullets.map((item) => `<li>${escapeHtmlValue(item)}</li>`).join('')}</ul>`;
         }
+        if (lines.length >= 2) {
+            return `<ul>${lines.map((item) => `<li>${escapeHtmlValue(item)}</li>`).join('')}</ul>`;
+        }
+        return '';
+    }
 
-        const sentenceParts = value
-            .split(/(?<=[.!?])\s+/)
-            .map((part) => part.trim())
-            .filter(Boolean);
-        const listItems = sentenceParts.length >= 2 ? sentenceParts : [value];
-        return `<ul>${listItems.map((item) => `<li>${escapeHtmlValue(item)}</li>`).join('')}</ul>`;
+    function isOverlayApplySupportedBlockInfo(blockInfo) {
+        return !!(blockInfo && blockInfo.block && isEditableBlock(blockInfo.block));
     }
 
     function applyTextToNodeRef(dispatcher, blocks, nodeRef, appliedText, options) {
@@ -3024,6 +5482,7 @@
         const blockInfo = findBlockByNodeRef(blocks, nodeRef);
         if (!blockInfo) return 'apply_failed';
         if (isTitleBlock(blockInfo)) return 'skipped_title';
+        if (!isOverlayApplySupportedBlockInfo(blockInfo)) return 'unsupported_block';
         const { block, clientId } = blockInfo;
         const attrKey = getBlockTextKey(block);
         if (!attrKey) return 'apply_failed';
@@ -3034,7 +5493,7 @@
             ? replaceText(currentValue, originalText, appliedText)
             : String(appliedText || '');
         if (!candidateValue || candidateValue === currentValue) {
-            return 'apply_failed';
+            return 'unchanged';
         }
         dispatcher.updateBlockAttributes(clientId, { [attrKey]: candidateValue });
         if (isAutoStaleDetectionEnabled()) {
@@ -3076,11 +5535,17 @@
             const targetNodeRefs = resolveTargetNodeRefsForApply(item, rewriteTarget, applyMode);
             if (!targetNodeRefs.length) return 'apply_failed';
             const primaryNodeRef = selectPrimaryApplyNodeRef(blocks, targetNodeRefs, rewriteTarget);
-            if (!primaryNodeRef) return 'apply_failed';
-            const listMarkup = convertTextToListMarkup(appliedText) || String(appliedText || '');
+            if (!primaryNodeRef) {
+                const hasUnsupportedTarget = targetNodeRefs.some((ref) => {
+                    const info = findBlockByNodeRef(blocks, ref);
+                    return info && !isTitleBlock(info) && !isOverlayApplySupportedBlockInfo(info);
+                });
+                return hasUnsupportedTarget ? 'unsupported_block' : 'apply_failed';
+            }
+            const listMarkup = convertTextToListMarkup(appliedText);
+            if (!listMarkup) return 'list_format_required';
             const primaryResult = applyTextToNodeRef(dispatcher, blocks, primaryNodeRef, listMarkup, { useReplace: false });
-            if (primaryResult === 'applied') return 'applied';
-            return applyTextToNodeRef(dispatcher, blocks, primaryNodeRef, String(appliedText || ''), { useReplace: false });
+            return primaryResult;
         }
 
         const targetNodeRefs = resolveTargetNodeRefsForApply(item, rewriteTarget, applyMode);
@@ -3090,10 +5555,17 @@
         const segments = splitRewriteSegments(appliedText);
         let appliedCount = 0;
         let skippedTitleCount = 0;
+        let unsupportedCount = 0;
 
         if (applyMode === 'replace_block' || applyMode === 'insert_after_heading' || applyMode === 'append_support') {
             const primaryNodeRef = selectPrimaryApplyNodeRef(blocks, uniqueRefs, rewriteTarget);
-            if (!primaryNodeRef) return 'apply_failed';
+            if (!primaryNodeRef) {
+                const hasUnsupportedTarget = uniqueRefs.some((ref) => {
+                    const info = findBlockByNodeRef(blocks, ref);
+                    return info && !isTitleBlock(info) && !isOverlayApplySupportedBlockInfo(info);
+                });
+                return hasUnsupportedTarget ? 'unsupported_block' : 'apply_failed';
+            }
             const mappedSegments = segments.length >= 2 && segments.length >= uniqueRefs.length;
             if (!mappedSegments) {
                 const combinedText = String(appliedText || '').trim();
@@ -3113,11 +5585,14 @@
                 appliedCount += 1;
             } else if (result === 'skipped_title') {
                 skippedTitleCount += 1;
+            } else if (result === 'unsupported_block') {
+                unsupportedCount += 1;
             }
         });
 
         if (appliedCount > 0) return 'applied';
         if (skippedTitleCount > 0) return 'skipped_title';
+        if (unsupportedCount > 0) return 'unsupported_block';
         return 'apply_failed';
     }
 
@@ -3240,25 +5715,15 @@
             : '';
         if (nextValue === currentValue) return 'unchanged';
         dispatcher.updateBlockAttributes(blockInfo.clientId, { [attrKey]: nextValue });
-        state.lastEditHtml.set(nodeRef, nextValue);
         if (isAutoStaleDetectionEnabled()) {
             state.isStale = true;
         }
         return 'updated';
     }
 
-    function scheduleBlockUpdate(nodeRef, body) {
-        if (!nodeRef || !body) return;
+    function markOverlayEditableChanged(reason) {
         setOverlayDirty(true);
-        scheduleOverlayDraftSave('input');
-        if (state.editTimers.has(nodeRef)) {
-            clearTimeout(state.editTimers.get(nodeRef));
-        }
-        const handle = setTimeout(() => {
-            state.editTimers.delete(nodeRef);
-            updateBlockFromEditable(nodeRef, body);
-        }, 300);
-        state.editTimers.set(nodeRef, handle);
+        scheduleOverlayDraftSave(reason || 'input');
     }
 
     function setActiveEditableBody(body, nodeRef) {
@@ -3269,17 +5734,17 @@
         active.forEach((el) => el.classList.remove('aivi-overlay-block-editing'));
         if (body && typeof body.closest === 'function') {
             const wrapper = body.closest('.aivi-overlay-block');
-            if (wrapper) wrapper.classList.add('aivi-overlay-block-editing');
+            if (wrapper) {
+                wrapper.classList.add('aivi-overlay-block-editing');
+                if (state.blockMenu && !state.blockMenu.hidden && state.blockMenuNodeRef === (nodeRef || '')) {
+                    positionBlockMenuForWrapper(wrapper);
+                }
+            }
         }
         queueToolbarActiveRefresh();
     }
 
     function flushPendingBlockUpdates() {
-        const pending = Array.from(state.editTimers.entries());
-        pending.forEach(([nodeRef, handle]) => {
-            try { clearTimeout(handle); } catch (e) { }
-            state.editTimers.delete(nodeRef);
-        });
         if (!state.overlayContent) return { updated: 0, unchanged: 0, failed: 0, total: 0 };
         const bodies = Array.from(state.overlayContent.querySelectorAll('.aivi-overlay-block-body[data-editable="true"]'));
         const blocks = getBlocks();
@@ -3288,17 +5753,18 @@
             const snapshotHtml = buildOverlayEditedHtmlSnapshot();
             const fallbackResult = applyHtmlToNonBlockEditor(snapshotHtml);
             if (fallbackResult === 'applied') {
-                return { updated: Math.max(1, bodies.length), unchanged: 0, failed: 0, total: Math.max(1, bodies.length) };
+                return { updated: Math.max(1, bodies.length), unchanged: 0, failed: 0, total: Math.max(1, bodies.length), updatedClientIds: [] };
             }
             if (fallbackResult === 'unchanged') {
-                return { updated: 0, unchanged: Math.max(1, bodies.length), failed: 0, total: Math.max(1, bodies.length) };
+                return { updated: 0, unchanged: Math.max(1, bodies.length), failed: 0, total: Math.max(1, bodies.length), updatedClientIds: [] };
             }
-            return { updated: 0, unchanged: 0, failed: Math.max(1, bodies.length), total: Math.max(1, bodies.length) };
+            return { updated: 0, unchanged: 0, failed: Math.max(1, bodies.length), total: Math.max(1, bodies.length), updatedClientIds: [] };
         }
 
         let updated = 0;
         let unchanged = 0;
         let failed = 0;
+        const updatedClientIds = [];
         bodies.forEach((body) => {
             const wrapper = body.closest('.aivi-overlay-block');
             const nodeRef = wrapper ? wrapper.getAttribute('data-node-ref') : '';
@@ -3307,11 +5773,17 @@
                 return;
             }
             const result = updateBlockFromEditable(nodeRef, body);
-            if (result === 'updated') updated += 1;
+            if (result === 'updated') {
+                updated += 1;
+                const info = findBlockByNodeRef(blocks, nodeRef);
+                if (info && info.clientId) {
+                    updatedClientIds.push(info.clientId);
+                }
+            }
             else if (result === 'unchanged' || result === 'skipped_title') unchanged += 1;
             else failed += 1;
         });
-        return { updated, unchanged, failed, total: bodies.length };
+        return { updated, unchanged, failed, total: bodies.length, updatedClientIds };
     }
 
     function enableEditableBody(body, block, nodeRef) {
@@ -3322,13 +5794,30 @@
         body.addEventListener('focus', () => setActiveEditableBody(body, nodeRef));
         body.addEventListener('click', () => setActiveEditableBody(body, nodeRef));
         body.addEventListener('keyup', () => setActiveEditableBody(body, nodeRef));
-        body.addEventListener('input', () => scheduleBlockUpdate(nodeRef, body));
+        body.addEventListener('input', () => markOverlayEditableChanged('input'));
         body.addEventListener('blur', () => {
-            updateBlockFromEditable(nodeRef, body);
             setActiveEditableBody(body, nodeRef);
-            setOverlayDirty(true);
-            scheduleOverlayDraftSave('blur');
+            if (state.overlayDirty) {
+                scheduleOverlayDraftSave('blur');
+            }
         });
+        const wrapper = typeof body.closest === 'function' ? body.closest('.aivi-overlay-block') : null;
+        if (wrapper && !wrapper._aiviBlockShellBound) {
+            wrapper._aiviBlockShellBound = true;
+            wrapper.addEventListener('mousedown', (event) => {
+                const target = event.target;
+                if (!target) return;
+                if (target === body || body.contains(target)) return;
+                if (typeof target.closest === 'function') {
+                    if (target.closest('.aivi-overlay-block-handle')) return;
+                    if (target.closest('.aivi-overlay-inline-panel')) return;
+                    if (target.closest('.aivi-overlay-highlight')) return;
+                }
+                event.preventDefault();
+                body.focus();
+                setActiveEditableBody(body, nodeRef);
+            });
+        }
     }
 
     function replaceText(text, original, applied) {
@@ -3418,15 +5907,27 @@
     }
 
     function jumpToOverlayNode(nodeRef) {
-        if (!nodeRef || !state.overlayContent || !state.contextDoc) return false;
+        if (!nodeRef || !state.overlayContent || !state.overlayViewport || !state.contextDoc) return false;
         const safeRef = String(nodeRef).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         const target = state.overlayContent.querySelector(`[data-node-ref="${safeRef}"]`);
         if (!target) return false;
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        try {
+            const containerRect = state.overlayViewport.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            const offsetTop = targetRect.top - containerRect.top + state.overlayViewport.scrollTop;
+            const top = Math.max(0, offsetTop - 24);
+            if (typeof state.overlayViewport.scrollTo === 'function') {
+                state.overlayViewport.scrollTo({ top, behavior: 'smooth' });
+            } else {
+                state.overlayViewport.scrollTop = top;
+            }
+        } catch (e) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
         return applyJumpFocus(nodeRef, true);
     }
 
-    function buildUnhighlightableSection(issues) {
+    state.buildUnhighlightableSection = function (issues) {
         if (!state.contextDoc || !Array.isArray(issues) || !issues.length) return null;
         const wrap = state.contextDoc.createElement('div');
         wrap.className = 'aivi-overlay-unhighlightable';
@@ -3445,17 +5946,21 @@
             const checkName = state.contextDoc.createElement('div');
             checkName.className = 'aivi-overlay-recommendation-check';
             checkName.textContent = issue.check_name || issue.check_id || 'Unknown check';
+            const preferredSummary = normalizeText(issue.review_summary || '');
             const sanitizedMessage = sanitizeInlineIssueMessage(
-                issue.rationale || issue.message || '',
+                preferredSummary || issue.message || '',
                 { name: issue.check_name || issue.check_id || '' }
             );
+            const summaryText = sanitizedMessage || preferredSummary || 'Issue detected but could not be anchored.';
             const explanationPack = resolveExplanationPack(
                 clonePlainObject(issue.explanation_pack),
                 {
-                    what_failed: sanitizedMessage || 'Issue detected but could not be anchored.',
-                    how_to_fix_step: issue.action_suggestion || 'Review this section manually and update the related sentence.'
+                    what_failed: summaryText,
+                    how_to_fix_step: issue.action_suggestion || 'Review this section manually and update the related sentence.',
+                    issue_explanation: issue.issue_explanation || ''
                 }
             );
+            const detailText = resolveRecommendationDetailText(issue, explanationPack, summaryText);
             const snippet = state.contextDoc.createElement('div');
             snippet.className = 'aivi-overlay-recommendation-snippet';
             snippet.textContent = issue.snippet || '';
@@ -3507,9 +6012,10 @@
                 isRecommendation: true,
                 check: {
                     check_id: issue.check_id || '',
-                    explanation: sanitizedMessage || '',
+                    explanation: summaryText,
                     action_suggestion: issue.action_suggestion || '',
                     explanation_pack: clonePlainObject(issue.explanation_pack) || explanationPack,
+                    review_summary: normalizeText(issue.review_summary || ''),
                     issue_explanation: normalizeText(issue.issue_explanation || ''),
                     rewrite_target: issueRewriteTarget || null,
                     repair_intent: issueRepairIntent || null,
@@ -3517,6 +6023,7 @@
                     schema_assist: issueSchemaAssist || null
                 },
                 explanation_pack: clonePlainObject(issue.explanation_pack) || explanationPack,
+                review_summary: normalizeText(issue.review_summary || ''),
                 issue_explanation: normalizeText(issue.issue_explanation || ''),
                 rewrite_target: issueRewriteTarget || null,
                 repair_intent: issueRepairIntent || null,
@@ -3524,8 +6031,9 @@
                 schema_assist: issueSchemaAssist || null,
                 highlight: {
                     snippet: issue.snippet || '',
-                    message: sanitizedMessage || '',
+                    message: summaryText,
                     explanation_pack: clonePlainObject(issue.explanation_pack) || explanationPack,
+                    review_summary: normalizeText(issue.review_summary || ''),
                     issue_explanation: normalizeText(issue.issue_explanation || ''),
                     node_ref: issue.node_ref || '',
                     signature: issue.signature || '',
@@ -3537,7 +6045,13 @@
                     schema_assist: issueSchemaAssist || null
                 }
             };
+            const hasRecommendationDetails = !!(detailText || issue.snippet);
+            if (!hasRecommendationDetails) {
+                button.disabled = true;
+                button.title = 'No additional details are available for this issue.';
+            }
             button.addEventListener('click', () => {
+                if (!hasRecommendationDetails) return;
                 if (panel.style.display === 'none') {
                     renderInlinePanel(panel, item);
                     panel.style.display = 'flex';
@@ -3553,7 +6067,7 @@
             }
             actions.appendChild(button);
             itemWrap.appendChild(checkName);
-            const explanationNode = buildExplanationPackNode(explanationPack, 'aivi-overlay-guidance-recommendation');
+            const explanationNode = buildGuidanceTextNode(detailText, 'aivi-overlay-guidance-recommendation');
             if (explanationNode) {
                 itemWrap.appendChild(explanationNode);
             }
@@ -3578,13 +6092,18 @@
         const filtered = allBlocks.filter((block, index) => !shouldSkipBlock(block, index));
         const blocksKey = buildBlocksKey(allBlocks);
         if (!force && blocksKey === state.lastBlocksKey) {
-            renderMeta(filtered);
+            renderOverlayDocumentHeader(allBlocks);
+            renderReviewRail(collectOverlayRecommendations(state.overlayContentData));
+            queueOverlayLayoutSync();
             return;
         }
         state.overlayContent.innerHTML = '';
+        hideBlockMenu();
         resetInlineSuppressedRecommendations();
 
-        renderMeta(filtered);
+        renderOverlayDocumentHeader(allBlocks);
+        renderReviewRail(collectOverlayRecommendations(state.overlayContentData));
+        state.lastBlocksKey = blocksKey;
         const DISABLE_SEMANTIC_HIGHLIGHT_V1 = (() => {
             try {
                 return localStorage.getItem('aivi.disable_semantic_v1') === '1'
@@ -3612,12 +6131,6 @@
                     removed: removedPassSpans
                 });
             }
-            const recommendations = collectOverlayRecommendations(state.overlayContentData);
-            const listSection = buildUnhighlightableSection(recommendations);
-            if (listSection) {
-                state.overlayContent.appendChild(listSection);
-            }
-
             // Still build index to populate state.issueMap for lookups
             buildIssueIndex(allBlocks);
 
@@ -3716,6 +6229,7 @@
             });
             restoreJumpFocus();
             restoreOverlayDraftIfAvailable();
+            queueOverlayLayoutSync();
 
             return;
         }
@@ -3730,6 +6244,7 @@
                 empty.className = 'aivi-overlay-empty';
                 empty.textContent = 'No editor blocks available.';
                 state.overlayContent.appendChild(empty);
+                queueOverlayLayoutSync();
                 return;
             }
 
@@ -3757,19 +6272,15 @@
             const panel = state.contextDoc.createElement('div');
             panel.className = 'aivi-overlay-inline-panel';
             panel.style.cssText = 'display:none;flex-direction:column;gap:10px;margin-top:10px;padding:12px;border:1px solid #d7dfec;border-radius:12px;background:#fff;box-shadow:0 8px 18px rgba(15,23,42,.06);';
+            const handle = buildBlockHandle('block-0', body);
+            if (handle) wrapper.appendChild(handle);
             wrapper.appendChild(body);
             wrapper.appendChild(panel);
             state.overlayContent.appendChild(wrapper);
 
-            if (state.overlayContentData) {
-                const recommendations = collectOverlayRecommendations(state.overlayContentData);
-                const listSection = buildUnhighlightableSection(recommendations);
-                if (listSection) {
-                    state.overlayContent.appendChild(listSection);
-                }
-            }
             restoreJumpFocus();
             restoreOverlayDraftIfAvailable();
+            queueOverlayLayoutSync();
             return;
         }
 
@@ -3799,9 +6310,12 @@
             wrapper.className = 'aivi-overlay-block';
             wrapper.setAttribute('data-block-name', block.name || '');
             wrapper.setAttribute('data-node-ref', nodeRef);
+            const renderMode = getOverlayBlockRenderMode(block);
+            wrapper.setAttribute('data-editability', renderMode);
 
             const body = state.contextDoc.createElement('div');
             body.className = 'aivi-overlay-block-body';
+            body.setAttribute('data-editability', renderMode);
             const html = buildBlockHtml(block);
             if (html) {
                 body.innerHTML = html;
@@ -3812,101 +6326,53 @@
             const items = collectItemsForTopNodeRef(nodeRef);
             applyHighlightsToBody(body, items, useV2);
             enableEditableBody(body, block, nodeRef);
+            const handle = buildBlockHandle(nodeRef, body);
+            const blockState = buildOverlayBlockState(renderMode);
 
             const panel = state.contextDoc.createElement('div');
             panel.className = 'aivi-overlay-inline-panel';
             panel.style.cssText = 'display:none;flex-direction:column;gap:10px;margin-top:10px;padding:12px;border:1px solid #d7dfec;border-radius:12px;background:#fff;box-shadow:0 8px 18px rgba(15,23,42,.06);';
 
+            if (handle) wrapper.appendChild(handle);
+            if (blockState) wrapper.appendChild(blockState);
             wrapper.appendChild(body);
             wrapper.appendChild(panel);
             state.overlayContent.appendChild(wrapper);
         });
+        queueOverlayLayoutSync();
 
-        if (state.overlayContentData) {
-            const recommendations = collectOverlayRecommendations(state.overlayContentData);
-            const listSection = buildUnhighlightableSection(recommendations);
-            if (listSection) {
-                state.overlayContent.appendChild(listSection);
-            }
-        }
         restoreJumpFocus();
         restoreOverlayDraftIfAvailable();
     }
 
-    function renderMeta(blocks) {
-        if (!state.overlayPanel || !state.contextDoc) return;
-        const meta = state.overlayPanel.querySelector('.aivi-overlay-meta');
-        if (!meta) return;
-        const blocksKey = buildBlocksKey(blocks || []);
-        const guardrail = getGuardrailState();
-        const guardrailKey = getGuardrailKey(guardrail);
-        if (blocksKey === state.lastBlocksKey && guardrailKey === state.lastGuardrailKey) {
-            const statusEl = meta.querySelector('#aivi-overlay-meta-status');
-            if (statusEl) statusEl.textContent = state.metaStatus || '';
-            return;
-        }
-        state.lastBlocksKey = blocksKey;
-        state.lastGuardrailKey = guardrailKey;
-        meta.innerHTML = '';
-        if (guardrail.message) {
-            const banner = state.contextDoc.createElement('div');
-            banner.style.cssText = 'margin:12px 16px 0;background:' + (guardrail.type === 'error' ? '#fff1ef' : '#fff9ea') + ';border:1px solid ' + (guardrail.type === 'error' ? '#f4c5bf' : '#f3dfad') + ';border-radius:10px;padding:10px 12px;font-size:12px;color:#92400e;font-family:"Manrope","Segoe UI",sans-serif;';
-            if (guardrail.type === 'error') {
-                banner.style.color = '#991b1b';
+    function buildBlockHandle(nodeRef, body) {
+        if (!state.contextDoc) return null;
+        const button = state.contextDoc.createElement('button');
+        button.type = 'button';
+        button.className = 'aivi-overlay-block-handle';
+        button.setAttribute('aria-label', 'Open block actions');
+        button.setAttribute('data-node-ref', nodeRef || '');
+        button.innerHTML = '<span></span><span></span><span></span>';
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (state.blockMenu && !state.blockMenu.hidden && state.blockMenuNodeRef === (nodeRef || '')) {
+                hideBlockMenu();
+                return;
             }
-            banner.textContent = guardrail.message;
-            meta.appendChild(banner);
-        }
-        const wrap = state.contextDoc.createElement('div');
-        wrap.className = 'aivi-overlay-meta-bar';
-        const topRow = state.contextDoc.createElement('div');
-        topRow.className = 'aivi-overlay-meta-top';
-        const label = state.contextDoc.createElement('div');
-        label.className = 'aivi-overlay-meta-label';
-        label.textContent = 'Editing Tools';
-        state.toolbarButtons = [];
-        const toolbar = buildOverlayEditToolbar();
-        const actions = state.contextDoc.createElement('div');
-        actions.className = 'aivi-overlay-meta-actions';
-        const applyBtn = state.contextDoc.createElement('button');
-        applyBtn.type = 'button';
-        applyBtn.className = 'aivi-overlay-meta-btn primary';
-        applyBtn.textContent = 'Apply Changes';
-        applyBtn.addEventListener('click', () => handleApplyChangesClick());
-        const copyBtn = state.contextDoc.createElement('button');
-        copyBtn.type = 'button';
-        copyBtn.className = 'aivi-overlay-meta-btn';
-        copyBtn.textContent = 'Copy to Clipboard';
-        copyBtn.addEventListener('click', () => copyToClipboard());
-        const status = state.contextDoc.createElement('div');
-        status.id = 'aivi-overlay-meta-status';
-        status.className = 'aivi-overlay-meta-status';
-        status.textContent = state.metaStatus || '';
-        status.style.visibility = state.metaStatus ? 'visible' : 'hidden';
-        actions.appendChild(applyBtn);
-        actions.appendChild(copyBtn);
-        topRow.appendChild(label);
-        if (toolbar) {
-            topRow.appendChild(toolbar);
-        } else {
-            const spacer = state.contextDoc.createElement('div');
-            spacer.className = 'aivi-overlay-meta-toolbar-spacer';
-            topRow.appendChild(spacer);
-        }
-        topRow.appendChild(actions);
-        wrap.appendChild(topRow);
-        wrap.appendChild(status);
-        meta.appendChild(wrap);
-        queueToolbarActiveRefresh();
+            openBlockMenuForBody(body, nodeRef);
+        });
+        return button;
     }
 
     function setMetaStatus(text) {
         state.metaStatus = text || '';
-        const el = state.overlayPanel ? state.overlayPanel.querySelector('#aivi-overlay-meta-status') : null;
+        const el = state.overlayPanel ? state.overlayPanel.querySelector('#aivi-overlay-rail-status') : null;
         if (el) {
             el.textContent = state.metaStatus;
-            el.style.visibility = state.metaStatus ? 'visible' : 'hidden';
+            el.hidden = !state.metaStatus;
         }
+        queueOverlayLayoutSync();
     }
 
     function resolveActiveEditableFromSelection() {
@@ -4048,10 +6514,8 @@
                 setMetaStatus('Command not supported for this selection');
                 return false;
             }
-            updateBlockFromEditable(active.nodeRef, active.body);
-            setOverlayDirty(true);
-            scheduleOverlayDraftSave('format_command');
-            setMetaStatus('Formatting applied');
+            markOverlayEditableChanged('format_command');
+            setMetaStatus('Formatting staged in AiVI. Click Apply Changes to send it to the WordPress editor.');
             queueToolbarActiveRefresh();
             return true;
         } catch (e) {
@@ -4072,7 +6536,7 @@
         return wp.blocks.createBlock('core/paragraph', { content: '' });
     }
 
-    function insertBlockAfterActive(name) {
+    state.insertBlockAfterActive = function (name) {
         if (!wp || !wp.data || !wp.data.dispatch) {
             setMetaStatus('WordPress block editor API unavailable');
             return;
@@ -4111,108 +6575,9 @@
         }
     }
 
-    function createToolbarButton(label, title, onClick, variantClass, activeResolver) {
-        if (!state.contextDoc) return null;
-        const button = state.contextDoc.createElement('button');
-        button.type = 'button';
-        button.className = 'aivi-overlay-toolbar-btn';
-        if (variantClass) {
-            button.classList.add(variantClass);
-        }
-        if (typeof activeResolver === 'function') {
-            button._aiviActiveResolver = activeResolver;
-        }
-        button.textContent = label;
-        button.title = title;
-        button.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onClick();
-            queueToolbarActiveRefresh();
-        });
-        state.toolbarButtons.push(button);
-        return button;
-    }
-
-    function createToolbarDivider() {
-        if (!state.contextDoc) return null;
-        const divider = state.contextDoc.createElement('span');
-        divider.className = 'aivi-overlay-toolbar-divider';
-        divider.setAttribute('aria-hidden', 'true');
-        return divider;
-    }
-
-    function buildOverlayEditToolbar() {
-        if (!state.contextDoc) return null;
-        const wrap = state.contextDoc.createElement('div');
-        wrap.className = 'aivi-overlay-toolbar';
-
-        const formatRow = state.contextDoc.createElement('div');
-        formatRow.className = 'aivi-overlay-toolbar-row aivi-overlay-toolbar-row-main';
-        const formatGroup = state.contextDoc.createElement('div');
-        formatGroup.className = 'aivi-overlay-toolbar-group aivi-overlay-toolbar-group-main';
-
-        const insertRow = state.contextDoc.createElement('div');
-        insertRow.className = 'aivi-overlay-toolbar-row aivi-overlay-toolbar-row-insert';
-        const insertLabel = state.contextDoc.createElement('span');
-        insertLabel.className = 'aivi-overlay-toolbar-insert-label';
-        insertLabel.textContent = 'Quick Insert';
-        const insertGroup = state.contextDoc.createElement('div');
-        insertGroup.className = 'aivi-overlay-toolbar-group aivi-overlay-toolbar-group-insert';
-
-        const linkButton = createToolbarButton(
-            'Link',
-            'Insert link',
-            () => {
-                const view = (state.contextDoc && state.contextDoc.defaultView) ? state.contextDoc.defaultView : window;
-                const input = view.prompt('Enter link URL');
-                if (!input) return;
-                runOverlayFormatCommand('createLink', input.trim());
-            },
-            '',
-            (snapshot) => !!snapshot.isLink
-        );
-
-        [
-            createToolbarButton('B', 'Bold', () => runOverlayFormatCommand('bold'), '', (snapshot) => !!snapshot.isBold),
-            createToolbarButton('I', 'Italic', () => runOverlayFormatCommand('italic'), '', (snapshot) => !!snapshot.isItalic),
-            createToolbarButton('H2', 'Heading 2', () => runOverlayFormatCommand('formatBlock', '<h2>'), '', (snapshot) => !!snapshot.isH2),
-            createToolbarButton('H3', 'Heading 3', () => runOverlayFormatCommand('formatBlock', '<h3>'), '', (snapshot) => !!snapshot.isH3),
-            createToolbarButton('•', 'Bulleted list', () => runOverlayFormatCommand('insertUnorderedList'), '', (snapshot) => !!snapshot.isUnorderedList),
-            createToolbarButton('1.', 'Numbered list', () => runOverlayFormatCommand('insertOrderedList'), '', (snapshot) => !!snapshot.isOrderedList),
-            linkButton,
-            createToolbarButton('Quote', 'Block quote', () => runOverlayFormatCommand('formatBlock', '<blockquote>'), '', (snapshot) => !!snapshot.isQuote)
-        ].forEach((btn) => {
-            if (btn) formatGroup.appendChild(btn);
-        });
-        const divider = createToolbarDivider();
-        if (divider) formatGroup.appendChild(divider);
-        [
-            createToolbarButton('Undo', 'Undo', () => runOverlayFormatCommand('undo'), 'is-soft'),
-            createToolbarButton('Redo', 'Redo', () => runOverlayFormatCommand('redo'), 'is-soft')
-        ].forEach((btn) => {
-            if (btn) formatGroup.appendChild(btn);
-        });
-
-        [
-            createToolbarButton('+ Paragraph', 'Insert paragraph below active block', () => insertBlockAfterActive('core/paragraph'), 'is-soft'),
-            createToolbarButton('+ List', 'Insert list below active block', () => insertBlockAfterActive('core/list'), 'is-soft'),
-            createToolbarButton('+ Heading', 'Insert heading below active block', () => insertBlockAfterActive('core/heading'), 'is-soft')
-        ].forEach((btn) => {
-            if (btn) insertGroup.appendChild(btn);
-        });
-
-        formatRow.appendChild(formatGroup);
-        insertRow.appendChild(insertLabel);
-        insertRow.appendChild(insertGroup);
-        wrap.appendChild(formatRow);
-        wrap.appendChild(insertRow);
-        return wrap;
-    }
-
     function confirmApplyOverlayOverwrite() {
         const title = 'Apply overlay edits to WordPress editor?';
-        const message = 'This will replace the current WordPress editor content with what you edited in the overlay. You can still undo after applying.';
+        const message = 'Your article edits stay inside AiVI until you apply them. This sends those edits to the WordPress editor state. Use Update or Publish afterward to make them live. You can still undo after applying.';
         if (!state.contextDoc || !state.overlayRoot) {
             return Promise.resolve(false);
         }
@@ -4260,7 +6625,7 @@
 
     function confirmOverlayCloseDiscard() {
         const title = 'Close editor with unsaved overlay edits?';
-        const message = "Changes you've made may be lost if you close now. Consider Apply Changes first.";
+        const message = "Your article edits stay inside AiVI until you click Apply Changes. If you close now, those unapplied edits may be lost.";
         if (!state.contextDoc || !state.overlayRoot) {
             return Promise.resolve(false);
         }
@@ -4320,13 +6685,22 @@
         if (sync.updated > 0) {
             setOverlayDirty(false);
             clearOverlayDraft();
-            setMetaStatus(`Applied ${sync.updated} block${sync.updated === 1 ? '' : 's'} to WordPress editor`);
+            const noticeMessage = sync.failed > 0
+                ? `Applied ${sync.updated} block${sync.updated === 1 ? '' : 's'} to the WordPress editor. ${sync.failed} block${sync.failed === 1 ? '' : 's'} stayed untouched. Review the changed blocks, then click Update or Publish.`
+                : `Applied ${sync.updated} block${sync.updated === 1 ? '' : 's'} to the WordPress editor. Review the changed blocks, then click Update or Publish.`;
+            if (sync.failed === 0) {
+                closeOverlayInternal();
+                revealAppliedChangesInEditor(sync.updatedClientIds);
+                showEditorNotice(noticeMessage, 'success');
+                return;
+            }
+            setMetaStatus(`Applied ${sync.updated} block${sync.updated === 1 ? '' : 's'} to the WordPress editor. ${sync.failed} block${sync.failed === 1 ? '' : 's'} stayed untouched.`);
             return;
         }
         if (sync.failed > 0) {
             setOverlayDirty(true);
             scheduleOverlayDraftSave('apply_failed');
-            setMetaStatus(`Apply completed with ${sync.failed} block${sync.failed === 1 ? '' : 's'} skipped`);
+            setMetaStatus(`Apply completed with ${sync.failed} block${sync.failed === 1 ? '' : 's'} skipped. Rich/read-only blocks stay untouched.`);
             return;
         }
         if (sync.unchanged > 0) {
@@ -4436,10 +6810,6 @@
         return `${index}:${block?.name || 'block'}:${block?.clientId || ''}:${textValues.length}`;
     }
 
-    function getGuardrailKey(guardrail) {
-        return `${guardrail.blockAi ? 'blocked' : 'open'}:${guardrail.type || ''}:${guardrail.message || ''}`;
-    }
-
     function htmlToText(html) {
         if (!html) return '';
         const tmp = state.contextDoc ? state.contextDoc.createElement('div') : document.createElement('div');
@@ -4455,129 +6825,203 @@
         style.id = 'aivi-overlay-style';
         style.type = 'text/css';
         style.textContent = `
-            .aivi-overlay-root{position:absolute;inset:0;pointer-events:none;z-index:999999;}
+            .aivi-overlay-root{position:fixed;inset:0;pointer-events:none;z-index:999999;}
             .aivi-overlay-root[data-open="true"]{pointer-events:auto;}
             .aivi-overlay-backdrop{
-                position:absolute;inset:0;display:none;align-items:stretch;justify-content:center;padding:16px;box-sizing:border-box;
+                position:fixed;inset:0;display:none;align-items:flex-start;justify-content:center;padding:14px;box-sizing:border-box;
                 background:rgba(15,23,42,.32);
             }
             .aivi-overlay-root[data-open="true"] .aivi-overlay-backdrop{display:flex;}
             .aivi-overlay-panel{
-                background:#fffefb;border-radius:16px;box-shadow:0 24px 56px rgba(15,23,42,.22);width:min(940px,100%);max-height:100%;
-                display:flex;flex-direction:column;overflow:hidden;border:1px solid #d7deea;
+                background:#fff;border-radius:24px;box-shadow:0 18px 44px rgba(23,26,33,.16);width:min(1540px,calc(100vw - 20px));max-height:calc(100vh - 28px);
+                overflow:hidden;border:1px solid rgba(23,26,33,.08);
             }
-            .aivi-overlay-header{
-                display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #d7deea;
-                background:linear-gradient(180deg,#fefdfa 0%,#f7faff 100%);
-                font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;
-            }
-            .aivi-overlay-title{
-                font-size:21px;font-weight:700;line-height:1.1;color:#0f172a;
-                font-family:"Newsreader","Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;
-            }
-            .aivi-overlay-close{
-                border:1px solid #ccd7eb;background:#fff;color:#102a57;padding:7px 13px;border-radius:10px;
-                font-size:12px;font-weight:700;cursor:pointer;
-                font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;
-            }
-            .aivi-overlay-close:hover{background:#f6f9ff;}
             .aivi-overlay-content{
-                padding:16px;overflow:auto;display:flex;flex-direction:column;gap:10px;
-                font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;color:#15233a;background:#f7faff;
+                height:100%;min-height:0;padding:16px;overflow:hidden;
+                font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;color:#171a21;
+                background:linear-gradient(180deg,rgba(37,99,235,.05),transparent 24%), #f5f6f8;
             }
-            .aivi-overlay-content h1,.aivi-overlay-content h2,.aivi-overlay-content h3{
-                font-family:"Newsreader","Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;
-                color:#13233d;line-height:1.2;
+            .aivi-overlay-shell{
+                display:grid;grid-template-columns:392px minmax(0,1fr);gap:16px;align-items:stretch;height:100%;min-height:0;
             }
-            .aivi-overlay-content p,.aivi-overlay-content li{font-size:15px;line-height:1.75;color:#1b2940;}
+            .aivi-overlay-review-rail{
+                padding:16px;border:1px solid rgba(23,26,33,.08);border-radius:24px;background:#fff;
+                box-shadow:0 18px 44px rgba(23,26,33,.10);display:flex;flex-direction:column;gap:14px;height:100%;min-height:0;overflow:hidden;
+            }
+            .aivi-overlay-rail-head{display:flex;flex-direction:column;gap:10px;}
+            .aivi-overlay-review-rail-title{
+                font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#69707d;
+            }
+            .aivi-overlay-rail-actions{display:flex;gap:8px;flex-wrap:wrap;}
+            .aivi-overlay-rail-note{font-size:11px;line-height:1.5;color:#69707d;}
+            .aivi-overlay-rail-btn{
+                border:1px solid #dee3ea;background:#fff;color:#171a21;padding:9px 12px;border-radius:999px;font-size:12px;font-weight:700;line-height:1.2;cursor:pointer;
+                font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;
+            }
+            .aivi-overlay-rail-btn:hover{background:#f5f8fd;}
+            .aivi-overlay-rail-btn.primary{background:#171a21;border-color:#171a21;color:#fff;}
+            .aivi-overlay-rail-btn.primary:hover{background:#222835;border-color:#222835;}
+            .aivi-overlay-rail-btn.subtle{color:#69707d;}
+            .aivi-overlay-rail-banner,.aivi-overlay-rail-status{border-radius:14px;padding:11px 12px;font-size:12px;line-height:1.5;}
+            .aivi-overlay-rail-banner{border:1px solid #f3dfad;background:#fff9ea;color:#92400e;}
+            .aivi-overlay-rail-banner.is-error{border-color:#f4c5bf;background:#fff1ef;color:#991b1b;}
+            .aivi-overlay-rail-status{border:1px solid #dee3ea;background:#fbfbfc;color:#4b5563;}
+            .aivi-overlay-review-summary,.aivi-overlay-review-empty,.aivi-overlay-review-preview-item{
+                border:1px solid #dee3ea;border-radius:14px;background:#fff;
+            }
+            .aivi-overlay-review-summary,.aivi-overlay-review-empty{padding:14px;}
+            .aivi-overlay-review-count{font-size:15px;font-weight:700;color:#13233d;}
+            .aivi-overlay-review-preview-list{display:flex;flex-direction:column;gap:10px;}
+            .aivi-overlay-review-viewport{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:auto;padding:0 10px 18px 0;margin-right:-4px;scrollbar-width:thin;scrollbar-color:#b9c2d0 transparent;scroll-padding-bottom:18px;}
+            .aivi-overlay-review-list{display:flex;flex-direction:column;gap:12px;padding-bottom:6px;}
+            .aivi-overlay-review-viewport::-webkit-scrollbar,.aivi-overlay-stage::-webkit-scrollbar{width:10px;}
+            .aivi-overlay-review-viewport::-webkit-scrollbar-thumb,.aivi-overlay-stage::-webkit-scrollbar-thumb{background:#b9c2d0;border-radius:999px;border:2px solid transparent;background-clip:padding-box;}
+            .aivi-overlay-review-viewport::-webkit-scrollbar-track,.aivi-overlay-stage::-webkit-scrollbar-track{background:transparent;}
+            .aivi-overlay-review-scroll-controls{display:flex;justify-content:flex-end;gap:8px;padding:2px 4px 0 0;}
+            .aivi-overlay-review-scroll-btn{width:34px;height:34px;border:1px solid #dee3ea;border-radius:999px;background:#fff;color:#171a21;font-size:15px;font-weight:800;line-height:1;cursor:pointer;box-shadow:0 8px 18px rgba(23,26,33,.08);}
+            .aivi-overlay-review-scroll-btn:hover{background:#f5f8fd;}
+            .aivi-overlay-review-scroll-btn[disabled]{opacity:.4;cursor:default;box-shadow:none;}
+            .aivi-overlay-review-preview-item,.aivi-overlay-review-item{padding:12px 14px;border:1px solid #dee3ea;border-radius:18px;background:#fbfbfc;}
+            .aivi-overlay-review-item[data-verdict="fail"]{border-color:#f0c6c6;box-shadow:inset 3px 0 0 #d14343;}
+            .aivi-overlay-review-item[data-verdict="partial"]{border-color:#efd6a4;box-shadow:inset 3px 0 0 #b56a07;}
+            .aivi-overlay-review-preview-name,.aivi-overlay-review-item-name{font-size:14px;font-weight:700;line-height:1.35;color:#171a21;flex:1 1 auto;min-width:0;}
+            .aivi-overlay-review-item-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+            .aivi-overlay-review-impact-pill{display:inline-flex;align-items:center;justify-content:center;padding:4px 9px;border-radius:999px;border:1px solid #dee3ea;background:#fff;color:#4b5563;font-size:11px;font-weight:700;line-height:1.1;white-space:nowrap;flex:0 0 auto;}
+            .aivi-overlay-review-impact-pill[data-tier="high"]{background:#fff1ef;border-color:#f3c2c7;color:#7c2532;}
+            .aivi-overlay-review-impact-pill[data-tier="recommended"]{background:#fff6dd;border-color:#e2b86a;color:#8a4b00;}
+            .aivi-overlay-review-impact-pill[data-tier="polish"]{background:#edfdf3;border-color:#bde7c9;color:#0f6b49;}
+            .aivi-overlay-review-item-summary{margin-top:8px;font-size:13px;line-height:1.6;color:#69707d;}
+            .aivi-overlay-review-item-actions{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;}
+            .aivi-overlay-review-btn{
+                border:1px solid #dee3ea;background:#fff;color:#171a21;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:700;line-height:1.2;cursor:pointer;
+                font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;
+            }
+            .aivi-overlay-review-btn:hover{background:#f5f8fd;}
+            .aivi-overlay-review-btn[disabled]{opacity:.5;cursor:not-allowed;}
+                .aivi-overlay-review-details{margin-top:12px;display:flex;flex-direction:column;gap:10px;}
+                .aivi-overlay-review-details[hidden]{display:none !important;}
+                .aivi-overlay-review-schema-assist{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid #d9e3f1;border-radius:14px;background:#ffffff;}
+                .aivi-overlay-review-schema-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+                .aivi-overlay-review-schema-title-wrap{display:flex;flex-direction:column;gap:4px;min-width:0;}
+                .aivi-overlay-review-schema-title{font-size:13px;font-weight:800;line-height:1.35;color:#153670;}
+                .aivi-overlay-review-schema-badge{border-radius:999px;padding:6px 10px;background:#f5f8fd;border:1px solid #cfdbef;color:#153670;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;}
+                .aivi-overlay-review-schema-badge[data-mode="copy_only"]{background:#fff7ea;border-color:#efd6a4;color:#8a4b00;}
+                .aivi-overlay-review-schema-badge[data-mode="unavailable"]{background:#f3f4f6;border-color:#dee3ea;color:#556070;}
+                .aivi-overlay-review-schema-note{font-size:12px;line-height:1.6;color:#4b607d;}
+                .aivi-overlay-review-schema-policy{font-size:11px;line-height:1.6;color:#51647d;border:1px solid #e0e7f2;border-radius:12px;background:#f8fbff;padding:8px 10px;}
+                .aivi-overlay-review-schema-actions{display:flex;gap:8px;flex-wrap:wrap;}
+                .aivi-overlay-review-schema-preview{width:100%;min-height:148px;font-size:11px;font-family:"IBM Plex Mono","SFMono-Regular",Consolas,monospace;padding:10px;border-radius:12px;border:1px solid #cfdbef;background:#fbfdff;color:#15233a;resize:vertical;}
+                .aivi-overlay-review-schema-status{font-size:11px;line-height:1.5;color:#4b607d;}
+                .aivi-overlay-review-schema-status:not(:empty){border:1px solid #dee3ea;border-radius:12px;background:#fbfbfc;padding:8px 10px;}
+                .aivi-overlay-review-schema-status[data-state="ready"]{border-color:#cfdbef;background:#f6faff;color:#153670;}
+                .aivi-overlay-review-schema-status[data-state="success"]{border-color:#c7ead7;background:#f1fbf5;color:#0f6b49;}
+                .aivi-overlay-review-schema-status[data-state="blocked"]{border-color:#efd6a4;background:#fff8ea;color:#8a4b00;}
+                .aivi-overlay-review-schema-status[data-state="error"]{border-color:#f0c6c6;background:#fff2f2;color:#9d2b2b;}
+                .aivi-overlay-review-metadata{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid #d9e3f1;border-radius:14px;background:#ffffff;}
+                .aivi-overlay-review-metadata-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+                .aivi-overlay-review-metadata-title{font-size:13px;font-weight:800;line-height:1.35;color:#153670;}
+                .aivi-overlay-review-metadata-badge{border-radius:999px;padding:6px 10px;background:#f5f8fd;border:1px solid #cfdbef;color:#153670;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;}
+                .aivi-overlay-review-metadata-note,.aivi-overlay-review-metadata-status{font-size:12px;line-height:1.6;color:#4b607d;}
+                .aivi-overlay-review-metadata-form{display:flex;flex-direction:column;gap:10px;}
+                .aivi-overlay-review-metadata-field{display:flex;flex-direction:column;gap:5px;}
+                .aivi-overlay-review-metadata-label{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#5b6980;}
+                .aivi-overlay-review-metadata-input{width:100%;border:1px solid #cfdbef;border-radius:12px;background:#fbfdff;color:#15233a;padding:10px 12px;font-size:13px;line-height:1.5;box-sizing:border-box;font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;}
+                .aivi-overlay-review-metadata-input:focus{outline:none;border-color:#9fb7df;box-shadow:0 0 0 3px rgba(37,99,235,.12);}
+                .aivi-overlay-review-metadata-input.is-description{resize:vertical;min-height:96px;}
+                .aivi-overlay-review-metadata-actions{display:flex;gap:8px;flex-wrap:wrap;}
+                .aivi-overlay-review-item-snippet{
+                    font-size:12px;line-height:1.55;color:#69707d;border:1px solid #dee3ea;border-radius:12px;background:#fff;padding:10px 11px;
+                }
+            .aivi-overlay-review-empty{font-size:13px;line-height:1.55;color:#5e6f86;}
+            .aivi-overlay-stage{min-width:0;min-height:0;display:flex;flex-direction:column;gap:18px;padding:4px 4px 8px 24px;border-left:1px solid #dee3ea;overflow:auto;scrollbar-width:thin;scrollbar-color:#b9c2d0 transparent;}
+            .aivi-overlay-doc-header{width:min(100%,860px);margin:0 auto;padding:10px 0 0;}
+            .aivi-overlay-doc-title{
+                margin:0;font-size:clamp(38px,4.2vw,60px);font-weight:700;line-height:1.04;color:#171a21;letter-spacing:-.03em;
+                font-family:"Newsreader",Georgia,serif;
+            }
+            .aivi-overlay-canvas{display:flex;flex-direction:column;gap:8px;width:min(100%,860px);margin:0 auto;padding:0 0 12px;min-width:0;}
+            .aivi-overlay-canvas h1,.aivi-overlay-canvas h2,.aivi-overlay-canvas h3{
+                font-family:"Newsreader",Georgia,serif;
+                color:#171a21;line-height:1.12;
+            }
+            .aivi-overlay-canvas p,.aivi-overlay-canvas li{font-size:20px;line-height:1.72;color:#2a303b;}
             .aivi-overlay-block{
-                border:1px solid transparent;border-radius:12px;padding:4px 6px;background:transparent;
-                box-shadow:none;transition:background .16s ease,border-color .16s ease;
+                border:0;border-radius:0;padding:0 28px 0 20px;background:transparent;
+                box-shadow:none;transition:background .16s ease;position:relative;margin:0 0 18px;
             }
-            .aivi-overlay-block:hover{background:#f6faff;border-color:#dde7f4;}
-            .aivi-overlay-block:focus-within{background:#f5f9ff;border-color:#d2dff1;}
-            .aivi-overlay-block-nested{margin-left:10px;border-style:solid;border-color:transparent;}
+            .aivi-overlay-block[data-editability="readonly"]{padding-right:96px;}
+            .aivi-overlay-block::before{
+                content:"";position:absolute;left:0;top:10px;width:6px;height:calc(100% - 18px);border-radius:999px;background:#2563eb;opacity:0;transition:opacity .18s ease;
+            }
+            .aivi-overlay-block-nested{margin-left:10px;}
             .aivi-overlay-block-body{
-                font-size:15px;line-height:1.75;color:#1b2940;padding:7px 9px;border-radius:10px;border:1px solid transparent;
-                background:transparent;transition:border-color .16s ease,background .16s ease,box-shadow .16s ease;
+                font-size:18px;line-height:1.72;color:#1b2940;padding:0;border-radius:0;border:1px solid transparent;
+                background:transparent;transition:border-color .16s ease,background .16s ease,box-shadow .16s ease;outline:none;
             }
-            .aivi-overlay-block:hover .aivi-overlay-block-body{border-color:#e2eaf6;background:#fbfdff;}
-            .aivi-overlay-block:focus-within .aivi-overlay-block-body{border-color:#cfdcf0;background:#f9fbff;}
+            .aivi-overlay-block-body[data-editability="readonly"]{border-color:rgba(23,26,33,.06);}
+            .aivi-overlay-block-state{
+                position:absolute;top:8px;right:42px;display:inline-flex;align-items:center;justify-content:center;
+                padding:4px 9px;border-radius:999px;border:1px solid rgba(23,26,33,.08);background:rgba(255,255,255,.95);
+                color:#5e6f86;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;z-index:2;
+            }
+            .aivi-overlay-block-handle{
+                position:absolute;top:6px;right:8px;width:28px;height:28px;border:1px solid #d4deef;border-radius:999px;background:rgba(255,255,255,.96);
+                box-shadow:0 8px 18px rgba(15,23,42,.08);display:inline-flex;align-items:center;justify-content:center;gap:2px;opacity:0;pointer-events:none;
+                transition:opacity .14s ease,transform .14s ease,background .14s ease;transform:translateY(2px);z-index:3;
+            }
+            .aivi-overlay-block:hover .aivi-overlay-block-handle,.aivi-overlay-block:focus-within .aivi-overlay-block-handle,.aivi-overlay-block-editing .aivi-overlay-block-handle{
+                opacity:1;pointer-events:auto;transform:translateY(0);
+            }
+            .aivi-overlay-block:hover::before,.aivi-overlay-block:focus-within::before,.aivi-overlay-block-editing::before{opacity:1;}
+            .aivi-overlay-block-handle span{width:4px;height:4px;border-radius:999px;background:#5e6f86;display:inline-block;}
+            .aivi-overlay-block-handle:hover{background:#f6f9ff;}
+            .aivi-overlay-block-menu{
+                position:fixed;width:320px;padding:10px;border:1px solid #d7deea;border-radius:18px;background:rgba(255,255,255,.99);
+                box-shadow:0 24px 48px rgba(15,23,42,.18);display:flex;flex-direction:column;gap:6px;overflow:auto;z-index:1000001;
+            }
+            .aivi-overlay-block-menu-header{padding:8px 10px 10px;border-bottom:1px solid rgba(23,26,33,.08);margin-bottom:2px;}
+            .aivi-overlay-block-menu-kicker{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#69707d;font-weight:800;}
+            .aivi-overlay-block-menu-title{display:block;margin-top:4px;font-size:15px;font-weight:800;color:#171a21;letter-spacing:-.02em;}
+            .aivi-overlay-block-menu-section{display:flex;flex-direction:column;gap:6px;}
+            .aivi-overlay-block-menu-toggle{border-radius:14px;}
+            .aivi-overlay-block-menu-section.open .aivi-overlay-block-menu-toggle{background:#f5f8fd;}
+            .aivi-overlay-block-menu-btn{
+                width:100%;border:0;background:transparent;color:#20252e;padding:11px 12px;border-radius:12px;font-size:14px;font-weight:600;line-height:1.2;cursor:pointer;transition:all .16s ease;
+                display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;
+            }
+            .aivi-overlay-block-menu-btn:hover{background:#f5f8fd;}
+            .aivi-overlay-block-menu-item-body{display:flex;flex-direction:column;gap:3px;}
+            .aivi-overlay-block-menu-item-label{font-weight:800;font-size:14px;color:#171a21;}
+            .aivi-overlay-block-menu-item-copy{color:#69707d;font-size:12px;line-height:1.45;}
+            .aivi-overlay-block-menu-chevron{color:#6b7280;font-size:14px;transition:transform .16s ease;}
+            .aivi-overlay-block-menu-section.open .aivi-overlay-block-menu-chevron{transform:rotate(90deg);}
+            .aivi-overlay-block-menu-submenu{display:none;grid-template-columns:1fr 1fr;gap:8px;padding:0 2px 6px;}
+            .aivi-overlay-block-menu-section.open .aivi-overlay-block-menu-submenu{display:grid;}
+            .aivi-overlay-block-menu-action{border:1px solid rgba(23,26,33,.08);border-radius:12px;background:#fbfbfc;color:#171a21;padding:10px 11px;font-size:12px;font-weight:700;line-height:1.35;text-align:left;min-height:56px;cursor:pointer;}
+            .aivi-overlay-block-menu-action:hover{background:#eef4ff;border-color:#cfe0ff;}
+            .aivi-overlay-block-menu-action.wide{grid-column:1 / -1;min-height:0;}
             .aivi-overlay-block-body img{max-width:100%;border-radius:10px;display:block;margin-bottom:10px;}
+            .aivi-overlay-block-body figure{margin:0 0 12px;}
             .aivi-overlay-block-body figcaption{font-size:12px;color:#5e6f86;}
+            .aivi-overlay-block-body table{width:100%;border-collapse:collapse;margin:6px 0 14px;font-size:16px;line-height:1.55;background:#fff;}
+            .aivi-overlay-block-body th,.aivi-overlay-block-body td{border:1px solid #d9e3f1;padding:10px 12px;vertical-align:top;}
+            .aivi-overlay-block-body th{background:#f6f9ff;color:#13233d;font-weight:800;}
+            .aivi-overlay-block-body iframe,.aivi-overlay-block-body video{width:100%;max-width:100%;border:0;border-radius:12px;display:block;background:#0f172a;margin:4px 0 12px;}
+            .aivi-overlay-block-body audio{width:100%;display:block;margin:4px 0 12px;}
+            .aivi-overlay-button-group,.aivi-overlay-button-row{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0 12px;}
+            .aivi-overlay-button-fallback{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:10px 16px;border-radius:999px;background:#171a21;color:#fff;text-decoration:none;font-size:13px;font-weight:800;line-height:1.2;}
+            .aivi-overlay-file-fallback{margin:6px 0 12px;}
+            .aivi-overlay-file-fallback a,.aivi-overlay-embed-fallback a{color:#1d4ed8;font-weight:700;word-break:break-word;}
+            .aivi-overlay-gallery-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:6px 0 12px;}
+            .aivi-overlay-gallery-grid figure{margin:0;}
+            .aivi-overlay-separator{border:0;border-top:1px solid #d9e3f1;margin:10px 0 16px;}
+            .aivi-overlay-spacer{width:100%;display:block;}
+            .aivi-overlay-verse{white-space:pre-wrap;}
             .aivi-overlay-block-editing{
-                background:#f4f8ff;border-color:#d0def1;
+                background:transparent;
             }
             .aivi-overlay-block-editing .aivi-overlay-block-body{
-                border-color:#bfd1ea;background:#ffffff;box-shadow:0 2px 8px rgba(15,35,74,.08);
-            }
-            .aivi-overlay-meta-bar{
-                padding:9px 14px;border-bottom:1px solid #d7deea;background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%);
-                display:flex;flex-direction:column;gap:8px;
-            }
-            .aivi-overlay-meta-top{
-                display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;
-            }
-            .aivi-overlay-meta-label{
-                font-size:11px;color:#536787;text-transform:uppercase;letter-spacing:.08em;font-weight:800;
-                font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;
-            }
-            .aivi-overlay-meta-toolbar-spacer{min-height:1px;}
-            .aivi-overlay-meta-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;}
-            .aivi-overlay-meta-btn{
-                border:1px solid #c8d6ee;background:#fff;color:#13346f;padding:8px 13px;border-radius:11px;
-                font-size:12px;font-weight:700;line-height:1.2;cursor:pointer;
-                font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;
-            }
-            .aivi-overlay-meta-btn:hover{background:#f6f9ff;}
-            .aivi-overlay-meta-btn.primary{
-                border-color:#1f4fa3;background:linear-gradient(180deg,#2359b3 0%,#1c468c 100%);color:#fff;
-                box-shadow:0 8px 16px rgba(28,70,140,.24);
-            }
-            .aivi-overlay-meta-btn.primary:hover{background:linear-gradient(180deg,#1f4fa3 0%,#163975 100%);}
-            .aivi-overlay-meta-status{
-                min-height:16px;padding-left:2px;font-size:12px;color:#5e6f86;font-weight:600;
-                font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;
-            }
-            .aivi-overlay-toolbar{display:flex;flex-direction:column;gap:5px;min-width:0;justify-self:stretch;}
-            .aivi-overlay-toolbar-row{display:flex;align-items:center;justify-content:center;}
-            .aivi-overlay-toolbar-row-insert{justify-content:flex-start;gap:7px;}
-            .aivi-overlay-toolbar-group{display:flex;gap:5px;align-items:center;flex-wrap:wrap;}
-            .aivi-overlay-toolbar-group-main{
-                justify-content:center;padding:5px 7px;border:1px solid #cedaf0;border-radius:999px;background:#fff;
-                box-shadow:0 2px 7px rgba(21,45,89,.06);
-            }
-            .aivi-overlay-toolbar-group-insert{gap:6px;}
-            .aivi-overlay-toolbar-divider{
-                width:1px;height:20px;display:inline-block;background:#d7e1ef;margin:0 2px;
-            }
-            .aivi-overlay-toolbar-insert-label{
-                font-size:11px;color:#5e6f86;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
-                font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;
-            }
-            .aivi-overlay-toolbar-btn{
-                border:1px solid #c8d6ee;background:#f4f8ff;color:#133f7b;padding:5px 9px;border-radius:9px;
-                font-size:12px;font-weight:700;line-height:1.2;cursor:pointer;min-width:32px;
-                font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;
-                transition:all .16s ease;
-            }
-            .aivi-overlay-toolbar-btn:hover{
-                background:#e9f1ff;border-color:#9db4dd;color:#0d346b;
-                box-shadow:0 4px 10px rgba(16,42,87,.14);transform:translateY(-1px);
-            }
-            .aivi-overlay-toolbar-btn:focus-visible{
-                outline:none;border-color:#1f4fa3;box-shadow:0 0 0 2px rgba(31,79,163,.22);
-            }
-            .aivi-overlay-toolbar-btn.is-active{
-                border-color:#1f4fa3;background:linear-gradient(180deg,#2b63bd 0%,#1f4fa3 100%);color:#fff;
-                box-shadow:0 6px 14px rgba(24,63,126,.28);
-            }
-            .aivi-overlay-toolbar-btn.is-active:hover{
-                border-color:#163975;background:linear-gradient(180deg,#2557ac 0%,#163975 100%);color:#fff;
-            }
-            .aivi-overlay-toolbar-btn.is-soft{background:#fff;color:#17345f;border-color:#cfdbef;}
-            .aivi-overlay-toolbar-btn.is-soft.is-active{
-                border-color:#1f4fa3;background:#eaf2ff;color:#143f82;box-shadow:0 4px 10px rgba(16,42,87,.16);
+                border-color:transparent;background:transparent;box-shadow:none;
             }
             .aivi-overlay-inline-panel{
                 display:flex;flex-direction:column;gap:10px;margin-top:10px;padding:12px;
@@ -4667,6 +7111,11 @@
                 70%{box-shadow:0 0 0 14px rgba(34,113,177,0);}
                 100%{box-shadow:0 0 0 0 rgba(34,113,177,0);}
             }
+            @keyframes aiviEditorApplyPulse{
+                0%{box-shadow:0 0 0 0 rgba(34,113,177,.24);}
+                50%{box-shadow:0 0 0 10px rgba(34,113,177,.10);}
+                100%{box-shadow:0 0 0 0 rgba(34,113,177,0);}
+            }
             .aivi-overlay-block-jump-focus{
                 position:relative;border-radius:12px;background:linear-gradient(180deg,rgba(222,235,255,.66) 0%,rgba(222,235,255,.20) 100%);
                 box-shadow:inset 0 0 0 2px rgba(34,113,177,.62),0 10px 24px rgba(16,42,87,.16);transition:box-shadow .25s ease,background .25s ease;
@@ -4676,11 +7125,18 @@
             }
             .aivi-overlay-block-jump-flash{animation:aiviOverlayJumpPulse 1.2s ease-out 1;}
             .aivi-overlay-block-focus{outline:2px solid #2271b1;outline-offset:2px;border-radius:10px;}
+            .aivi-editor-apply-flash{
+                position:relative;border-radius:12px;
+                box-shadow:0 0 0 2px rgba(34,113,177,.58),0 14px 34px rgba(34,113,177,.14);
+                animation:aiviEditorApplyPulse 1.8s ease-out 1;
+            }
             @media (max-width: 980px){
-                .aivi-overlay-meta-top{grid-template-columns:1fr;}
-                .aivi-overlay-meta-actions{justify-content:flex-start;}
-                .aivi-overlay-toolbar-row{justify-content:flex-start;}
-                .aivi-overlay-toolbar-group-main{border-radius:12px;}
+                .aivi-overlay-panel{width:calc(100vw - 12px);max-height:calc(100vh - 12px);}
+                .aivi-overlay-content{padding:10px;}
+                .aivi-overlay-shell{grid-template-columns:1fr;height:auto;}
+                .aivi-overlay-review-rail{height:auto;max-height:none;overflow:visible;}
+                .aivi-overlay-review-viewport{max-height:40vh;}
+                .aivi-overlay-stage{padding-left:0;border-left:0;overflow:visible;}
             }
         `;
         doc.head.appendChild(style);
@@ -4704,9 +7160,7 @@
         state.isStale = true;
         if (state.open) {
             hideInlinePanel();
-            const blocks = getBlocks();
-            const filtered = blocks.filter((block, index) => !shouldSkipBlock(block, index));
-            renderMeta(filtered);
+            renderReviewRail(collectOverlayRecommendations(state.overlayContentData));
             setMetaStatus('Analysis results stale — please re-run analysis');
         }
     });

@@ -1,11 +1,11 @@
 <?php
 /**
- * Plugin Name: AiVI — AI Visibility Inspector
- * Description: AI-gated content analysis product that measures AEO/GEO visibility.
- * Version: 1.0.8
+ * Plugin Name: AiVI - AI Visibility Inspector
+ * Description: Analyze content in WordPress, review structured AiVI findings, and improve AI search readiness.
+ * Version: 1.0.16
  * Author: AiVI Team
  * License: GPLv2 or later
- * Text Domain: aivi
+ * Text Domain: ai-visibility-inspector
  *
  * @package AiVI
  */
@@ -14,10 +14,16 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// Prevent a second copy of the plugin from fatally redeclaring bootstrap symbols
+// when WordPress installs it into a different folder during an upload.
+if (defined('AIVI_VERSION') || class_exists('\AiVI\Plugin', false) || function_exists('aivi_run')) {
+    return;
+}
+
 /**
  * Define plugin constants
  */
-define('AIVI_VERSION', '1.0.8');
+define('AIVI_VERSION', '1.0.16');
 define('AIVI_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AIVI_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('AIVI_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -39,25 +45,29 @@ register_deactivation_hook(__FILE__, 'aivi_deactivate');
 /**
  * Plugin activation
  */
-function aivi_activate()
-{
-    $opt = get_option('aivi_core', false);
-    if (false === $opt) {
-        $site_id = wp_generate_password(24, false, false);
-        $store = array(
-            'site_id' => $site_id,
-            'version' => AIVI_VERSION,
-        );
-        add_option('aivi_core', $store, '', 'no');
+if (!function_exists('aivi_activate')) {
+    function aivi_activate()
+    {
+        $opt = get_option('aivi_core', false);
+        if (false === $opt) {
+            $site_id = wp_generate_password(24, false, false);
+            $store = array(
+                'site_id' => $site_id,
+                'version' => AIVI_VERSION,
+            );
+            add_option('aivi_core', $store, '', 'no');
+        }
     }
 }
 
 /**
  * Plugin deactivation
  */
-function aivi_deactivate()
-{
-    // Clean up if needed
+if (!function_exists('aivi_deactivate')) {
+    function aivi_deactivate()
+    {
+        // Clean up if needed
+    }
 }
 
 /**
@@ -65,13 +75,18 @@ function aivi_deactivate()
  */
 add_action('init', 'aivi_ensure_options');
 
-function aivi_ensure_options()
-{
-    $opt = get_option('aivi_core', false);
-    if (false === $opt) {
-        $site_id = wp_generate_password(24, false, false);
-        $store = array('site_id' => $site_id, 'version' => AIVI_VERSION);
-        add_option('aivi_core', $store, '', 'no');
+if (!function_exists('aivi_ensure_options')) {
+    function aivi_ensure_options()
+    {
+        $opt = get_option('aivi_core', false);
+        if (false === $opt) {
+            $site_id = wp_generate_password(24, false, false);
+            $store = array(
+                'site_id' => $site_id,
+                'version' => AIVI_VERSION,
+            );
+            add_option('aivi_core', $store, '', 'no');
+        }
     }
 }
 
@@ -80,9 +95,13 @@ function aivi_ensure_options()
  */
 if (!AIVI_PLUGIN_DISABLED) {
     require_once AIVI_PLUGIN_DIR . 'includes/class-plugin.php';
-    function aivi_run()
-    {
-        return AiVI\Plugin::get_instance();
+
+    if (!function_exists('aivi_run')) {
+        function aivi_run()
+        {
+            return AiVI\Plugin::get_instance();
+        }
     }
+
     aivi_run();
 }

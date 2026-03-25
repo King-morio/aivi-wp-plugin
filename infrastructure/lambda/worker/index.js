@@ -8,14 +8,27 @@ const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client
 const OpenAI = require("openai");
 const Ajv = require("ajv");
 const { buildHighlightedHtml } = require('./analysis-serializer');
-const { performDeterministicChecks } = require('./preflight-handler');
+const { performDeterministicChecks, ensureManifestPreflightStructure } = require('./preflight-handler');
+const isPackagedLambdaRuntime = Boolean(process.env.AWS_EXECUTION_ENV);
 const requireSharedRuntime = (modulePath) => {
-    try {
-        return require(`./shared/${modulePath}`);
-    } catch (error) {
-        return require(`../shared/${modulePath}`);
+    const candidates = isPackagedLambdaRuntime
+        ? [`./shared/${modulePath}`, `../shared/${modulePath}`]
+        : [`../shared/${modulePath}`, `./shared/${modulePath}`];
+    let lastError = null;
+    for (const candidate of candidates) {
+        try {
+            return require(candidate);
+        } catch (error) {
+            if (error && error.code !== 'MODULE_NOT_FOUND') {
+                throw error;
+            }
+            lastError = error;
+        }
     }
+    throw lastError || new Error(`Unable to load shared runtime module: ${modulePath}`);
 };
+const { SCORE_CONTRACT_DEFAULTS } = requireSharedRuntime('score-contract');
+const { scoreChecksAgainstConfig } = requireSharedRuntime('scoring-policy');
 const { buildUsageSettlementPreview } = requireSharedRuntime('credit-pricing');
 const { createSettlementEvent, createRefundEvent, persistLedgerEvent } = requireSharedRuntime('credit-ledger');
 const { createAccountBillingStateStore, applyLedgerEventToState } = requireSharedRuntime('billing-account-state');
@@ -129,15 +142,10 @@ let cachedScoringConfig;
 
 const REQUIRED_PROMPT_TOKENS = ['{{CHECKS_DEFINITIONS}}', '{{AI_CHECK_COUNT}}', '{{QUESTION_ANCHORS_JSON}}'];
 const INTRO_DETERMINISTIC_CHECK_IDS = new Set([
-    'intro_first_sentence_topic',
     'intro_wordcount',
     'intro_readability',
-    'intro_factual_entities',
-    'intro_schema_suggestion',
-    'intro_focus_and_factuality.v1'
+    'intro_schema_suggestion'
 ]);
-
-const SCORE_CONTRACT_DEFAULTS = { AEO: 0, GEO: 0, GLOBAL: 0 };
 
 /**
  * AEO/GEO Mapping (Per User Specification)
@@ -152,6 +160,41 @@ const AI_CHECK_TYPE_FALLBACK = new Set(['semantic']);
 const MAX_STRUCTURED_GUIDANCE_TEXT = 320;
 const MAX_STRUCTURED_GUIDANCE_STEPS = 4;
 const MAX_STRUCTURED_GUIDANCE_STEP_LENGTH = 220;
+const MISTRAL_FINDINGS_SCHEMA_NAME = 'aivi_chunk_findings_v1';
+const MISTRAL_FINDINGS_RESPONSE_SCHEMA = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['findings'],
+    properties: {
+        findings: {
+            type: 'array',
+            minItems: 1,
+            items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['check_id', 'verdict', 'confidence', 'scope', 'text_quote_selector', 'explanation'],
+                properties: {
+                    check_id: { type: 'string', minLength: 1 },
+                    verdict: { type: 'string', enum: CANONICAL_VERDICTS },
+                    confidence: { type: 'number', minimum: 0, maximum: 1 },
+                    scope: { type: 'string', enum: ['sentence', 'span', 'block'] },
+                    text_quote_selector: {
+                        type: 'object',
+                        additionalProperties: false,
+                        required: ['exact', 'prefix', 'suffix'],
+                        properties: {
+                            exact: { type: 'string', minLength: 1 },
+                            prefix: { type: 'string' },
+                            suffix: { type: 'string' }
+                        }
+                    },
+                    question_anchor_text: { type: 'string', minLength: 1 },
+                    explanation: { type: 'string', maxLength: 180 }
+                }
+            }
+        }
+    }
+};
 
 const normalizeVerdict = (verdict, fallback = 'fail') => {
     if (typeof verdict !== 'string') return fallback;
@@ -917,7 +960,7 @@ const { scrubAnalysisResult } = require('./pii-scrubber');
 const CHECK_CATEGORY_MAP = {
     // === AEO CHECKS (Answer Engine Optimization) ===
     // answer_extractability - ALL AEO
-    'direct_answer_first_120': { category: 'AEO', subcategory: 'Answer Extractability' },
+    'immediate_answer_placement': { category: 'AEO', subcategory: 'Answer Extractability' },
     'answer_sentence_concise': { category: 'AEO', subcategory: 'Answer Extractability' },
     'question_answer_alignment': { category: 'AEO', subcategory: 'Answer Extractability' },
     'clear_answer_formatting': { category: 'AEO', subcategory: 'Answer Extractability' },
@@ -925,7 +968,7 @@ const CHECK_CATEGORY_MAP = {
     // structure_readability - ALL AEO
     'single_h1': { category: 'AEO', subcategory: 'Structure & Readability' },
     'logical_heading_hierarchy': { category: 'AEO', subcategory: 'Structure & Readability' },
-    'orphan_headings': { category: 'AEO', subcategory: 'Structure & Readability' },
+    'heading_topic_fulfillment': { category: 'AEO', subcategory: 'Structure & Readability' },
     'heading_fragmentation': { category: 'AEO', subcategory: 'Structure & Readability' },
     'appropriate_paragraph_length': { category: 'AEO', subcategory: 'Structure & Readability' },
     'lists_tables_presence': { category: 'AEO', subcategory: 'Structure & Readability' },
@@ -933,6 +976,7 @@ const CHECK_CATEGORY_MAP = {
     // schema_structured_data - MOSTLY AEO (except semantic_html_usage)
     'valid_jsonld_schema': { category: 'AEO', subcategory: 'Schema & Structured Data' },
     'schema_matches_content': { category: 'AEO', subcategory: 'Schema & Structured Data' },
+    'canonical_clarity': { category: 'AEO', subcategory: 'Schema & Structured Data' },
     'supported_schema_types_validation': { category: 'AEO', subcategory: 'Schema & Structured Data' },
     'faq_jsonld_generation_suggestion': { category: 'AEO', subcategory: 'Schema & Structured Data' },
     'howto_schema_presence_and_completeness': { category: 'AEO', subcategory: 'Schema & Structured Data' },
@@ -954,6 +998,7 @@ const CHECK_CATEGORY_MAP = {
     'author_identified': { category: 'GEO', subcategory: 'Trust & Neutrality' },
     'author_bio_present': { category: 'GEO', subcategory: 'Trust & Neutrality' },
     'metadata_checks': { category: 'GEO', subcategory: 'Trust & Neutrality' },
+    'ai_crawler_accessibility': { category: 'GEO', subcategory: 'Trust & Neutrality' },
     'accessibility_basics': { category: 'GEO', subcategory: 'Trust & Neutrality' },
     'external_authoritative_sources': { category: 'GEO', subcategory: 'Trust & Neutrality' },
     'citation_format_and_context': { category: 'GEO', subcategory: 'Trust & Neutrality' },
@@ -964,6 +1009,7 @@ const CHECK_CATEGORY_MAP = {
     'promotional_or_commercial_intent': { category: 'GEO', subcategory: 'Trust & Neutrality' },
     'pii_sensitive_content_detector': { category: 'GEO', subcategory: 'Trust & Neutrality' },
     // citability_verifiability - ALL GEO
+    'original_evidence_signal': { category: 'GEO', subcategory: 'Citability & Verifiability' },
     'claim_pattern_detection': { category: 'GEO', subcategory: 'Citability & Verifiability' },
     'factual_statements_well_formed': { category: 'GEO', subcategory: 'Citability & Verifiability' },
     'internal_link_context_relevance': { category: 'GEO', subcategory: 'Citability & Verifiability' },
@@ -1079,14 +1125,44 @@ const assertPromptTemplateTokens = (template) => {
 };
 
 const resolveScoringConfigPath = () => {
-    const candidates = [
+    const sourceCandidates = [
+        path.join(__dirname, '..', 'orchestrator', 'schemas', 'scoring-config-v1.json'),
+        path.join(__dirname, '..', 'shared', 'schemas', 'scoring-config-v1.json'),
+        path.join(__dirname, 'shared', 'schemas', 'scoring-config-v1.json'),
+        path.join(__dirname, 'schemas', 'scoring-config-v1.json')
+    ];
+    const packagedCandidates = [
         path.join(__dirname, 'shared', 'schemas', 'scoring-config-v1.json'),
         path.join(__dirname, 'schemas', 'scoring-config-v1.json'),
         path.join(__dirname, '..', 'shared', 'schemas', 'scoring-config-v1.json'),
         path.join(__dirname, '..', 'orchestrator', 'schemas', 'scoring-config-v1.json')
     ];
+    const candidates = isPackagedLambdaRuntime ? packagedCandidates : sourceCandidates;
     const existing = candidates.find((candidate) => fs.existsSync(candidate));
     return existing || null;
+};
+
+const ensureScoringConfigLoaded = () => {
+    if (cachedScoringConfig !== undefined) {
+        return cachedScoringConfig;
+    }
+
+    const scoringPath = resolveScoringConfigPath();
+    if (!scoringPath) {
+        cachedScoringConfig = null;
+        return cachedScoringConfig;
+    }
+
+    try {
+        cachedScoringConfig = readJsonFile(scoringPath);
+    } catch (error) {
+        cachedScoringConfig = null;
+        log('WARN', 'Failed to lazy load scoring config; using fallback scoring', {
+            error: error.message
+        });
+    }
+
+    return cachedScoringConfig;
 };
 
 const normalizeContentTypeForScoring = (manifest) => {
@@ -1099,25 +1175,6 @@ const normalizeContentTypeForScoring = (manifest) => {
     if (rawType === 'post' || rawType === 'blog' || rawType === 'guide' || rawType === 'pillar') return 'article';
     const known = new Set(['article', 'faq', 'howto', 'news', 'product', 'opinion']);
     return known.has(rawType) ? rawType : 'article';
-};
-
-const getConfidenceBucketForScoring = (confidence) => {
-    if (confidence >= 0.8) return 'high';
-    if (confidence >= 0.5) return 'medium';
-    return 'low';
-};
-
-const parseConfidenceForScoring = (confidence) => {
-    if (typeof confidence === 'number' && Number.isFinite(confidence)) {
-        return Math.max(0, Math.min(1, confidence));
-    }
-    if (typeof confidence === 'string') {
-        const parsed = parseFloat(confidence);
-        if (Number.isFinite(parsed)) {
-            return Math.max(0, Math.min(1, parsed));
-        }
-    }
-    return 0.8;
 };
 
 const resolveScoreCategory = (checkId, checkData = null) => {
@@ -1134,100 +1191,16 @@ const scoreChecksForSidebar = (checks, manifest = null, runId = null) => {
     }
 
     const contentType = normalizeContentTypeForScoring(manifest);
-    const scoring = cachedScoringConfig?.scoring || null;
-    const confidenceMultipliers = scoring?.confidence_multipliers || { high: 1.0, medium: 0.8, low: 0.6 };
-    const verdictMultipliers = scoring?.verdict_multipliers || { pass: 1.0, partial: 0.6, fail: 0.0 };
-    const categoryMaxPoints = scoring?.category_max_points || { AEO: 55, GEO: 45 };
-    const introWeight = typeof scoring?.intro_weight_in_aeo === 'number' ? scoring.intro_weight_in_aeo : null;
-    const introCheckId = 'intro_focus_and_factuality.v1';
-
-    const allCheckWeights = {};
-    if (scoring?.check_weights && typeof scoring.check_weights === 'object') {
-        Object.values(scoring.check_weights).forEach((categoryWeights) => {
-            if (categoryWeights && typeof categoryWeights === 'object') {
-                Object.assign(allCheckWeights, categoryWeights);
-            }
-        });
-    }
-
-    const categoryScores = {
-        AEO: { score: 0, raw_max_score: 0, checks: {} },
-        GEO: { score: 0, raw_max_score: 0, checks: {} }
-    };
-
-    Object.entries(checks).forEach(([checkId, checkData]) => {
-        if (!checkData || typeof checkData !== 'object') return;
-
-        const checkWeight = allCheckWeights[checkId];
-        const checkCategory = (checkWeight?.category === 'AEO' || checkWeight?.category === 'GEO')
-            ? checkWeight.category
-            : resolveScoreCategory(checkId, checkData);
-        if (!checkCategory || !categoryScores[checkCategory]) return;
-
-        if (checkWeight && Array.isArray(checkWeight.applicable_content_types) && checkWeight.applicable_content_types.length > 0) {
-            const isApplicable = checkWeight.applicable_content_types.includes('all')
-                || checkWeight.applicable_content_types.includes(contentType);
-            if (!isApplicable) return;
-        }
-
-        const maxPoints = Number(checkWeight?.max_points);
-        const effectiveMaxPoints = Number.isFinite(maxPoints) && maxPoints >= 0 ? maxPoints : 1;
-        const verdict = normalizeVerdict(checkData.verdict || checkData.ui_verdict, 'fail');
-        const confidence = parseConfidenceForScoring(checkData.confidence);
-        const confidenceBucket = getConfidenceBucketForScoring(confidence);
-        const confidenceMultiplier = Number(confidenceMultipliers[confidenceBucket] ?? 0.6);
-        const verdictMultiplier = Number(verdictMultipliers[verdict] ?? 0);
-        const rawScore = effectiveMaxPoints * verdictMultiplier * confidenceMultiplier;
-
-        categoryScores[checkCategory].score += rawScore;
-        categoryScores[checkCategory].raw_max_score += effectiveMaxPoints;
-        categoryScores[checkCategory].checks[checkId] = {
-            score: rawScore,
-            max_score: effectiveMaxPoints
-        };
-    });
-
-    const normalizeCategoryScore = (category) => {
-        const acc = categoryScores[category];
-        const categoryMax = Number(categoryMaxPoints[category]) || (category === 'AEO' ? 55 : 45);
-        if (!acc) return 0;
-
-        if (category === 'AEO' && introWeight !== null && acc.checks[introCheckId]) {
-            const introCheck = acc.checks[introCheckId];
-            const otherTotals = Object.entries(acc.checks)
-                .filter(([checkId]) => checkId !== introCheckId)
-                .reduce((sum, [, check]) => {
-                    sum.score += Number(check.score || 0);
-                    sum.max += Number(check.max_score || 0);
-                    return sum;
-                }, { score: 0, max: 0 });
-            const introNormalized = introCheck.max_score > 0
-                ? (introCheck.score / introCheck.max_score) * categoryMax * introWeight
-                : 0;
-            const otherNormalized = otherTotals.max > 0
-                ? (otherTotals.score / otherTotals.max) * categoryMax * (1 - introWeight)
-                : 0;
-            return Math.round((introNormalized + otherNormalized) * 100) / 100;
-        }
-
-        if (acc.raw_max_score <= 0) return 0;
-        return Math.round(((acc.score / acc.raw_max_score) * categoryMax) * 100) / 100;
-    };
-
-    const aeo = normalizeCategoryScore('AEO');
-    const geo = normalizeCategoryScore('GEO');
-    const global = Math.round(Math.max(0, Math.min(100, aeo + geo)) * 100) / 100;
-    const computed = {
-        AEO: aeo,
-        GEO: geo,
-        GLOBAL: global
-    };
+    const scoringConfig = ensureScoringConfigLoaded();
+    const computed = scoreChecksAgainstConfig(checks, scoringConfig, contentType, {
+        resolveCategory: (checkId, checkData) => resolveScoreCategory(checkId, checkData)
+    }).scores;
 
     if (runId) {
         log('INFO', 'Scores computed from checks', {
             run_id: runId,
             content_type: contentType,
-            scoring_config_version: cachedScoringConfig?.version || 'fallback',
+            scoring_config_version: scoringConfig?.version || 'fallback',
             scores: computed
         });
     }
@@ -1274,7 +1247,7 @@ const sentenceScopedChecks = new Set([
     'factual_statements_well_formed'
 ]);
 
-const ORPHAN_HEADING_CHECK_ID = 'orphan_headings';
+const ORPHAN_HEADING_CHECK_ID = 'heading_topic_fulfillment';
 const ORPHAN_AGGREGATE_EXPLANATION_PATTERNS = [
     /\ball headings\b/i,
     /\bmultiple headings\b/i,
@@ -1284,7 +1257,15 @@ const ORPHAN_AGGREGATE_EXPLANATION_PATTERNS = [
 ];
 
 const getAllowedScopesForCheck = (checkId, runtimeContract = cachedRuntimeContract) => {
-    const entry = getRuntimeContractEntry(checkId, runtimeContract);
+    if (!runtimeContract && !cachedRuntimeContract) {
+        try {
+            loadAssets();
+        } catch (error) {
+            // Narrow test paths may call scope normalization before asset hydration.
+        }
+    }
+    const effectiveRuntimeContract = runtimeContract || cachedRuntimeContract;
+    const entry = getRuntimeContractEntry(checkId, effectiveRuntimeContract);
     const scopes = Array.isArray(entry?.allowed_scopes) ? entry.allowed_scopes : (entry?.allowed_scopes ? [entry.allowed_scopes] : []);
     const normalized = scopes
         .map((scope) => String(scope || '').trim().toLowerCase())
@@ -1292,9 +1273,9 @@ const getAllowedScopesForCheck = (checkId, runtimeContract = cachedRuntimeContra
     return normalized.length > 0 ? normalized : ['span', 'block'];
 };
 
-const enforceAllowedScope = (checkId, scope) => {
+const enforceAllowedScope = (checkId, scope, runtimeContract = cachedRuntimeContract) => {
     const normalizedScope = String(scope || '').trim().toLowerCase();
-    const allowedScopes = getAllowedScopesForCheck(checkId, cachedRuntimeContract);
+    const allowedScopes = getAllowedScopesForCheck(checkId, runtimeContract);
     if (allowedScopes.includes(normalizedScope)) {
         return normalizedScope;
     }
@@ -1334,19 +1315,62 @@ const looksAggregateOrphanExplanation = (value) => {
 };
 
 const QUESTION_ANCHOR_GATED_CHECKS = new Set([
-    'direct_answer_first_120',
+    'immediate_answer_placement',
     'answer_sentence_concise',
     'question_answer_alignment',
-    'clear_answer_formatting',
-    'faq_structure_opportunity',
-    'faq_jsonld_generation_suggestion'
+    'clear_answer_formatting'
 ]);
+const QUESTION_ANCHOR_GUARDRAIL_VERDICT_BY_CHECK = Object.freeze({
+});
 
-const STRICT_QUESTION_PREFIX_PATTERNS = [
-    /^(what|why|when|where|who|which)\s+(is|are|was|were|does|do|did|can|could|should|would|will|has|have|had)\b/i,
-    /^how\s+(is|are|does|do|can|could|should|would|will)\b/i,
-    /^(is|are|was|were|does|do|did|can|could|should|would|will|has|have|had)\b/i
-];
+const getQuestionAnchorGuardrailVerdict = (checkId) => (
+    QUESTION_ANCHOR_GUARDRAIL_VERDICT_BY_CHECK[checkId] || 'partial'
+);
+
+const buildQuestionAnchorGuardrailExplanation = (checkId, reason) => {
+    const normalizedCheckId = String(checkId || '').trim();
+    const normalizedReason = String(reason || '').trim().toLowerCase();
+    if (checkId === 'faq_structure_opportunity') {
+        return normalizedReason === 'invalid_or_missing_question_anchor'
+            ? 'The article contains answerable topics, but the question-and-answer structure is too ambiguous to support reliable FAQ extraction.'
+            : 'The content shares useful information, but it is not organized into explicit question-and-answer pairs that support FAQ extraction.';
+    }
+    if (checkId === 'faq_jsonld_generation_suggestion') {
+        return normalizedReason === 'invalid_or_missing_question_anchor'
+            ? 'The article hints at answerable topics, but the question-and-answer path is too ambiguous to support reliable FAQ schema guidance.'
+            : 'The content is not framed as clear question-and-answer pairs, so FAQ schema support is only partial.';
+    }
+    const answerFallbackByCheck = {
+        immediate_answer_placement: normalizedReason === 'invalid_or_missing_question_anchor'
+            ? 'The topic is covered, but the opening does not show a clear query-to-answer path that supports immediate answer extraction.'
+            : 'The opening is informative, but it does not present a clear question-led setup for direct answer extraction in the first section.',
+        answer_sentence_concise: normalizedReason === 'invalid_or_missing_question_anchor'
+            ? 'The answer idea is present, but the query-to-answer path is too ambiguous to confirm a concise extractable answer sentence.'
+            : 'The content includes useful detail, but it is not structured as concise question-led answer sentences.',
+        question_answer_alignment: normalizedReason === 'invalid_or_missing_question_anchor'
+            ? 'The response appears relevant, but the query-to-answer path is too ambiguous to verify strong question-answer alignment.'
+            : 'The section is informative, but it is not organized into explicit question-led answers that prove clear alignment.',
+        clear_answer_formatting: normalizedReason === 'invalid_or_missing_question_anchor'
+            ? 'The content covers the topic, but the query-to-answer path is too ambiguous to support clearly formatted answer extraction.'
+            : 'The section shares useful information, but it is not formatted as explicit question-and-answer blocks for clear extraction.'
+    };
+    if (answerFallbackByCheck[normalizedCheckId]) {
+        return answerFallbackByCheck[normalizedCheckId];
+    }
+    return normalizedReason === 'invalid_or_missing_question_anchor'
+        ? 'The article covers the topic, but the query-to-answer path is too ambiguous to support strong direct-answer extraction.'
+        : 'The content is informative, but it is not structured around explicit question prompts that support direct-answer extraction.';
+};
+
+const STRICT_QUESTION_PREFIX_PATTERNS = [ /^(what|why|when|where|who|which)\s+(is|are|was|were|does|do|did|can|could|should|would|will|has|have|had)\b/i, /^how\s+(is|are|does|do|can|could|should|would|will)\b/i, /^(is|are|was|were|does|do|did|can|could|should|would|will|has|have|had)\b/i, /^(faq|question|q:)\s*(what|why|when|where|who|which|how|is|are|does|do|can)\b/i ];
+
+const RELAXED_HEADING_QUESTION_STARTERS = new Set(['what', 'why', 'when', 'where', 'who', 'which', 'how']);
+const RELAXED_HEADING_QUESTION_VERB_CUES = new Set([
+    'is', 'are', 'was', 'were', 'do', 'does', 'did', 'can', 'could', 'should', 'would', 'will', 'has', 'have', 'had',
+    'changed', 'change', 'matters', 'matter', 'means', 'mean', 'works', 'work', 'helps', 'help', 'affects', 'affect',
+    'improves', 'improve', 'supports', 'support', 'reduces', 'reduce', 'increases', 'increase', 'updated', 'update',
+    'miss', 'misses', 'missed', 'drives', 'drive', 'shifts', 'shift'
+]);
 
 const NON_QUESTION_TOPIC_PATTERNS = [
     /^how to\b/i,
@@ -1354,6 +1378,23 @@ const NON_QUESTION_TOPIC_PATTERNS = [
     /^overview\b/i,
     /^introduction\b/i
 ];
+
+const isRelaxedQuestionLikeHeadingText = (normalizedText) => {
+    if (!normalizedText || typeof normalizedText !== 'string') return false;
+    const tokens = normalizedText
+        .toLowerCase()
+        .replace(/[^a-z0-9\s'-]/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+    if (tokens.length < 3 || tokens.length > 12) return false;
+    if (!RELAXED_HEADING_QUESTION_STARTERS.has(tokens[0])) return false;
+    if (tokens[0] === 'how' && tokens[1] === 'to') return false;
+    if (tokens.slice(1).some((token) => RELAXED_HEADING_QUESTION_VERB_CUES.has(token))) {
+        return true;
+    }
+    return false;
+};
 
 const normalizeQuestionAnchorText = (value) => {
     if (typeof value !== 'string') return '';
@@ -1380,6 +1421,9 @@ const isStrictQuestionAnchorText = (value) => {
         return false;
     }
     if (normalized.endsWith('?')) {
+        return true;
+    }
+    if (isRelaxedQuestionLikeHeadingText(normalized)) {
         return true;
     }
     return STRICT_QUESTION_PREFIX_PATTERNS.some((pattern) => pattern.test(normalized));
@@ -1485,16 +1529,45 @@ const buildStrictQuestionAnchors = (manifest, maxAnchors = 24) => {
 
 const buildQuestionAnchorPayload = (manifest) => {
     const anchors = buildStrictQuestionAnchors(manifest);
+    const blockMap = Array.isArray(manifest?.block_map) ? manifest.block_map : [];
+    const anchorNodeTextLookup = {};
+    const anchorNodeRefs = new Set(
+        anchors
+            .map((anchor) => (typeof anchor?.node_ref === 'string' ? anchor.node_ref.trim() : ''))
+            .filter(Boolean)
+    );
+    const getAnchorWindowText = (startIndex) => {
+        const windowParts = [];
+        for (let index = startIndex + 1; index < blockMap.length; index += 1) {
+            const candidate = blockMap[index];
+            if (!candidate || typeof candidate !== 'object') continue;
+            if (isHeadingLikeBlockType(candidate.block_type)) break;
+            const candidateText = normalizeQuestionAnchorText(candidate?.text || candidate?.text_content || '').toLowerCase();
+            if (candidateText) {
+                windowParts.push(candidateText);
+            }
+        }
+        return windowParts.join(' ').trim();
+    };
+    blockMap.forEach((block, blockIndex) => {
+        const nodeRef = typeof block?.node_ref === 'string' ? block.node_ref.trim() : '';
+        if (!nodeRef || !anchorNodeRefs.has(nodeRef)) return;
+        const blockText = normalizeQuestionAnchorText(block?.text || block?.text_content || '').toLowerCase();
+        if (!blockText) return;
+        const anchorWindowText = getAnchorWindowText(blockIndex);
+        anchorNodeTextLookup[nodeRef] = [blockText, anchorWindowText].filter(Boolean).join(' ').trim();
+    });
     return {
         strict_mode: true,
         anchor_count: anchors.length,
-        anchors
+        anchors,
+        anchor_node_text_lookup: anchorNodeTextLookup
     };
 };
 
 const evaluateQuestionAnchorGuardrail = ({ checkId, verdict, finding, questionAnchorPayload }) => {
     const normalizedVerdict = normalizeVerdict(verdict, 'fail');
-    if (!QUESTION_ANCHOR_GATED_CHECKS.has(checkId) || (normalizedVerdict !== 'fail' && normalizedVerdict !== 'partial')) {
+    if (!QUESTION_ANCHOR_GATED_CHECKS.has(checkId)) {
         return {
             verdict: normalizedVerdict,
             adjusted: false,
@@ -1506,6 +1579,14 @@ const evaluateQuestionAnchorGuardrail = ({ checkId, verdict, finding, questionAn
         ? questionAnchorPayload
         : { anchors: [] };
     const anchors = Array.isArray(payload.anchors) ? payload.anchors : [];
+    const anchorNodeRefSet = new Set(
+        anchors
+            .map((anchor) => (typeof anchor?.node_ref === 'string' ? anchor.node_ref.trim() : ''))
+            .filter(Boolean)
+    );
+    const anchorNodeTextLookup = payload.anchor_node_text_lookup && typeof payload.anchor_node_text_lookup === 'object'
+        ? payload.anchor_node_text_lookup
+        : {};
     const normalizedAnchorSet = new Set(
         anchors
             .map((anchor) => normalizeQuestionAnchorText(anchor?.text).toLowerCase())
@@ -1514,7 +1595,7 @@ const evaluateQuestionAnchorGuardrail = ({ checkId, verdict, finding, questionAn
 
     if (normalizedAnchorSet.size === 0) {
         return {
-            verdict: 'pass',
+            verdict: getQuestionAnchorGuardrailVerdict(checkId),
             adjusted: true,
             reason: 'no_strict_question_anchor'
         };
@@ -1540,6 +1621,47 @@ const evaluateQuestionAnchorGuardrail = ({ checkId, verdict, finding, questionAn
     const selector = finding?.text_quote_selector && typeof finding.text_quote_selector === 'object'
         ? finding.text_quote_selector
         : {};
+    const findingNodeRef = typeof finding?.node_ref === 'string' ? finding.node_ref.trim() : '';
+    if (findingNodeRef && anchorNodeRefSet.has(findingNodeRef)) {
+        return {
+            verdict: normalizedVerdict,
+            adjusted: false,
+            reason: null
+        };
+    }
+
+    const normalizeAnchorEvidenceText = (value) => normalizeQuestionAnchorText(value)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const evidenceCandidates = [
+        selector.exact,
+        finding?.snippet,
+        finding?.text,
+        typeof selector.prefix === 'string' && typeof selector.exact === 'string'
+            ? `${selector.prefix} ${selector.exact}`
+            : '',
+        typeof selector.exact === 'string' && typeof selector.suffix === 'string'
+            ? `${selector.exact} ${selector.suffix}`
+            : ''
+    ]
+        .map((value) => normalizeAnchorEvidenceText(value))
+        .filter((value) => value.length >= 24);
+    const anchorBlockTexts = Object.values(anchorNodeTextLookup)
+        .map((value) => normalizeAnchorEvidenceText(value))
+        .filter(Boolean);
+    const hasAnchorBlockEvidence = evidenceCandidates.some((candidate) => (
+        anchorBlockTexts.some((blockText) => blockText.includes(candidate))
+    ));
+    if (hasAnchorBlockEvidence) {
+        return {
+            verdict: normalizedVerdict,
+            adjusted: false,
+            reason: null
+        };
+    }
+
     const exactText = normalizeQuestionAnchorText(selector.exact || finding?.snippet || finding?.text).toLowerCase();
     if (exactText && normalizedAnchorSet.has(exactText)) {
         return {
@@ -1550,10 +1672,384 @@ const evaluateQuestionAnchorGuardrail = ({ checkId, verdict, finding, questionAn
     }
 
     return {
-        verdict: 'pass',
+        verdict: getQuestionAnchorGuardrailVerdict(checkId),
         adjusted: true,
         reason: 'invalid_or_missing_question_anchor'
     };
+};
+
+const STRUCTURE_GOVERNED_OPPORTUNITY_CHECKS = new Set([
+    'lists_tables_presence',
+    'faq_structure_opportunity',
+    'howto_semantic_validity'
+]);
+
+const buildBlockSectionLookup = (blockMap) => {
+    const lookup = {};
+    const blocks = Array.isArray(blockMap) ? blockMap : [];
+    let currentHeadingNodeRef = null;
+
+    blocks.forEach((block) => {
+        const nodeRef = typeof block?.node_ref === 'string' ? block.node_ref.trim() : '';
+        if (!nodeRef) {
+            return;
+        }
+        if (isHeadingLikeBlockType(block?.block_type)) {
+            currentHeadingNodeRef = nodeRef;
+            lookup[nodeRef] = nodeRef;
+            return;
+        }
+        lookup[nodeRef] = currentHeadingNodeRef || nodeRef;
+    });
+
+    return lookup;
+};
+
+const collectNodeRefSet = (items, selector) => {
+    const refs = new Set();
+    if (!Array.isArray(items) || typeof selector !== 'function') {
+        return refs;
+    }
+    items.forEach((item) => {
+        const value = selector(item);
+        if (Array.isArray(value)) {
+            value.forEach((entry) => {
+                const normalized = typeof entry === 'string' ? entry.trim() : '';
+                if (normalized) {
+                    refs.add(normalized);
+                }
+            });
+            return;
+        }
+        const normalized = typeof value === 'string' ? value.trim() : '';
+        if (normalized) {
+            refs.add(normalized);
+        }
+    });
+    return refs;
+};
+
+const buildSemanticStructureGuardrailContext = (manifest) => {
+    const structure = manifest?.preflight_structure;
+    if (!structure || typeof structure !== 'object') {
+        return null;
+    }
+
+    const blockMap = Array.isArray(manifest?.block_map) ? manifest.block_map : [];
+    const visibleItemListSections = Array.isArray(structure.visible_itemlist_sections)
+        ? structure.visible_itemlist_sections
+        : [];
+    const pseudoListSections = Array.isArray(structure.pseudo_list_sections)
+        ? structure.pseudo_list_sections
+        : [];
+    const questionSections = Array.isArray(structure.question_sections)
+        ? structure.question_sections
+        : [];
+    const faqCandidateSections = Array.isArray(structure.faq_candidate_sections)
+        ? structure.faq_candidate_sections
+        : [];
+    const proceduralSections = Array.isArray(structure.procedural_sections)
+        ? structure.procedural_sections
+        : [];
+    const howtoSummary = structure.howto_summary && typeof structure.howto_summary === 'object'
+        ? structure.howto_summary
+        : {};
+    const faqSignals = structure.faq_signals && typeof structure.faq_signals === 'object'
+        ? structure.faq_signals
+        : {};
+
+    return {
+        blockSectionLookup: buildBlockSectionLookup(blockMap),
+        visibleListNodeRefs: collectNodeRefSet(visibleItemListSections, (section) => section?.node_ref),
+        visibleListHeadingRefs: collectNodeRefSet(visibleItemListSections, (section) => section?.heading_node_ref),
+        pseudoListNodeRefs: collectNodeRefSet(pseudoListSections, (section) => section?.node_ref),
+        pseudoListHeadingRefs: collectNodeRefSet(pseudoListSections, (section) => section?.heading_node_ref),
+        questionHeadingRefs: collectNodeRefSet(questionSections, (section) => section?.heading_node_ref),
+        questionSupportNodeRefs: collectNodeRefSet(questionSections, (section) => section?.support_node_refs),
+        faqCandidateHeadingRefs: collectNodeRefSet(faqCandidateSections, (section) => section?.heading_node_ref),
+        proceduralNodeRefs: collectNodeRefSet(proceduralSections, (section) => section?.node_ref),
+        faqCandidateCount: faqCandidateSections.length,
+        questionSectionCount: questionSections.length,
+        faqExplicitSignal: faqSignals.explicit_signal === true && faqSignals.blocked_by_type !== true,
+        proceduralSignalCount: Number(howtoSummary.step_heading_count || 0)
+            + Number(howtoSummary.list_item_count || 0)
+            + Number(howtoSummary.procedural_support_count || 0)
+            + (Array.isArray(howtoSummary.detected_steps) ? howtoSummary.detected_steps.length : 0)
+            + (howtoSummary.title_signal === true ? 1 : 0)
+    };
+};
+
+const resolveStructuralSectionContext = (structureContext, nodeRef) => {
+    if (!structureContext || typeof structureContext !== 'object') {
+        return {
+            nodeRef: null,
+            sectionRef: null,
+            inVisibleListSection: false,
+            inPseudoListSection: false,
+            inQuestionSection: false,
+            inFaqCandidateSection: false,
+            inProceduralSection: false
+        };
+    }
+
+    const normalizedNodeRef = typeof nodeRef === 'string' ? nodeRef.trim() : '';
+    const sectionRef = normalizedNodeRef
+        ? (structureContext.blockSectionLookup?.[normalizedNodeRef] || normalizedNodeRef)
+        : null;
+
+    return {
+        nodeRef: normalizedNodeRef || null,
+        sectionRef: sectionRef || null,
+        inVisibleListSection: !!(
+            (normalizedNodeRef && structureContext.visibleListNodeRefs.has(normalizedNodeRef))
+            || (sectionRef && structureContext.visibleListHeadingRefs.has(sectionRef))
+        ),
+        inPseudoListSection: !!(
+            (normalizedNodeRef && structureContext.pseudoListNodeRefs.has(normalizedNodeRef))
+            || (sectionRef && structureContext.pseudoListHeadingRefs.has(sectionRef))
+        ),
+        inQuestionSection: !!(
+            (normalizedNodeRef && structureContext.questionSupportNodeRefs.has(normalizedNodeRef))
+            || (sectionRef && structureContext.questionHeadingRefs.has(sectionRef))
+        ),
+        inFaqCandidateSection: !!(sectionRef && structureContext.faqCandidateHeadingRefs.has(sectionRef)),
+        inProceduralSection: !!(
+            (normalizedNodeRef && structureContext.proceduralNodeRefs.has(normalizedNodeRef))
+            || (sectionRef && structureContext.proceduralNodeRefs.has(sectionRef))
+        )
+    };
+};
+
+const buildSemanticStructureGuardrailExplanation = (checkId, reason) => {
+    const normalizedCheckId = String(checkId || '').trim();
+    const normalizedReason = String(reason || '').trim().toLowerCase();
+
+    if (normalizedCheckId === 'lists_tables_presence') {
+        if (normalizedReason === 'visible_list_already_present') {
+            return 'This section already presents the ideas as a visible list, so a list-formatting opportunity is not needed.';
+        }
+        if (normalizedReason === 'faq_candidate_section') {
+            return 'This section behaves more like reusable question-and-answer material than a list-formatting problem.';
+        }
+    }
+
+    if (normalizedCheckId === 'faq_structure_opportunity') {
+        if (normalizedReason === 'insufficient_faq_pairs') {
+            return 'The content does not contain enough explicit reusable question-and-answer pairs to justify an FAQ-structure opportunity.';
+        }
+        if (normalizedReason === 'question_led_explainer_or_list') {
+            return 'The section uses a question-led heading, but it behaves like an explainer or list rather than repeated FAQ pairs.';
+        }
+        if (normalizedReason === 'section_not_faq_candidate') {
+            return 'This section is not structurally supported as an FAQ candidate, so an FAQ-formatting opportunity is not triggered here.';
+        }
+    }
+
+    if (normalizedCheckId === 'howto_semantic_validity' && normalizedReason === 'not_procedural_content') {
+        return 'This content does not present strong step-by-step procedural signals, so a HowTo-validity issue is not triggered here.';
+    }
+
+    return 'Structural evidence does not support releasing this opportunity finding.';
+};
+
+const TEMPORAL_LOCAL_INTERVAL_PATTERNS = [
+    /\b(?:after|within|in|over|during|before|by|for|throughout)\s+(?:the\s+next\s+|the\s+first\s+|at\s+least\s+|up\s+to\s+)?\d+(?:\s*(?:-|to)\s*\d+)?\s*(?:hour|hours|day|days|week|weeks|month|months|year|years)\b/i,
+    /\b\d+(?:\s*(?:-|to)\s*\d+)?\s*(?:hour|hours|day|days|week|weeks|month|months|year|years)\s+(?:after|before|later)\b/i,
+    /\bfor\s+(?:the\s+)?first\s+\d+(?:\s*(?:-|to)\s*\d+)?\s*(?:hour|hours|day|days|week|weeks|month|months|year|years)\b/i
+];
+
+const TEMPORAL_RECENCY_LANGUAGE_PATTERN = /\b(currently|current|today|now|right now|latest|recent|recently|at present|as of|up-to-date|changing|emerging|growing)\b/i;
+
+const normalizeTemporalGuardrailText = (value) => String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const hasAnchoredLocalTemporalInterval = (value) => {
+    const text = normalizeTemporalGuardrailText(value);
+    if (!text) return false;
+    return TEMPORAL_LOCAL_INTERVAL_PATTERNS.some((pattern) => pattern.test(text));
+};
+
+const hasTemporalRecencyLanguage = (value) => TEMPORAL_RECENCY_LANGUAGE_PATTERN.test(normalizeTemporalGuardrailText(value));
+
+const looksLikeArticleDateComplaint = (value) => {
+    const text = normalizeTemporalGuardrailText(value).toLowerCase();
+    if (!text) return false;
+    return /\bdate\b/.test(text) && /\b(publication|publish(?:ed)?|posted|update(?:d)?|last updated?)\b/.test(text);
+};
+
+const buildTemporalClaimGuardrailExplanation = (reason) => {
+    const normalizedReason = String(reason || '').trim().toLowerCase();
+    if (normalizedReason === 'local_interval_already_anchored') {
+        return 'This sentence already anchors the timing with a clear local interval, so an article-level publication date is not required for this claim.';
+    }
+    return 'The sentence already carries enough local timing context to judge the claim.';
+};
+
+const evaluateSemanticStructureGuardrail = ({
+    checkId,
+    verdict,
+    finding,
+    match,
+    structureContext
+}) => {
+    const normalizedVerdict = normalizeVerdict(verdict, 'fail');
+    if (normalizedVerdict === 'pass' || !STRUCTURE_GOVERNED_OPPORTUNITY_CHECKS.has(checkId) || !structureContext) {
+        return {
+            verdict: normalizedVerdict,
+            adjusted: false,
+            reason: null,
+            kind: null
+        };
+    }
+
+    const candidateNodeRef = typeof match?.node_ref === 'string' && match.node_ref.trim()
+        ? match.node_ref.trim()
+        : (typeof finding?.node_ref === 'string' ? finding.node_ref.trim() : '');
+    const sectionContext = resolveStructuralSectionContext(structureContext, candidateNodeRef);
+
+    if (checkId === 'lists_tables_presence') {
+        if (sectionContext.inVisibleListSection) {
+            return {
+                verdict: 'pass',
+                adjusted: true,
+                reason: 'visible_list_already_present',
+                kind: 'semantic_structure'
+            };
+        }
+        if (sectionContext.inFaqCandidateSection && !sectionContext.inVisibleListSection) {
+            return {
+                verdict: 'pass',
+                adjusted: true,
+                reason: 'faq_candidate_section',
+                kind: 'semantic_structure'
+            };
+        }
+    }
+
+    if (checkId === 'faq_structure_opportunity') {
+        const hasStrongFaqSupport = structureContext.faqCandidateCount >= 2
+            || (structureContext.faqExplicitSignal && structureContext.questionSectionCount >= 2);
+        if (!hasStrongFaqSupport) {
+            return {
+                verdict: 'pass',
+                adjusted: true,
+                reason: 'insufficient_faq_pairs',
+                kind: 'semantic_structure'
+            };
+        }
+        if (sectionContext.inVisibleListSection || sectionContext.inPseudoListSection) {
+            return {
+                verdict: 'pass',
+                adjusted: true,
+                reason: 'question_led_explainer_or_list',
+                kind: 'semantic_structure'
+            };
+        }
+        if (!sectionContext.inFaqCandidateSection && !sectionContext.inQuestionSection) {
+            return {
+                verdict: 'pass',
+                adjusted: true,
+                reason: 'section_not_faq_candidate',
+                kind: 'semantic_structure'
+            };
+        }
+    }
+
+    if (checkId === 'howto_semantic_validity') {
+        if (!sectionContext.inProceduralSection && structureContext.proceduralSignalCount === 0) {
+            return {
+                verdict: 'pass',
+                adjusted: true,
+                reason: 'not_procedural_content',
+                kind: 'semantic_structure'
+            };
+        }
+    }
+
+    return {
+        verdict: normalizedVerdict,
+        adjusted: false,
+        reason: null,
+        kind: null
+    };
+};
+
+const evaluateTemporalClaimGuardrail = ({
+    checkId,
+    verdict,
+    finding
+}) => {
+    const normalizedVerdict = normalizeVerdict(verdict, 'fail');
+    if (checkId !== 'temporal_claim_check' || normalizedVerdict === 'pass') {
+        return {
+            verdict: normalizedVerdict,
+            adjusted: false,
+            reason: null,
+            kind: null
+        };
+    }
+
+    const selector = finding?.text_quote_selector && typeof finding.text_quote_selector === 'object'
+        ? finding.text_quote_selector
+        : {};
+    const evidenceText = [
+        selector.exact,
+        finding?.snippet,
+        finding?.text
+    ]
+        .map((value) => normalizeTemporalGuardrailText(value))
+        .filter(Boolean)
+        .join(' ');
+    const explanationText = normalizeTemporalGuardrailText(finding?.explanation || '');
+
+    if (
+        looksLikeArticleDateComplaint(explanationText)
+        && hasAnchoredLocalTemporalInterval(evidenceText)
+        && !hasTemporalRecencyLanguage(evidenceText)
+    ) {
+        return {
+            verdict: 'pass',
+            adjusted: true,
+            reason: 'local_interval_already_anchored',
+            kind: 'semantic_temporal'
+        };
+    }
+
+    return {
+        verdict: normalizedVerdict,
+        adjusted: false,
+        reason: null,
+        kind: null
+    };
+};
+
+const applyNoInternalLinksNeutrality = (checks, manifest) => {
+    if (!checks || typeof checks !== 'object') return checks;
+    const links = Array.isArray(manifest?.links) ? manifest.links : null;
+    if (!links || links.length > 0) return checks;
+    const check = checks.internal_link_context_relevance;
+    if (!check || typeof check !== 'object') return checks;
+    check.verdict = 'pass';
+    check.ui_verdict = 'pass';
+    check.confidence = typeof check.confidence === 'number'
+        ? Math.max(check.confidence, 0.6)
+        : 0.6;
+    check.explanation = 'No internal links were detected in this content, so contextual internal-link relevance is neutral for this run.';
+    check.highlights = [];
+    check.failed_candidates = [];
+    check.candidate_highlights = [];
+    check.non_inline = true;
+    check.non_inline_reason = 'internal_links_absent';
+    check.score_neutral = true;
+    check.score_neutral_reason = 'internal_links_absent';
+    if (!check.details || typeof check.details !== 'object') {
+        check.details = {};
+    }
+    check.details.internal_link_count = 0;
+    check.details.score_neutral = true;
+    check.details.score_neutral_reason = 'internal_links_absent';
+    return checks;
 };
 
 const extractSentenceFromBlock = (blockMap, snippet) => {
@@ -1588,10 +2084,10 @@ const hasEllipsis = (value) => {
     return /(\.\s*\.\s*\.)|…/.test(value);
 };
 
-const DEFAULT_AI_CHUNK_SIZE = 8;
+const DEFAULT_AI_CHUNK_SIZE = 5;
 const DEFAULT_AI_CHUNK_MAX_TOKENS = 1600;
 const DEFAULT_AI_CHUNK_RETRY_MAX_TOKENS = 2200;
-const DEFAULT_AI_COMPACT_CHUNK_SIZE = 8;
+const DEFAULT_AI_COMPACT_CHUNK_SIZE = 5;
 const DEFAULT_AI_COMPACT_CHUNK_MAX_TOKENS = 1500;
 const DEFAULT_AI_COMPACT_CHUNK_RETRY_MAX_TOKENS = 2000;
 const DEFAULT_AI_CHUNK_REQUEST_MAX_ATTEMPTS = 2;
@@ -1602,6 +2098,7 @@ const DEFAULT_AI_COMPLETION_FIRST_ENABLED = true;
 const DEFAULT_AI_LAMBDA_RESERVE_MS = 20000;
 const DEFAULT_AI_MIN_RETURNED_CHECK_RATE = 0.85;
 const DEFAULT_AI_MAX_SYNTHETIC_CHECK_RATE = 0.15;
+const DEFAULT_AI_MALFORMED_CHUNK_CAPTURE_LIMIT = 3;
 const DEFAULT_MISTRAL_MODEL = 'mistral-large-latest';
 const DEFAULT_MISTRAL_FALLBACK_MODEL = 'magistral-small-latest';
 
@@ -1924,28 +2421,66 @@ const buildSyntheticPartialFinding = (checkId, manifest, reason) => {
     };
 };
 
+const buildMistralChunkResponseFormat = () => ({
+    type: 'json_schema',
+    json_schema: {
+        name: MISTRAL_FINDINGS_SCHEMA_NAME,
+        strict: true,
+        schema: MISTRAL_FINDINGS_RESPONSE_SCHEMA
+    }
+});
+
+const buildMalformedChunkCaptureEntry = ({
+    chunkIndex,
+    chunkTag,
+    attemptLabel,
+    model,
+    finishReason,
+    parseError,
+    rawText
+} = {}) => ({
+    chunk_index: Number(chunkIndex || 0) + 1,
+    chunk_tag: chunkTag || null,
+    attempt_label: attemptLabel || null,
+    model: model || null,
+    finish_reason: finishReason || null,
+    parse_error_class: classifyParseErrorClass(parseError) || 'unknown',
+    parse_error_message: parseError?.message || 'unknown_error',
+    raw_response_length: typeof rawText === 'string' ? rawText.length : 0,
+    raw_preview: typeof rawText === 'string' ? rawText.slice(0, 2000) : '',
+    raw_response: typeof rawText === 'string' ? rawText.slice(0, 24000) : ''
+});
+
+const captureMalformedChunkEntry = (entries, payload, limit = DEFAULT_AI_MALFORMED_CHUNK_CAPTURE_LIMIT) => {
+    if (!Array.isArray(entries)) return false;
+    const safeLimit = clampPositiveInt(limit, DEFAULT_AI_MALFORMED_CHUNK_CAPTURE_LIMIT, 0, 10);
+    if (safeLimit === 0 || entries.length >= safeLimit) {
+        return false;
+    }
+    entries.push(buildMalformedChunkCaptureEntry(payload));
+    return true;
+};
+
 const normalizeChunkFindings = (findings, chunkCheckIds, manifest, missingReason, options = {}) => {
     const synthesizeMissing = options.synthesizeMissing !== false;
     const expectedSet = new Set(chunkCheckIds);
-    const deduped = new Map();
+    const findingsByCheck = new Map();
 
     findings.forEach((finding) => {
         const checkId = String(finding?.check_id || '').trim();
         if (!expectedSet.has(checkId)) return;
-        if (!deduped.has(checkId)) {
-            deduped.set(checkId, finding);
-        }
+        addNormalizedFindingToMap(findingsByCheck, finding);
     });
 
-    const missingCheckIds = chunkCheckIds.filter((checkId) => !deduped.has(checkId));
+    const missingCheckIds = chunkCheckIds.filter((checkId) => !findingsByCheck.has(checkId));
     if (synthesizeMissing) {
         missingCheckIds.forEach((checkId) => {
-            deduped.set(checkId, buildSyntheticPartialFinding(checkId, manifest, missingReason));
+            findingsByCheck.set(checkId, [buildSyntheticPartialFinding(checkId, manifest, missingReason)]);
         });
     }
 
     return {
-        findings: Array.from(deduped.values()),
+        findings: Array.from(findingsByCheck.values()).flat(),
         missingCheckIds,
         syntheticCount: synthesizeMissing ? missingCheckIds.length : 0
     };
@@ -2010,7 +2545,9 @@ const validateFindingsContract = (result) => {
         }
         if (!prefix || prefix.length < 32) warnings.push({ index: idx, reason: 'prefix_too_short' });
         if (!suffix || suffix.length < 32) warnings.push({ index: idx, reason: 'suffix_too_short' });
-        if (!explanation) missingFields.push({ index: idx, reason: 'missing_explanation' });
+        if (verdict !== 'pass' && !explanation) {
+            missingFields.push({ index: idx, reason: 'missing_explanation' });
+        }
         if (typeof finding.confidence !== 'number' || Number.isNaN(finding.confidence)) {
             missingFields.push({ index: idx, reason: 'missing_confidence' });
         }
@@ -2073,8 +2610,8 @@ const buildSemanticFallbackCheck = (checkId, definitions) => {
     const checkName = typeof checkDef.name === 'string' && checkDef.name.trim()
         ? checkDef.name.trim()
         : checkId;
-    const explanation = checkId === 'orphan_headings'
-        ? 'Orphan heading semantic validation is partial because AI analysis was unavailable for this run.'
+    const explanation = checkId === 'heading_topic_fulfillment'
+        ? 'Heading topic fulfillment validation is partial because AI analysis was unavailable for this run.'
         : `Semantic check "${checkName}" is partial because AI analysis was unavailable for this run.`;
     return {
         verdict: 'partial',
@@ -2306,6 +2843,7 @@ const findOrphanHeadingMatch = (blockMap, exact, prefix = '', suffix = '') => {
 
 const convertFindingsToChecks = (findings, definitions, manifest, aiEligibleCheckIds = null, options = {}) => {
     const blockMap = Array.isArray(manifest?.block_map) ? manifest.block_map : [];
+    const structureGuardrailContext = buildSemanticStructureGuardrailContext(manifest);
     const questionAnchorPayload = options && options.questionAnchorPayload
         ? options.questionAnchorPayload
         : buildQuestionAnchorPayload(manifest);
@@ -2324,7 +2862,16 @@ const convertFindingsToChecks = (findings, definitions, manifest, aiEligibleChec
         fallback_total: 0,
         skipped_non_ai_findings: 0,
         question_anchor_guardrail_adjustments_total: 0,
-        question_anchor_guardrail_adjustments_by_check: {}
+        question_anchor_guardrail_adjustments_by_check: {},
+        question_anchor_guardrail_adjustments_by_reason: {},
+        question_anchor_guardrail_fallback_explanations_total: 0,
+        question_anchor_guardrail_fallback_explanations_by_check: {},
+        semantic_structure_guardrail_adjustments_total: 0,
+        semantic_structure_guardrail_adjustments_by_check: {},
+        semantic_structure_guardrail_adjustments_by_reason: {},
+        semantic_temporal_guardrail_adjustments_total: 0,
+        semantic_temporal_guardrail_adjustments_by_check: {},
+        semantic_temporal_guardrail_adjustments_by_reason: {}
     };
 
     findings.forEach((finding, idx) => {
@@ -2338,10 +2885,12 @@ const convertFindingsToChecks = (findings, definitions, manifest, aiEligibleChec
             return;
         }
         const rawVerdict = typeof finding.verdict === 'string' ? finding.verdict.trim() : '';
-        let verdict = normalizeVerdict(rawVerdict, 'fail');
+        const sourceVerdict = normalizeVerdict(rawVerdict, 'fail');
+        let verdict = sourceVerdict;
         const aiExplanationPack = extractStructuredExplanationPackFromFinding(finding);
+        const allowSourceExplanation = sourceVerdict !== 'pass';
         const isSynthetic = finding && finding._synthetic === true;
-        const guardrailDecision = isSynthetic
+        let guardrailDecision = isSynthetic
             ? { verdict, adjusted: false, reason: null }
             : evaluateQuestionAnchorGuardrail({
                 checkId,
@@ -2349,7 +2898,6 @@ const convertFindingsToChecks = (findings, definitions, manifest, aiEligibleChec
                 finding,
                 questionAnchorPayload
             });
-        verdict = guardrailDecision.verdict;
         const selector = finding.text_quote_selector || {};
         let scope = typeof finding.scope === 'string' ? finding.scope : 'span';
         let exact = typeof selector.exact === 'string' ? selector.exact : '';
@@ -2365,14 +2913,38 @@ const convertFindingsToChecks = (findings, definitions, manifest, aiEligibleChec
             const sentenceExact = extractSentenceFromBlock(blockMap, exact);
             if (sentenceExact) exact = sentenceExact;
         }
-        scope = enforceAllowedScope(checkId, scope);
+        scope = enforceAllowedScope(checkId, scope, cachedRuntimeContract);
         const snippetLength = exact.length;
         const tokenEstimate = estimateTokenCount(exact);
         const ellipsis = hasEllipsis(exact);
+        const sourceExplanationNormalized = allowSourceExplanation && typeof finding.explanation === 'string'
+            ? String(finding.explanation).trim()
+            : '';
         const position = finding.text_position_selector || {};
         const match = isOrphanHeadingsCheck
             ? findOrphanHeadingMatch(blockMap, exact, prefix, suffix)
             : findBlockMatch(blockMap, exact);
+        if (!isSynthetic) {
+            const structureGuardrailDecision = evaluateSemanticStructureGuardrail({
+                checkId,
+                verdict: guardrailDecision.verdict,
+                finding,
+                match,
+                structureContext: structureGuardrailContext
+            });
+            if (structureGuardrailDecision.adjusted) {
+                guardrailDecision = structureGuardrailDecision;
+            }
+            const temporalGuardrailDecision = evaluateTemporalClaimGuardrail({
+                checkId,
+                verdict: guardrailDecision.verdict,
+                finding
+            });
+            if (temporalGuardrailDecision.adjusted) {
+                guardrailDecision = temporalGuardrailDecision;
+            }
+        }
+        verdict = guardrailDecision.verdict;
         const anchorSuccess = !!match;
         const strategy = anchorSuccess ? (match.strategy || 'exact') : 'failed';
         const telemetryItem = {
@@ -2384,8 +2956,12 @@ const convertFindingsToChecks = (findings, definitions, manifest, aiEligibleChec
             anchoring_strategy_used: strategy,
             anchor_success: anchorSuccess,
             wrap_errors: false,
-            question_anchor_guardrail_applied: guardrailDecision.adjusted,
-            question_anchor_guardrail_reason: guardrailDecision.reason || null
+            question_anchor_guardrail_applied: guardrailDecision.adjusted && guardrailDecision.kind !== 'semantic_structure' && guardrailDecision.kind !== 'semantic_temporal',
+            question_anchor_guardrail_reason: guardrailDecision.kind !== 'semantic_structure' && guardrailDecision.kind !== 'semantic_temporal' ? (guardrailDecision.reason || null) : null,
+            semantic_structure_guardrail_applied: guardrailDecision.kind === 'semantic_structure',
+            semantic_structure_guardrail_reason: guardrailDecision.kind === 'semantic_structure' ? (guardrailDecision.reason || null) : null,
+            semantic_temporal_guardrail_applied: guardrailDecision.kind === 'semantic_temporal',
+            semantic_temporal_guardrail_reason: guardrailDecision.kind === 'semantic_temporal' ? (guardrailDecision.reason || null) : null
         };
         telemetryFindings.push(telemetryItem);
         aggregate.snippet_length_total += snippetLength;
@@ -2394,9 +2970,31 @@ const convertFindingsToChecks = (findings, definitions, manifest, aiEligibleChec
         if (anchorSuccess) aggregate.anchor_success_total += 1;
         if (!anchorSuccess) aggregate.fallback_total += 1;
         if (guardrailDecision.adjusted) {
-            aggregate.question_anchor_guardrail_adjustments_total += 1;
-            aggregate.question_anchor_guardrail_adjustments_by_check[checkId] =
-                Number(aggregate.question_anchor_guardrail_adjustments_by_check[checkId] || 0) + 1;
+            const guardrailReasonKey = guardrailDecision.reason || 'guardrail';
+            if (guardrailDecision.kind === 'semantic_structure') {
+                aggregate.semantic_structure_guardrail_adjustments_total += 1;
+                aggregate.semantic_structure_guardrail_adjustments_by_check[checkId] =
+                    Number(aggregate.semantic_structure_guardrail_adjustments_by_check[checkId] || 0) + 1;
+                aggregate.semantic_structure_guardrail_adjustments_by_reason[guardrailReasonKey] =
+                    Number(aggregate.semantic_structure_guardrail_adjustments_by_reason[guardrailReasonKey] || 0) + 1;
+            } else if (guardrailDecision.kind === 'semantic_temporal') {
+                aggregate.semantic_temporal_guardrail_adjustments_total += 1;
+                aggregate.semantic_temporal_guardrail_adjustments_by_check[checkId] =
+                    Number(aggregate.semantic_temporal_guardrail_adjustments_by_check[checkId] || 0) + 1;
+                aggregate.semantic_temporal_guardrail_adjustments_by_reason[guardrailReasonKey] =
+                    Number(aggregate.semantic_temporal_guardrail_adjustments_by_reason[guardrailReasonKey] || 0) + 1;
+            } else {
+                aggregate.question_anchor_guardrail_adjustments_total += 1;
+                aggregate.question_anchor_guardrail_adjustments_by_check[checkId] =
+                    Number(aggregate.question_anchor_guardrail_adjustments_by_check[checkId] || 0) + 1;
+                aggregate.question_anchor_guardrail_adjustments_by_reason[guardrailReasonKey] =
+                    Number(aggregate.question_anchor_guardrail_adjustments_by_reason[guardrailReasonKey] || 0) + 1;
+                if (sourceExplanationNormalized) {
+                    aggregate.question_anchor_guardrail_fallback_explanations_total += 1;
+                    aggregate.question_anchor_guardrail_fallback_explanations_by_check[checkId] =
+                        Number(aggregate.question_anchor_guardrail_fallback_explanations_by_check[checkId] || 0) + 1;
+                }
+            }
         }
 
         if (!checks[checkId]) {
@@ -2404,8 +3002,8 @@ const convertFindingsToChecks = (findings, definitions, manifest, aiEligibleChec
             checks[checkId] = {
                 verdict: verdict,
                 confidence: typeof finding.confidence === 'number' ? finding.confidence : 0.8,
-                explanation: typeof finding.explanation === 'string' ? finding.explanation : '',
-                ai_explanation_pack: aiExplanationPack || null,
+                explanation: allowSourceExplanation && typeof finding.explanation === 'string' ? finding.explanation : '',
+                ai_explanation_pack: allowSourceExplanation ? (aiExplanationPack || null) : null,
                 highlights: [],
                 suggestions: [],
                 id: checkId,
@@ -2414,24 +3012,57 @@ const convertFindingsToChecks = (findings, definitions, manifest, aiEligibleChec
             };
         }
         const check = checks[checkId];
-        check.verdict = verdict;
-        check.confidence = typeof finding.confidence === 'number' ? finding.confidence : check.confidence;
-        const modelExplanation = typeof finding.explanation === 'string' ? finding.explanation : check.explanation;
-        check.explanation = guardrailDecision.adjusted
-            ? 'No strict question anchor detected for this check in the analyzed content.'
+        const modelExplanation = allowSourceExplanation
+            ? (typeof finding.explanation === 'string' ? finding.explanation : check.explanation)
+            : '';
+        const findingExplanation = guardrailDecision.adjusted
+            ? (
+                guardrailDecision.kind === 'semantic_structure'
+                    ? buildSemanticStructureGuardrailExplanation(checkId, guardrailDecision.reason)
+                    : guardrailDecision.kind === 'semantic_temporal'
+                        ? buildTemporalClaimGuardrailExplanation(guardrailDecision.reason)
+                    : buildQuestionAnchorGuardrailExplanation(checkId, guardrailDecision.reason)
+            )
             : modelExplanation;
-        if (aiExplanationPack && !guardrailDecision.adjusted) {
-            check.ai_explanation_pack = aiExplanationPack;
-        }
-        if (!guardrailDecision.adjusted && !isSynthetic && isOrphanHeadingsCheck) {
-            const shouldRewriteOrphanExplanation = looksAggregateOrphanExplanation(check.explanation);
-            if (shouldRewriteOrphanExplanation) {
-                check.explanation = buildOrphanHeadingInstanceExplanation(exact, check.explanation);
+        const modelExplanationNormalized = String(modelExplanation || '').trim();
+        const modelExplanationSummary = modelExplanationNormalized
+            ? modelExplanationNormalized.slice(0, 220)
+            : '';
+        const normalizedConfidence = typeof finding.confidence === 'number' ? finding.confidence : check.confidence;
+        const existingInstanceCount = Number(check.instance_count || 0);
+        const currentVerdictPriority = existingInstanceCount > 0 ? verdictPriority(check.verdict) : -1;
+        const nextVerdictPriority = verdictPriority(verdict);
+        const shouldPromoteSummary = existingInstanceCount === 0
+            || nextVerdictPriority > currentVerdictPriority
+            || (nextVerdictPriority === currentVerdictPriority && normalizedConfidence > Number(check.confidence || 0));
+
+        check.instance_count = existingInstanceCount + 1;
+        if (shouldPromoteSummary) {
+            check.verdict = verdict;
+            check.confidence = normalizedConfidence;
+            check.explanation = findingExplanation;
+            check.ai_explanation_pack = (!guardrailDecision.adjusted && allowSourceExplanation) ? (aiExplanationPack || null) : null;
+            if (!guardrailDecision.adjusted && !isSynthetic && isOrphanHeadingsCheck) {
+                const shouldRewriteOrphanExplanation = looksAggregateOrphanExplanation(check.explanation);
+                if (shouldRewriteOrphanExplanation) {
+                    check.explanation = buildOrphanHeadingInstanceExplanation(exact, check.explanation);
+                }
             }
-        }
-        if (guardrailDecision.adjusted) {
-            check.guardrail_adjusted = true;
-            check.guardrail_reason = guardrailDecision.reason || 'question_anchor_guardrail';
+            if (guardrailDecision.adjusted) {
+                check.guardrail_adjusted = true;
+                check.guardrail_reason = guardrailDecision.reason || 'question_anchor_guardrail';
+                check.guardrail_kind = guardrailDecision.kind || 'question_anchor';
+                check.guardrail_source_verdict = sourceVerdict;
+                check.guardrail_source_confidence = normalizedConfidence;
+                check.guardrail_source_explanation = allowSourceExplanation ? (modelExplanationSummary || null) : null;
+            } else {
+                delete check.guardrail_adjusted;
+                delete check.guardrail_reason;
+                delete check.guardrail_kind;
+                delete check.guardrail_source_verdict;
+                delete check.guardrail_source_confidence;
+                delete check.guardrail_source_explanation;
+            }
         }
 
         if (isSynthetic) {
@@ -2444,9 +3075,12 @@ const convertFindingsToChecks = (findings, definitions, manifest, aiEligibleChec
         }
 
         if (!isSynthetic && (verdict === 'fail' || verdict === 'partial')) {
-            const candidateMessage = isOrphanHeadingsCheck
-                ? buildOrphanHeadingInstanceExplanation(exact, modelExplanation)
+            const candidateExplanation = guardrailDecision.adjusted
+                ? findingExplanation
                 : modelExplanation;
+            const candidateMessage = isOrphanHeadingsCheck
+                ? buildOrphanHeadingInstanceExplanation(exact, candidateExplanation)
+                : candidateExplanation;
             const candidate = {
                 scope,
                 snippet: exact,
@@ -2472,6 +3106,7 @@ const convertFindingsToChecks = (findings, definitions, manifest, aiEligibleChec
                 check.non_inline_reason = 'orphan_heading_no_anchor';
             }
             if (!Array.isArray(check.candidate_highlights)) check.candidate_highlights = [];
+            candidate.instance_index = check.candidate_highlights.length;
             check.candidate_highlights.push(candidate);
         }
     });
@@ -2493,13 +3128,35 @@ const convertFindingsToChecks = (findings, definitions, manifest, aiEligibleChec
                 skipped_non_ai_findings: aggregate.skipped_non_ai_findings,
                 question_anchor_count: strictQuestionAnchors.length,
                 question_anchor_guardrail_adjustments_total: aggregate.question_anchor_guardrail_adjustments_total,
-                question_anchor_guardrail_adjustments_by_check: aggregate.question_anchor_guardrail_adjustments_by_check
+                question_anchor_guardrail_adjustments_by_check: aggregate.question_anchor_guardrail_adjustments_by_check,
+                question_anchor_guardrail_adjustments_by_reason: aggregate.question_anchor_guardrail_adjustments_by_reason,
+                question_anchor_guardrail_fallback_explanations_total: aggregate.question_anchor_guardrail_fallback_explanations_total,
+                question_anchor_guardrail_fallback_explanations_by_check: aggregate.question_anchor_guardrail_fallback_explanations_by_check,
+                semantic_structure_guardrail_adjustments_total: aggregate.semantic_structure_guardrail_adjustments_total,
+                semantic_structure_guardrail_adjustments_by_check: aggregate.semantic_structure_guardrail_adjustments_by_check,
+                semantic_structure_guardrail_adjustments_by_reason: aggregate.semantic_structure_guardrail_adjustments_by_reason,
+                semantic_temporal_guardrail_adjustments_total: aggregate.semantic_temporal_guardrail_adjustments_total,
+                semantic_temporal_guardrail_adjustments_by_check: aggregate.semantic_temporal_guardrail_adjustments_by_check,
+                semantic_temporal_guardrail_adjustments_by_reason: aggregate.semantic_temporal_guardrail_adjustments_by_reason
             },
             question_anchor_guardrail: {
                 strict_mode: true,
                 question_anchor_count: strictQuestionAnchors.length,
                 adjustments_total: aggregate.question_anchor_guardrail_adjustments_total,
-                adjustments_by_check: aggregate.question_anchor_guardrail_adjustments_by_check
+                adjustments_by_check: aggregate.question_anchor_guardrail_adjustments_by_check,
+                adjustments_by_reason: aggregate.question_anchor_guardrail_adjustments_by_reason,
+                fallback_explanations_total: aggregate.question_anchor_guardrail_fallback_explanations_total,
+                fallback_explanations_by_check: aggregate.question_anchor_guardrail_fallback_explanations_by_check
+            },
+            semantic_structure_guardrail: {
+                adjustments_total: aggregate.semantic_structure_guardrail_adjustments_total,
+                adjustments_by_check: aggregate.semantic_structure_guardrail_adjustments_by_check,
+                adjustments_by_reason: aggregate.semantic_structure_guardrail_adjustments_by_reason
+            },
+            semantic_temporal_guardrail: {
+                adjustments_total: aggregate.semantic_temporal_guardrail_adjustments_total,
+                adjustments_by_check: aggregate.semantic_temporal_guardrail_adjustments_by_check,
+                adjustments_by_reason: aggregate.semantic_temporal_guardrail_adjustments_by_reason
             }
         }
     };
@@ -2672,6 +3329,57 @@ const normalizeCreditReservation = (candidate = {}, fallbackSiteId = '') => {
             : (candidate.pricingSnapshot && typeof candidate.pricingSnapshot === 'object' ? candidate.pricingSnapshot : null),
         created_at: String(candidate.created_at || candidate.createdAt || '').trim()
     };
+};
+
+const MAX_FINDINGS_PER_CHECK = 3;
+
+const getFindingDedupKey = (finding) => {
+    const checkId = String(finding?.check_id || '').trim();
+    const verdict = normalizeVerdict(finding?.verdict, 'fail');
+    const scope = typeof finding?.scope === 'string' ? finding.scope.trim() : 'span';
+    const selector = finding?.text_quote_selector && typeof finding.text_quote_selector === 'object'
+        ? finding.text_quote_selector
+        : {};
+    const exact = String(selector.exact || finding?.snippet || finding?.text || '').trim().toLowerCase();
+    return `${checkId}::${verdict}::${scope}::${exact}`;
+};
+
+const addNormalizedFindingToMap = (findingsByCheck, finding) => {
+    const checkId = String(finding?.check_id || '').trim();
+    if (!checkId) return;
+    const existing = Array.isArray(findingsByCheck.get(checkId))
+        ? findingsByCheck.get(checkId)
+        : [];
+    const verdict = normalizeVerdict(finding?.verdict, 'fail');
+    const isPassingFinding = verdict === 'pass';
+    const hasNonPassFinding = existing.some((item) => normalizeVerdict(item?.verdict, 'fail') !== 'pass');
+    const nextDedupKey = getFindingDedupKey(finding);
+
+    if (existing.some((item) => getFindingDedupKey(item) === nextDedupKey)) {
+        return;
+    }
+
+    if (isPassingFinding) {
+        if (hasNonPassFinding || existing.length > 0) {
+            return;
+        }
+        findingsByCheck.set(checkId, [finding]);
+        return;
+    }
+
+    const nonPassOnly = existing.filter((item) => normalizeVerdict(item?.verdict, 'fail') !== 'pass');
+    if (nonPassOnly.length >= MAX_FINDINGS_PER_CHECK) {
+        findingsByCheck.set(checkId, nonPassOnly);
+        return;
+    }
+    findingsByCheck.set(checkId, [...nonPassOnly, finding]);
+};
+
+const verdictPriority = (verdict) => {
+    const normalized = normalizeVerdict(verdict, 'fail');
+    if (normalized === 'fail') return 3;
+    if (normalized === 'partial') return 2;
+    return 1;
 };
 
 const finalizeCreditSettlement = async ({
@@ -3104,6 +3812,9 @@ const extractPartialFindingsFromRaw = (text, manifest) => {
 
 const callMistralChunked = async (manifest, promptVersion, runId, options = {}) => {
     loadAssets();
+    ensureManifestPreflightStructure(manifest, options.runMetadata || {}, {
+        contentHtml: typeof manifest?.content_html === 'string' ? manifest.content_html : ''
+    });
 
     const apiKey = await getMistralApiKey();
     if (!apiKey || apiKey.length < 8) {
@@ -3174,6 +3885,12 @@ const callMistralChunked = async (manifest, promptVersion, runId, options = {}) 
         DEFAULT_AI_CHUNK_RETRY_BASE_DELAY_MS,
         100,
         10000
+    );
+    const malformedChunkCaptureLimit = clampPositiveInt(
+        getEnv('AI_MALFORMED_CHUNK_CAPTURE_LIMIT', DEFAULT_AI_MALFORMED_CHUNK_CAPTURE_LIMIT),
+        DEFAULT_AI_MALFORMED_CHUNK_CAPTURE_LIMIT,
+        0,
+        10
     );
     const configuredMaxAnalysisLatencyMs = clampPositiveInt(
         getEnv('AI_MAX_ANALYSIS_LATENCY_MS', DEFAULT_AI_MAX_ANALYSIS_LATENCY_MS),
@@ -3255,6 +3972,7 @@ const callMistralChunked = async (manifest, promptVersion, runId, options = {}) 
         chunk_max_tokens: chunkMaxTokens,
         chunk_retry_max_tokens: chunkRetryMaxTokens,
         chunk_request_max_attempts: chunkRequestMaxAttempts,
+        malformed_chunk_capture_limit: malformedChunkCaptureLimit,
         completion_first_enabled: completionFirstEnabled,
         configured_max_analysis_latency_ms: configuredMaxAnalysisLatencyMs,
         lambda_remaining_time_ms: lambdaRemainingTimeMs,
@@ -3326,9 +4044,10 @@ ${promptContent}`;
             ? `
 
 Output compression rules:
-- Keep each explanation to 1-2 concise sentences, maximum 180 characters.
-- For block/span scope, choose the shortest exact proof span (roughly 40-220 characters).
-- Keep prefix/suffix between 32 and 80 characters where possible.`
+- Keep each explanation to one short sentence where possible, maximum 140 characters.
+- For block/span scope, choose the shortest exact proof span that still proves the finding (roughly 32-160 characters).
+- Keep prefix/suffix between 32 and 64 characters where possible.
+- Do not emit optional advisory prose or duplicate the same point in multiple fields.`
             : '';
         return `${baseUserPrompt}
 
@@ -3367,14 +4086,22 @@ Return findings ONLY for these check_ids.${compactRules}`;
         input_tokens: response?.usage?.input_tokens ?? response?.usage?.prompt_tokens ?? 0,
         output_tokens: response?.usage?.output_tokens ?? response?.usage?.completion_tokens ?? 0
     });
+    const mistralChunkResponseFormat = buildMistralChunkResponseFormat();
 
     let chunkApiRetryCount = 0;
     let modelSwitchCount = 0;
     const parseErrorCounts = {};
+    const malformedChunkSamples = [];
     const trackParseErrorClass = (error) => {
+        if (error?._parseClassTracked) return;
         const klass = classifyParseErrorClass(error);
         if (!klass) return;
         parseErrorCounts[klass] = Number(parseErrorCounts[klass] || 0) + 1;
+        try {
+            error._parseClassTracked = true;
+        } catch (trackingError) {
+            // best-effort marker only
+        }
     };
 
     const executeChunkRequest = async ({ checkIds, userPrompt, maxTokens, temperature, chunkIndex, attemptLabel }) => {
@@ -3412,7 +4139,7 @@ Return findings ONLY for these check_ids.${compactRules}`;
                             ],
                             temperature,
                             max_tokens: maxTokens,
-                            response_format: { type: "json_object" }
+                            response_format: mistralChunkResponseFormat
                         }),
                         budgetWindow.requestTimeoutMs,
                         () => createTimeBudgetExceededError('time_budget_exceeded: chunk_request_timeout', {
@@ -3431,6 +4158,16 @@ Return findings ONLY for these check_ids.${compactRules}`;
                     try {
                         parsed = parseFindingsFromRaw(rawText);
                     } catch (parseError) {
+                        trackParseErrorClass(parseError);
+                        captureMalformedChunkEntry(malformedChunkSamples, {
+                            chunkIndex,
+                            chunkTag,
+                            attemptLabel,
+                            model: activeModel,
+                            finishReason,
+                            parseError,
+                            rawText
+                        }, malformedChunkCaptureLimit);
                         const recoveredFindings = extractPartialFindingsFromRaw(rawText, manifest);
                         if (recoveredFindings.length > 0) {
                             recoveredPartial = true;
@@ -3439,10 +4176,21 @@ Return findings ONLY for these check_ids.${compactRules}`;
                                 run_id: runId,
                                 chunk: chunkTag,
                                 model: activeModel,
+                                finish_reason: finishReason,
+                                parse_error_class: classifyParseErrorClass(parseError) || 'unknown',
                                 recovered_count: recoveredFindings.length,
                                 error: parseError.message
                             });
                         } else {
+                            log('WARN', 'Chunk response failed structured parse and could not be partially recovered', {
+                                run_id: runId,
+                                chunk: chunkTag,
+                                model: activeModel,
+                                finish_reason: finishReason,
+                                parse_error_class: classifyParseErrorClass(parseError) || 'unknown',
+                                attempt_label: attemptLabel,
+                                error: parseError.message
+                            });
                             throw parseError;
                         }
                     }
@@ -3621,7 +4369,7 @@ Return findings ONLY for these check_ids.${compactRules}`;
                 chunkCheckIds,
                 'normal',
                 chunkMaxTokens,
-                compactPromptEnabled ? 0.1 : 0.2,
+                0,
                 'missing_primary_chunk_output',
                 false
             );
@@ -3637,7 +4385,7 @@ Return findings ONLY for these check_ids.${compactRules}`;
                     retryCheckIds,
                     'compact',
                     chunkRetryMaxTokens,
-                    0.1,
+                    0,
                     'missing_after_compact_retry',
                     false
                 );
@@ -3685,7 +4433,7 @@ Return findings ONLY for these check_ids.${compactRules}`;
                     chunkCheckIds,
                     'compact',
                     chunkRetryMaxTokens,
-                    0.1,
+                    0,
                     'missing_compact_fallback_output',
                     false
                 );
@@ -3748,7 +4496,7 @@ Return findings ONLY for these check_ids.${compactRules}`;
                                 { synthesizeMissing: false }
                             );
                             if (finalizedSingle.findings.length > 0) {
-                                salvageRecovered.set(checkId, finalizedSingle.findings[0]);
+                                salvageRecovered.set(checkId, finalizedSingle.findings);
                             }
                         } catch (singleCheckError) {
                             if (isTimeBudgetExceededError(singleCheckError)) {
@@ -3763,7 +4511,7 @@ Return findings ONLY for these check_ids.${compactRules}`;
                 if (salvageRecovered.size > 0) {
                     const recoveredFindings = chunkCheckIds
                         .filter((checkId) => salvageRecovered.has(checkId))
-                        .map((checkId) => salvageRecovered.get(checkId));
+                        .flatMap((checkId) => salvageRecovered.get(checkId));
                     const missingCheckIds = chunkCheckIds.filter((checkId) => !salvageRecovered.has(checkId));
                     const syntheticReason = salvageBudgetStop ? 'time_budget_exceeded' : 'chunk_parse_failure';
                     const syntheticFindings = missingCheckIds.map((checkId) =>
@@ -3834,6 +4582,7 @@ Return findings ONLY for these check_ids.${compactRules}`;
         aiEligibleCheckIds,
         { questionAnchorPayload }
     );
+    applyNoInternalLinksNeutrality(converted.checks, manifest);
     const computedScores = scoreChecksForSidebar(converted.checks, manifest, runId);
     const result = {
         classification: {
@@ -3908,6 +4657,26 @@ Return findings ONLY for these check_ids.${compactRules}`;
     partialContext.parse_error_counts = parseErrorCounts;
     partialContext.parse_error_total = Object.values(parseErrorCounts).reduce((sum, value) => sum + Number(value || 0), 0);
     partialContext.parse_recovery_count = parseRecoveryCount;
+    partialContext.malformed_chunk_capture_limit = malformedChunkCaptureLimit;
+    partialContext.malformed_chunk_capture_count = malformedChunkSamples.length;
+
+    if (malformedChunkSamples.length > 0) {
+        try {
+            const malformedChunkArtifact = await storeResult(runId, {
+                run_id: runId,
+                captured_at: new Date().toISOString(),
+                capture_limit: malformedChunkCaptureLimit,
+                captures: malformedChunkSamples
+            }, 'malformed_chunks.json');
+            partialContext.malformed_chunk_capture_s3_key = malformedChunkArtifact.s3Uri;
+        } catch (captureError) {
+            log('WARN', 'Failed to persist malformed chunk capture artifact', {
+                run_id: runId,
+                capture_count: malformedChunkSamples.length,
+                error: captureError.message
+            });
+        }
+    }
 
     log('INFO', 'AI chunk telemetry summary', {
         run_id: runId,
@@ -3919,6 +4688,7 @@ Return findings ONLY for these check_ids.${compactRules}`;
         parse_error_total: partialContext.parse_error_total,
         parse_recovery_count: parseRecoveryCount,
         parse_error_counts: parseErrorCounts,
+        malformed_chunk_capture_count: malformedChunkSamples.length,
         returned_check_rate: partialContext.returned_check_rate,
         synthetic_check_rate: partialContext.synthetic_check_rate,
         budget_hit: budgetHit,
@@ -4133,12 +4903,11 @@ ${promptContent}`;
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt }
         ],
-        temperature: 0.3,
+        temperature: 0,
         max_tokens: 8000
     };
 
-    // Add response_format only if needed (Mistral supports JSON mode)
-    requestPayload.response_format = { type: "json_object" };
+    requestPayload.response_format = buildMistralChunkResponseFormat();
 
     log('INFO', 'API request payload', {
         model: requestPayload.model,
@@ -4170,7 +4939,7 @@ ${promptContent}`;
         log('WARN', 'Primary parse failed, retrying with compact prompt', { error: parseError.message });
         const contentText = manifest.content_html || manifest.content || '';
         const truncatedContent = typeof contentText === 'string' ? contentText.slice(0, 12000) : '';
-        const fallbackUserPrompt = `Return compact JSON only. Omit long explanations if needed. Keep findings array and required fields (check_id, verdict, confidence, scope, text_quote_selector, explanation).
+        const fallbackUserPrompt = `Return compact JSON only. Omit long explanations if needed. Keep findings array and required fields (check_id, verdict, confidence, scope, text_quote_selector, explanation). For pass verdicts, set explanation to an empty string.
 
 Title: ${manifest.title || 'Untitled'}
 Meta Description: ${manifest.meta_description || 'Not provided'}
@@ -4184,7 +4953,7 @@ ${truncatedContent}`;
                 { role: "system", content: systemPrompt },
                 { role: "user", content: fallbackUserPrompt }
             ],
-            temperature: 0.2,
+            temperature: 0,
             max_tokens: 4000
         };
         const fallbackResponse = await openai.chat.completions.create(fallbackPayload);
@@ -4237,6 +5006,7 @@ ${truncatedContent}`;
         aiEligibleCheckIds,
         { questionAnchorPayload }
     );
+    applyNoInternalLinksNeutrality(converted.checks, manifest);
     const computedScores = scoreChecksForSidebar(converted.checks, manifest, runId);
     result = {
         classification: result.classification || {
@@ -4493,7 +5263,8 @@ const processJob = async (message, lambdaContext = null) => {
             runId,
             {
                 featureFlags,
-                lambdaRemainingTimeMs
+                lambdaRemainingTimeMs,
+                runMetadata: job
             }
         );
 
@@ -4942,8 +5713,18 @@ exports.__testHooks = {
     isStrictQuestionAnchorText,
     buildQuestionAnchorPayload,
     evaluateQuestionAnchorGuardrail,
+    applyNoInternalLinksNeutrality,
+    buildQuestionAnchorGuardrailExplanation,
+    normalizeChunkFindings,
     normalizeCreditReservation,
-    finalizeCreditSettlement
+    finalizeCreditSettlement,
+    buildMistralChunkResponseFormat,
+    DEFAULT_AI_CHUNK_SIZE,
+    DEFAULT_AI_COMPACT_CHUNK_SIZE,
+    buildMalformedChunkCaptureEntry,
+    captureMalformedChunkEntry,
+    DEFAULT_AI_MALFORMED_CHUNK_CAPTURE_LIMIT,
+    validateFindingsContract
 };
 
 exports.handler = async (event, context) => {

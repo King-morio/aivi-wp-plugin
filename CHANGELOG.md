@@ -1,306 +1,166 @@
 # Changelog
 
-All notable changes to the AiVI WordPress Plugin will be documented in this file.
+All notable public-facing changes to the **AiVI - AI Visibility Inspector** WordPress plugin are documented in this file.
+
+This changelog is intentionally written for the public plugin surface. It excludes private operator systems, internal phase labels, and backend-only implementation details that do not belong in the public repository.
 
 ## [Unreleased]
 
-### Phase 5 Closeout
+### Documentation Expansion
 
-- formally closed the Phase 5 commerce rollout work after validating:
-  - sandbox top-up grant
-  - sandbox subscription activation
-  - analysis admission and credit settlement
-- updated closeout and rollout docs to move the remaining work into a dedicated Phase 6 polish track
+- added a dedicated documentation set for the public plugin surface:
+  - `USER_GUIDE.md`
+  - `CHECK_REFERENCE.md`
+  - `TROUBLESHOOTING.md`
+  - `PRIVACY.md`
+  - `TERMS_OF_SERVICE.md`
+  - `SUPPORT.md`
+  - `DEVELOPMENT.md`
+  - `ARCHITECTURE.md`
+  - `OPERATIONS.md`
+- added a first-class `Documentation` settings tab that renders the bundled guides inside WordPress
+- refreshed the public README and contributing guide to match the current plugin workflow
 
-### Billing UI and State Sync
+### Analysis and Editor Experience
 
-- refreshed local WordPress account/dashboard state from authoritative backend summary after completed runs
-- removed the duplicate post-run credit/debit card from the analysis sidebar
-- kept sidebar and settings credit balances aligned after live credit consumption
+- refined intro extraction, answer-family behavior, heading-fragmentation behavior, and freshness handling in the current plugin runtime
+- improved stale-result invalidation and article-level supersession behavior
+- improved overlay draft compatibility checks for reruns and changed content
+- redesigned the analysis progress card and refreshed live analysis microcopy inside the editor sidebar
+
+### Settings and UI Polish
+
+- polished the Overview, Plans, Credits, Connection, and Support settings surfaces
+- tightened the plans spotlight layout
+- improved Credits tab card design and connection guidance presentation
+- removed dormant debug-style controls from the visible sidebar UI
+
+### Public Repository and Packaging
+
+- added a public snapshot export workflow and allowlist-based publishing path
+- kept the public repository limited to plugin-safe runtime code, tests, docs, and packaging helpers
+- preserved the release ZIP packaging allowlist so only WordPress runtime files ship in plugin packages
+
+## [1.0.16] - 2026-03-25
+
+### Temporal And Overlay Apply Clarity
+
+- tightened `temporal_claim_check` so locally anchored interval advice like `after 48 hours` no longer gets treated like a missing article-date problem
+- made `Apply Changes` the clear commit point into the WordPress editor for supported overlay edits instead of silently mirroring article text as you type
+- added a post-apply reveal flow that closes the overlay, scrolls Gutenberg to the changed block, briefly highlights it, and reminds the author to `Update` or `Publish`
+
+## [1.0.15] - 2026-03-25
+
+### Overlay And Sidebar Fidelity
+
+- improved the overlay editor so rich article blocks like tables, embeds, galleries, code, and separators stay visible in context instead of disappearing during review
+- clarified that `Apply Changes` writes into the WordPress editor and still requires the normal `Update` or `Publish` action to make changes live
+- removed unsafe paragraph-to-list coercion and tightened apply safety around unsupported rich blocks
+- refined the live analysis sidebar with a calmer progress shell, better queued-state presentation, and less duplicated messaging
+
+### Privacy And Trial Controls
+
+- stopped silently using the WordPress admin email as AiVI's default contact email
+- made the billing contact email visible and optional so free trial can begin without a hidden email fallback
+- hardened self-serve trial admission checks with exact-domain history while keeping the approach privacy-safe and explicit in the bundled privacy guide
+
+## [1.0.14] - 2026-03-25
+
+### Live Analysis And Review Rail Fixes
+
+- activated live semantic guardrails earlier so question-led list sections are less likely to misfire as FAQ opportunities during async analysis
+- restored verdict-oriented issue badges in the editor sidebar and moved `High impact`, `Recommended`, and `Polish` to the overlay review rail where they were intended to appear
+- rebalanced the live analysis progress panel and added a clearer time expectation note for longer runs
+
+### Billing Recovery And Support Controls
+
+- improved PayPal activation recovery so cancelled or invalid trial upgrade attempts can return to retry-ready state instead of remaining stuck on `Wait for activation`
+- added a safer support recovery path in the admin console with `Recheck activation` and `Clear activation hold`
+
+## [1.0.13] - 2026-03-25
+
+### Review And Score UX
+
+- added review-rail impact pills so surfaced issues now read as `High impact`, `Recommended`, or `Polish` instead of feeling equally urgent
+- added a global score quality pill so the main score is easier to interpret at a glance
+- updated AEO and GEO ring colors to use simple score bands, making weak category scores look more honest without adding extra clutter
+
+### Settings Flow Cleanup
+
+- fixed the Plans spotlight CTA so `Choose your plan` now lands directly on the Plans tab and plan grid
+- kept the rest of the in-settings routing aligned with the existing tab-state model so internal jumps land where users expect
+
+## [1.0.12] - 2026-03-25
+
+### Schema Insert Conflict Hardening
+
+- hardened schema insertion so AiVI now checks existing editor and rendered-page schema before inserting new JSON-LD
+- added safer insert outcomes across the overlay experience so schema assists can append, replace one clear AiVI-managed block, skip exact matches, or switch to copy-only when another schema source already exists
+- improved schema-assist release messaging so the editor clearly shows whether AiVI is ready to insert, ready to replace, already present, or blocked by an external conflict
+
+### Editor and Release Safety
+
+- preserved duplicate awareness across reruns and later editing sessions by carrying stronger schema-assist identity metadata and conflict-policy hints through the release path
+- kept the overlay draft compatibility and serializer release layers aligned so conflict-aware schema assists stay stable across worker and orchestrator output
+- shipped the new overlay review states without adding a heavy schema management panel
+
+## [1.0.11] - 2026-03-24
+
+### Structural Detection and Deterministic Guidance
+
+- improved ItemList detection so strong visible lists under real headings and heading-like section labels no longer get missed as schema candidates
+- added a deterministic heading-markup check for bolded or otherwise heading-like text that should use real heading tags
+- kept structural release behavior cleaner across sidebar and overlay surfaces for the new heading-markup and ItemList findings
+
+### PayPal Retry Recovery
+
+- restored failed or cancelled PayPal free-trial activation attempts back to a true retry-ready state from the return path when the provider confirms a terminal status
+- cleared the stale blocked-plan messaging path so guarded plan cards show the right local explanation instead of the misleading billing-not-ready error
+- preserved the existing free-trial access while removing the stuck `Wait for activation` state for retry-ready customers
+
+## [1.0.10] - 2026-03-24
+
+### Semantic Opportunity Governance and Release Stability
+
+- taught opportunity-style semantic checks clearer pass shapes, non-trigger rules, and contrastive examples so they stop overreaching on acceptable content formats
+- hardened shared structural truth for visible lists, pseudo-lists, question-led sections, FAQ candidacy, and procedural signals
+- added worker-side semantic guardrails so list, FAQ, and HowTo opportunities respect structural evidence before release
+- collapsed duplicate cross-block semantic releases into one canonical issue in sidebar, details, and overlay surfaces
+
+### Billing and Deterministic Review Continuity
+
+- preserved the recent PayPal pending-subscription safety fixes and deterministic review ownership cleanup in the current release package
+- kept deterministic guidance, schema checks, and machine-readable release behavior aligned across worker and orchestrator paths
+
+## [1.0.9] - 2026-03-23
+
+### Billing Activation and Retry Safety
+
+- kept customers on their existing trial or active plan until PayPal confirms subscription activation
+- cleared failed or cancelled pending subscription attempts back into a retry-ready state
+- improved billing status handling so stale "waiting for PayPal" states clear more reliably after failure or cancellation
+
+### Check Ownership and Deterministic Guidance
+
+- removed deterministic-owned checks from the AI analyzer surface so semantic analysis stays focused on judgment-heavy review
+- retired the fake intro composite check and redistributed intro ownership and scoring cleanly
+- expanded deterministic guidance coverage and added stronger machine-readable schema checks for article pages and strong visible lists
 
 ## [1.0.8] - 2026-03-06
 
-### Phase 4 Closeout
+### Packaging and Release Hygiene
 
 - aligned plugin and package metadata on version `1.0.8`
-- added a release packaging allowlist so docs, infrastructure, archives, and temp artifacts do not ship in the plugin zip
-- cleaned Phase 4 repo clutter and removed obsolete helper/debug files from the commit candidate set
+- added a release packaging allowlist so infrastructure files, temp artifacts, and non-runtime files do not ship in the plugin ZIP
+- cleaned the release candidate surface before packaging
 
-### Security Hardening
+### Security and Runtime Hardening
 
-- removed hardcoded backend API fallback from plugin bootstrap
-- stopped localizing unnecessary client config values (`siteId`, `tokenCutoff`, full backend URL)
-- changed details-token signing to require real secret material instead of a predictable fallback
-- quarantined local artifact captures and leaked presigned worker code URL files from version control
+- removed unnecessary client-side runtime exposure for backend-related configuration
+- tightened token and runtime handling used by analysis-result flows
+- improved packaging and repository hygiene around local artifacts
 
-### UI and Analysis Runtime
+### Editor and Runtime Refinements
 
-- finalized sidebar analysis loader refinements for the current Phase 4 baseline
-- preserved overlay/editor runtime behavior while tightening packaging and commit hygiene
-
-## [1.5.0] - 2026-01-29
-
-### Execution & Failure States (Hard Abort, Stale-Run Invalidation)
-
-**Feature:** Professional, predictable behavior when analysis fails or content changes.
-
-#### Abort Behavior (Strict)
-
-When any of these occur, the entire analysis run is aborted:
-- AI service returns timeout
-- AI service returns HTTP error (5xx) or model unavailable
-- Analyzer produces invalid/unparseable JSON
-- Any unexpected exception during server-side analysis pipeline
-
-**Abort Response (exact shape):**
-```json
-{
-  "version": "1.2.0",
-  "run_id": "<run_id>",
-  "status": "aborted",
-  "reason": "ai_unavailable|timeout|invalid_output|internal_error",
-  "message": "Analysis aborted — no partial results shown",
-  "trace_id": "<trace id>"
-}
-```
-
-#### Sidebar Behavior on Abort
-
-- Sidebar is emptied of all analysis cards (no categories, no issues)
-- Prominent non-modal banner with exact copy: **"Analysis aborted — no partial results shown"**
-- Single CTA button: **"Retry analysis"**
-
-#### Details Endpoint Behavior
-
-- **Aborted run**: Returns HTTP 503 Service Unavailable
-- **Stale run**: Returns HTTP 410 Gone
-
-**503 Response (aborted):**
-```json
-{
-  "status": "aborted",
-  "code": "analysis_aborted",
-  "reason": "<reason>",
-  "message": "Analysis aborted — no partial results shown",
-  "trace_id": "<trace id>"
-}
-```
-
-**410 Response (stale):**
-```json
-{
-  "status": "stale",
-  "code": "results_stale",
-  "message": "Analysis results stale — please re-run analysis",
-  "run_id": "<run_id>"
-}
-```
-
-#### Stale-Run Invalidation
-
-On any editor content modification after analysis completes:
-- Run marked stale locally
-- Active highlights cleared
-- Navigation controls disabled
-- Toast displayed: **"Analysis results stale — please re-run analysis"**
-- Single-action button: **"Re-run analysis"**
-
-#### Telemetry Events (PII-safe)
-
-- `analysis_started` { run_id, user_id_anonymized, timestamp }
-- `analysis_completed` { run_id, duration_ms, issues_count }
-- `analysis_aborted` { run_id, reason, trace_id, duration_ms }
-- `analysis_marked_stale` { run_id, user_action, timestamp }
-- `details_request_aborted` { run_id, check_id?, instance_index? }
-- `details_request_stale` { run_id, check_id?, instance_index? }
-
-#### Files Added/Modified
-
-- `infrastructure/lambda/orchestrator/analysis-serializer.js` - Abort response generation
-- `infrastructure/lambda/orchestrator/run-status-handler.js` - Proper abort analysis_summary
-- `infrastructure/lambda/orchestrator/analysis-details-handler.js` - 503/410 responses
-- `infrastructure/lambda/orchestrator/telemetry-emitter.js` - PII-safe telemetry events
-- `assets/js/aivi-sidebar.js` - Abort banner, stale banner, content change detection
-- `tests/js/execution-failure-states.test.js` - 6 acceptance tests
-
----
-
-## [1.4.0] - 2026-01-29
-
-### Editor Coupling & Highlight Discipline
-
-**Feature:** Deterministic anchor resolution with single active highlight for trustworthy editor integration.
-
-#### Anchor Resolution (Deterministic)
-
-- **Primary**: `node_ref` from details endpoint maps directly to Gutenberg block
-- **Fallback**: Exact substring match only (no fuzzy/heuristic search)
-- **No Match**: "Unable to locate instance" popover with "Open details" action
-
-#### Single Active Highlight
-
-- Only one highlight visible at any time
-- Previous highlight cleared before showing new one
-- Highlight persists until next navigation or content edit
-
-#### Stale-Run Handling
-
-- Content edits invalidate the current analysis run
-- Navigation disabled when stale (returns 410 from endpoint)
-- Non-modal toast: "Analysis results stale — please re-run analysis."
-- Highlights auto-cleared on content edit
-
-#### Visual Specification
-
-Semantic style tokens for verdict-based highlighting:
-- `fail` → Critical (red border: `#dc2626`, light background)
-- `partial` → Warning (amber border: `#d97706`, light background)
-- `pass` → Success (green, details drawer only)
-
-#### Accessibility
-
-- Smooth scroll to highlighted block
-- Keyboard focus inside highlighted element
-- WCAG AA compliant contrast ratios
-- Screen reader labels: `aria-label`, `role="mark"`
-
-#### Telemetry (PII-safe)
-
-Events logged without raw snippet content:
-- `highlight_shown` - navigation success
-- `highlight_cleared` - highlight removed
-- `anchor_resolution_failed` - with reason (no snippet)
-
-#### Files Added/Modified
-
-- `assets/js/aivi-highlight-manager.js` - HighlightManager, AnchorResolver, DetailsClient, PopoverManager
-- `assets/js/aivi-sidebar.js` - NavigationController integration with HighlightManager
-- `assets/css/aivi-highlights.css` - Semantic style tokens, popover/toast styles
-- `tests/js/highlight-discipline.test.js` - 7 acceptance tests
-- `docs/HIGHLIGHT_DISCIPLINE.md` - Internal documentation
-
----
-
-## [1.3.0] - 2026-01-29
-
-### Navigation Model (Fast Editing, No Cognitive Load)
-
-**Feature:** Fast, deterministic navigation between issue instances in the editor.
-
-#### Navigation Controls
-
-- **Instance Display**: `< 1 / 5 >` format showing current position
-- **Cyclic Navigation**: Wraps from last→first and first→last
-- **Keyboard Shortcuts**: `[` = previous, `]` = next instance
-- **Click to Focus**: Clicking issue row sets it as the active issue for keyboard nav
-
-#### Editor Integration
-
-- **Smooth Scroll**: Editor scrolls to target block on navigation
-- **Highlight**: Blue outline + tint for ~1.8 seconds
-- **Block Focus**: Gutenberg block selection (when supported)
-
-#### Tooltips
-
-Hover on verdict icons for static UI copy:
-- `✕` → "This issue must be fixed for extractability."
-- `⚠️` → "This issue partially meets extraction criteria."
-
-#### Files Modified
-
-- `assets/js/aivi-sidebar.js` - NavigationController, keyboard nav, tooltips, highlighting
-- `docs/NAVIGATION_MODEL.md` - Internal documentation
-
----
-
-## [1.2.0] - 2026-01-29
-
-### Sidebar Noise Elimination
-
-**Breaking Change:** The WordPress editor sidebar now shows **only fail/partial issues** with a minimal, icon-only presentation.
-
-#### What Changed
-
-- **Fail/Partial Only**: Sidebar issues list now displays only checks with `ui_verdict === "fail"` or `ui_verdict === "partial"`. Pass and not_applicable checks are hidden from the list view.
-
-- **Icon Mapping**:
-  - `fail` → ✕ (X icon, red)
-  - `partial` → ⚠️ (warning icon, yellow)
-  - `pass` → ✓ (hidden in list, visible only in details drawer)
-  - `not_applicable` → hidden
-
-- **Single-Line Issue Rows**: Each issue row now shows only:
-  - Verdict icon
-  - Check name
-  - Instance navigation (`< count >`) if `instances > 1`
-
-- **Ordering**: Issues within each category are now ordered:
-  1. All `fail` items first (alphabetical by name)
-  2. Then `partial` items (alphabetical by name)
-
-- **No Prose in Sidebar**: The following fields are **never** included in `analysis_summary`:
-  - `explanation`
-  - `highlights`
-  - `suggestions`
-  - `snippets`
-  - `confidence`
-  - `score`
-  - `offsets`
-
-- **Instance Navigation**: Click `<` / `>` to navigate between instances. The sidebar calls the details endpoint to fetch highlight offsets for each instance. `instance_index` is **zero-based** (0..instances-1).
-
-#### Schema Version
-
-`analysis_summary.version` is now `1.2.0`:
-
-```json
-{
-  "version": "1.2.0",
-  "run_id": "string",
-  "categories": [
-    {
-      "id": "answer_extractability",
-      "name": "Answer Extractability",
-      "issue_count": 2,
-      "issues": [
-        {
-          "check_id": "direct_answer_first_120",
-          "name": "Direct Answer in First 120 Words",
-          "ui_verdict": "fail",
-          "instances": 2,
-          "first_instance_node_ref": "block-123"
-        }
-      ]
-    }
-  ]
-}
-```
-
-#### Files Modified
-
-- `infrastructure/lambda/orchestrator/analysis-serializer.js` - Filter to fail/partial, ordering logic
-- `infrastructure/lambda/orchestrator/sidebar-payload-stripper.js` - Validation for ordering and forbidden verdicts
-- `assets/js/aivi-sidebar.js` - Icon mapping, single-line rows, instance navigation
-- `infrastructure/lambda/orchestrator/sidebar-noise-elimination.test.js` - 19 automated tests
-
----
-
-## [1.1.0] - 2026-01-29
-
-### Canonical Primary Category Mapping (Presentation Lock)
-
-- **7 Canonical Categories**: Sidebar results are now grouped exclusively by 7 primary categories
-- **No AEO/GEO Grouping**: AEO/GEO are aggregate scores only, never used for grouping
-- **Stable Ordering**: Categories displayed in fixed `display_order` (1-7)
-- **Single Source of Truth**: `primary-category-map.json` defines all category→check mappings
-
----
-
-## [1.0.0] - 2026-01-29
-
-### Sidebar-Payload Hard Separation
-
-- **Stripper Layer**: Server-side removal of all forbidden fields before sending to sidebar
-- **PII Scrubbing**: Emails, SSNs, phones, credit cards redacted before S3 persistence
-- **Stale Content Detection**: Details endpoint returns 410 Gone if content changed since analysis
-- **Result Contract Lock**: Minimal `analysis_summary` payload for sidebar, full analysis stored server-side
+- improved the analysis sidebar experience for the current `1.0.8` baseline
+- preserved overlay/editor behavior while tightening release discipline and package boundaries
