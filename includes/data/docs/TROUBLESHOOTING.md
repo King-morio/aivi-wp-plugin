@@ -48,7 +48,7 @@ AiVI uses an async run flow. The plugin submits the analysis and then polls for 
 Longer waits can happen when:
 
 - the article is large
-- the backend is busy
+- the service is busy
 - a temporary network problem interrupts polling
 
 ### What to do
@@ -63,7 +63,7 @@ Contact support if:
 
 - multiple fresh runs remain stuck
 - the same article repeatedly fails to complete
-- the backend health or account state also looks unstable
+- the service status or account state also looks unstable
 
 ## Problem: "Analysis results are stale" or "Details are unavailable for this run"
 
@@ -277,7 +277,7 @@ They are not the normal customer path for most sites.
 
 ### What it usually means
 
-AiVI may still be waiting for backend confirmation of the latest billing or connection state.
+AiVI may still be waiting for confirmation of the latest billing or connection state.
 
 ### What to do
 
@@ -297,13 +297,13 @@ Contact support if:
 
 ### What it usually means
 
-The configured backend endpoint may be unreachable, invalid, or not intended for the current environment.
+If support previously asked you to use a custom service URL, that custom setting may now be wrong or unreachable.
 
 ### What to do
 
-- leave **Backend URL** empty on normal customer sites so AiVI uses the built-in production endpoint
-- only use a backend override for staging, development, or support-guided troubleshooting
-- if a custom backend URL is set, verify it is correct and reachable
+- leave the advanced service URL setting empty on normal customer sites
+- only use a custom service URL when support specifically asks you to
+- if a custom service URL is set, verify it is correct or clear it and try again
 
 ## Problem: Support flow is needed
 
@@ -315,7 +315,6 @@ The most helpful support reports include:
 - what happened instead
 - the post or page involved
 - the approximate time of the run
-- the run ID, when available
 - whether the problem happened after a rerun or after changing content
 
 ### Where to start
@@ -336,12 +335,12 @@ If you are unsure what to do next, use this quick reset sequence:
 4. Re-run analysis.
 5. Wait for the latest run to finish.
 6. Review the latest result, not an older one.
-7. If the issue persists, collect the run ID and contact support.
+7. If the issue persists, contact support with a short description of what changed and what you already tried.
 
 ## Related Documents
 
 - `USER_GUIDE.md`
 - `CHECK_REFERENCE.md`
-- `readme.md`
+- `SUPPORT.md`
 
-This guide is meant to help with the most common runtime problems. For policy, trust, and data-handling questions, pair it with the upcoming privacy and terms documents.
+This guide is meant to help with the most common runtime problems. For policy, trust, and data-handling questions, pair it with `PRIVACY.md` and `TERMS_OF_SERVICE.md`.

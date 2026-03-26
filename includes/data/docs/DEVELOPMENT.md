@@ -214,7 +214,7 @@ The packaging helper intentionally includes only the plugin files WordPress need
 
 - plugin bootstrap
 - `LICENSE`
-- `readme.md`
+- `readme.txt`
 - `assets/`
 - `includes/`
 
@@ -238,8 +238,7 @@ If your change affects setup, testing, packaging, or user-visible behavior, upda
 
 Important docs in this repo include:
 
-- `readme.md`
-- `CONTRIBUTING.md`
+- `readme.txt`
 - `USER_GUIDE.md`
 - `CHECK_REFERENCE.md`
 - `TROUBLESHOOTING.md`

@@ -2,21 +2,46 @@
 
 All notable public-facing changes to the **AiVI - AI Visibility Inspector** WordPress plugin are documented in this file.
 
-## [Unreleased]
+## [1.0.30] - 2026-03-27
 
-### Analysis and Editor Experience
+### Final Validation Cleanup
 
-- refined intro extraction, answer-family behavior, heading-fragmentation behavior, and freshness handling in the current plugin runtime
-- improved stale-result invalidation and article-level supersession behavior
-- improved overlay draft compatibility checks for reruns and changed content
-- redesigned the analysis progress card and refreshed live analysis microcopy inside the editor sidebar
+- cleaned final packaging compatibility details for a smoother WordPress.org validation pass
 
-### Settings and UI Polish
+## [1.0.29] - 2026-03-27
 
-- polished the Overview, Plans, Credits, Connection, and Support settings surfaces
-- tightened the plans spotlight layout
-- improved Credits tab card design and connection guidance presentation
-- removed dormant debug-style controls from the visible sidebar UI
+### Validation Compatibility Polish
+
+- refined WordPress admin compatibility and packaging validation polish for a smoother release check
+
+## [1.0.28] - 2026-03-27
+
+### Compatibility And Validation Polish
+
+- improved WordPress.org compatibility and admin safety handling across the settings and backend flows
+- cleaned packaging compatibility details for a smoother validation pass
+
+## [1.0.27] - 2026-03-27
+
+### Documentation Delivery Polish
+
+- kept the bundled walkthrough screenshots clear while making the plugin package much lighter to install and distribute
+- preserved the customer-facing documentation flow and image guidance inside WordPress admin
+
+## [1.0.26] - 2026-03-27
+
+### Documentation And Guidance Polish
+
+- refined the in-plugin guides so the privacy, support, and user-help content read more clearly for everyday users
+- kept the Documentation tab focused on customer-facing help content by default while preserving advanced docs for explicit enablement later
+- simplified connection guidance and reduced technical wording in the plugin interface
+
+## [1.0.25] - 2026-03-26
+
+### Documentation Refresh
+
+- improved the in-plugin documentation experience with bundled walkthrough screenshots
+- revised documentation rendering so guide images and list markers display more reliably inside WordPress admin
 
 ## [1.0.24] - 2026-03-26
 

@@ -53,7 +53,7 @@ This packaging flow intentionally includes only the runtime files WordPress need
 
 - `ai-visibility-inspector.php`
 - `LICENSE`
-- `readme.md`
+- `readme.txt`
 - `assets/`
 - `includes/`
 

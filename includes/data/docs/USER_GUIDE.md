@@ -1,35 +1,19 @@
 # AiVI User Guide
 
-AiVI helps you analyze WordPress content for AI search readiness, review structured findings, and work through fixes inside the editor.
+AiVI helps you review WordPress content for AI visibility, answer readiness, structure, schema, and trust before publishing.
 
-This guide focuses on the current plugin experience in WordPress. It is written so you can use it as-is, then add screenshots later where they help most.
-
-## Screenshot Placeholders
-
-Replace these placeholder lines with screenshots when you are ready:
-
-- `[Screenshot: AiVI sidebar open in Gutenberg]`
-- `[Screenshot: Analysis in progress card]`
-- `[Screenshot: Completed analysis with issue groups]`
-- `[Screenshot: Overlay review editor open]`
-- `[Screenshot: AiVI settings Overview tab]`
-- `[Screenshot: AiVI settings Plans tab]`
-- `[Screenshot: AiVI settings Credits tab]`
-- `[Screenshot: AiVI settings Connection tab]`
-- `[Screenshot: AiVI settings Support tab]`
-- `[Screenshot: AiVI settings Documentation tab]`
+This guide focuses on the day-to-day plugin experience inside WordPress and uses screenshots that match the main AiVI workflow.
 
 ## What AiVI Does
 
 AiVI works inside WordPress to:
 
-- analyze your current post or page content
-- estimate how well the content is structured for answer-first and AI-assisted discovery
+- analyze the content currently in your post or page editor
 - surface grouped findings in the editor sidebar
-- let you inspect issue details and jump to the affected block when available
-- open a guided review overlay for deeper editing workflows
+- let you inspect issue details and jump closer to the affected area when available
+- open a guided review overlay for deeper inspection
 
-AiVI combines WordPress-side preflight checks with a managed backend analysis service. That means some findings are generated from the editor content immediately, and deeper findings arrive after the analysis run completes.
+Some findings appear quickly from the current editor content, while deeper results arrive once the analysis finishes.
 
 ## Before You Start
 
@@ -47,7 +31,7 @@ If AiVI reports that there is no content to analyze yet, save the post first and
 
 In the Block Editor, AiVI appears in the editor sidebar as **AiVI Inspector**.
 
-`[Screenshot: AiVI sidebar open in Gutenberg]`
+![Open AiVI from the eye icon in the editor chrome.](assets/img/docs/user-guide-open-sidebar.jpg)
 
 ### Classic Editor
 
@@ -58,47 +42,33 @@ In the Classic Editor, AiVI appears in its own meta box. The experience is light
 1. Open the post or page you want to review.
 2. Open the AiVI panel.
 3. Click **Analyze content**.
-4. Wait while AiVI performs preflight checks and sends the run to the backend.
+4. Wait for AiVI to finish reviewing the current page.
+
+![Launch analysis from the Analyze content button in the AiVI sidebar.](assets/img/docs/user-guide-run-analysis.jpg)
 
 While the analysis is running, the sidebar shows a live progress card with rotating analysis messages.
 
-`[Screenshot: Analysis in progress card]`
-
-### What Happens During Analysis
-
-At a high level, AiVI:
-
-1. extracts the current editor content
-2. builds a manifest and block map
-3. estimates tokens and prepares the request
-4. sends the analysis run through the WordPress proxy
-5. polls for the finished result
-6. replaces the in-progress state with the completed report
-
-Each analysis gets its own run ID. New runs supersede older runs for the same article, so fresh results do not keep using stale UI state.
+![Watch the live progress panel while AiVI runs the analysis.](assets/img/docs/user-guide-analysis-progress.jpg)
 
 ## Reading the Results
 
-When the analysis finishes, AiVI groups findings into categories such as:
+When the analysis finishes, AiVI groups findings into clear sections such as:
 
-- Intro Focus & Factuality
-- Answer Extractability
-- Structure & Readability
-- Schema & Structured Data
-- Freshness & Temporal
-- Entities & Semantic Clarity
-- Trust, Neutrality & Safety
-- Citability & Verifiability
+- opening answer quality
+- structure and readability
+- schema and structured data
+- timing clarity and freshness
+- trust and support signals
 
-`[Screenshot: Completed analysis with issue groups]`
+![Review the surfaced findings and act on the recommendations that matter most.](assets/img/docs/user-guide-review-results.jpg)
 
 ### Verdicts
 
 AiVI uses three main verdict states:
 
-- **Pass** — the check is healthy enough not to be featured as a problem
-- **Partial** — the content is on the right track, but improvement is still recommended
-- **Fail** — the issue is strong enough to be surfaced clearly
+- **Pass** - healthy enough not to be featured as a problem
+- **Partial** - there is useful structure in place, but improvement is still recommended
+- **Fail** - the issue is strong enough to surface clearly
 
 Passed checks are not meant to dominate the review rail. AiVI focuses attention on findings that still need action.
 
@@ -110,7 +80,7 @@ For many findings, AiVI can:
 - highlight the related block or section
 - jump you closer to the relevant content
 
-Some findings are document-scope rather than inline. In those cases, AiVI may give you context and a nearby jump target instead of an exact highlight.
+Some findings are broader than one exact sentence. In those cases, AiVI may give you context and a nearby jump target instead of a perfect inline highlight.
 
 ## Re-running Analysis After Edits
 
@@ -124,13 +94,11 @@ This is especially useful after:
 - adding or adjusting schema markup
 - tightening citations or evidence
 
-AiVI now clears stale sidebar state more aggressively when a new run starts, so older results should not linger as if they are still current.
-
 ## Using the Overlay Review Experience
 
 AiVI can open a review overlay that gives you a larger inspection surface for recommendations and content context.
 
-`[Screenshot: Overlay review editor open]`
+![Open the AiVI overlay editor from the completed analysis surface.](assets/img/docs/user-guide-open-overlay.jpg)
 
 In the overlay you may see:
 
@@ -149,11 +117,11 @@ Depending on the issue type, the overlay may point to:
 
 ### Unsaved Overlay Changes
 
-AiVI can restore compatible unsaved overlay edits, but only when they still match the current content/run context. If the content or run has changed materially, older overlay drafts should no longer be restored onto the wrong article state.
+AiVI can restore compatible unsaved overlay edits only when they still match the current article state. If the article has changed too much, older overlay drafts should not be restored onto the wrong content.
 
 ## Understanding the Settings Page
 
-Open **AiVI** in WordPress admin to access the settings experience.
+Open **AiVI** in WordPress admin to access the main settings experience.
 
 The current settings tabs are:
 
@@ -166,53 +134,39 @@ The current settings tabs are:
 
 ### Overview
 
-The Overview tab gives you a top-level snapshot of:
+The Overview tab gives you a quick snapshot of:
 
 - current account and site state
 - usage summary
-- account connection status
-- quick navigation into the rest of the AiVI settings experience
-
-`[Screenshot: AiVI settings Overview tab]`
+- connection status
+- quick navigation into the rest of AiVI
 
 ### Plans
 
-The Plans tab helps you review available AiVI plans and choose the one that fits your site or editorial workflow.
-
-Use this tab when you want to:
+Use the Plans tab when you want to:
 
 - compare plan levels
 - review what is included in each plan
 - move into plan selection or upgrade flows
 
-`[Screenshot: AiVI settings Plans tab]`
-
 ### Credits
 
-The Credits tab shows available top-up options and helps you understand how credits fit into your account usage.
-
-Use it when you want to:
+Use the Credits tab when you want to:
 
 - review credit pack options
 - buy additional analysis capacity where supported
 - understand how credits relate to current account access
 
-`[Screenshot: AiVI settings Credits tab]`
-
 ### Connection
 
 The Connection tab helps you confirm how the current site is attached to your AiVI account.
 
-It can also be used for:
+It can also help with:
 
-- reviewing site/account connection state
-- checking connected domain and related status fields
-- working with support-guided operational connection controls when needed
+- checking connection state
+- reviewing the connected domain
 - adding another site to the same account where your plan allows it
-
-`[Screenshot: AiVI settings Connection tab]`
-
-For most sites, the account dashboard is the normal path. Operational fallback controls are there for troubleshooting and support-guided overrides, not as the default customer flow.
+- following support guidance if a connection needs attention
 
 ### Support
 
@@ -224,34 +178,27 @@ Typical categories include:
 - Connection & Setup
 - General Support
 
-`[Screenshot: AiVI settings Support tab]`
-
 ### Documentation
 
-The Documentation tab gives you an in-product knowledge surface for the current AiVI guides.
+The Documentation tab keeps the main AiVI guides inside WordPress.
 
 Use it when you want to:
 
 - review the user guide without leaving WordPress
-- look up the meaning of a check family
-- work through troubleshooting steps for stale results or missing highlights
-- read privacy, terms, support, development, architecture, operations, and decision docs from one place
-
-Support-side documentation links now route into this internal docs surface where appropriate, so you can move from a support question into the right guide more quickly.
-
-`[Screenshot: AiVI settings Documentation tab]`
+- understand what a finding means
+- work through troubleshooting steps
+- read the current support, privacy, and terms guidance
 
 When asking for help, it is useful to include:
 
 - what you were trying to do
 - what happened instead
 - the post or page involved
-- the approximate time of the run
-- the run ID when available
+- the approximate time of the issue
 
 ## Common Situations
 
-### “No content to analyze yet”
+### "No content to analyze yet"
 
 Usually means the editor content is empty or has not been saved into a usable state yet.
 
@@ -261,32 +208,32 @@ What to do:
 2. confirm the content is present in the editor
 3. run analysis again
 
-### “Analysis in progress” takes a while
+### "Analysis in progress" takes a while
 
-AiVI uses async analysis runs, so deeper results can take some time depending on article size and backend load.
+Some analyses take longer depending on article size and current service load.
 
 What to do:
 
 - wait for the current run to complete
-- avoid repeatedly starting new runs unless you have changed the content
+- avoid repeatedly starting new runs unless you changed the content
 - if the status looks stuck for too long, refresh the editor and try again
 
 ### Older results seem to reappear
 
-AiVI now uses better stale-result handling and run supersession, but if something still looks off:
+If something still looks off:
 
-- confirm you are looking at the latest run
+- confirm you are looking at the latest result
 - refresh the editor
 - re-run analysis after saving the current article state
 
 ### A finding has no exact highlight
 
-Some findings are not naturally inline. They may describe:
+Some findings are broader than one sentence. They may describe:
 
 - document-level schema issues
 - broad structural problems
-- account/setup issues
-- verification or support-related states
+- account or setup issues
+- timing or support-related states
 
 In those cases, AiVI may offer context without a perfect text-level highlight.
 
@@ -309,12 +256,14 @@ Contact support if:
 - a run keeps failing unexpectedly
 - the support or connection flow on your site looks incomplete
 
-If possible, include the run ID and a short description of what changed between runs.
+If possible, include a short description of what changed between attempts.
 
 ## Related Documents
 
-- `readme.md`
-- `CONTRIBUTING.md`
-- `CHANGELOG.md`
+- `CHECK_REFERENCE.md`
+- `TROUBLESHOOTING.md`
+- `SUPPORT.md`
+- `PRIVACY.md`
+- `TERMS_OF_SERVICE.md`
 
-As the documentation set grows, this guide will be supported by dedicated check reference, troubleshooting, privacy, and terms documents.
+Use this guide as your main workflow reference, then move into the other guides only when you need more help on a specific issue.

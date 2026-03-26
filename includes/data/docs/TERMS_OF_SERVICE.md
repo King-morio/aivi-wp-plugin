@@ -1,12 +1,8 @@
 # AiVI Terms of Service
 
-> **Important note**
->
-> This document is a product-specific starting point for AiVI and should be reviewed by qualified legal counsel before being treated as a final production legal agreement. Replace any bracketed placeholders with your official business and jurisdiction details before publishing as a binding service agreement.
+**Effective date:** `March 3, 2026`
 
-**Effective date:** `[Add effective date]`
-
-**Service provider:** `[Add legal entity / operator name]`
+**Service provider:** `Dollarchain Investments LTD`
 
 ## 1. Acceptance of These Terms
 
@@ -270,13 +266,13 @@ AiVI is not a substitute for legal, medical, financial, editorial, compliance, o
 
 To the fullest extent permitted by law, AiVI and its operators will not be liable for indirect, incidental, special, consequential, exemplary, or punitive damages, including loss of profits, revenue, goodwill, business opportunities, data, or expected search performance.
 
-To the fullest extent permitted by law, any direct liability should be limited to the amount you paid for the applicable service in the period `[add desired limitation period, e.g. 12 months]` before the event giving rise to the claim, or the minimum amount allowed by law if no such payment applies.
+To the fullest extent permitted by law, any direct liability should be limited to the amount you paid for the applicable service in the 12 months before the event giving rise to the claim, or the minimum amount allowed by law if no such payment applies.
 
 Some jurisdictions do not allow certain limitations, so parts of this section may not apply to you.
 
 ## 18. Indemnity
 
-To the extent permitted by law, you agree to defend, indemnify, and hold harmless `[add legal entity / operator name]` and its affiliates, personnel, and service providers from claims arising out of:
+To the extent permitted by law, you agree to defend, indemnify, and hold harmless Dollarchain Investments LTD and its affiliates, personnel, and service providers from claims arising out of:
 
 - your misuse of AiVI
 - your submitted content
@@ -293,20 +289,13 @@ Your continued use of AiVI after the updated terms take effect means you accept 
 
 ## 20. Governing Law and Dispute Terms
 
-**Add your governing-law and dispute-resolution terms here before production publication.**
+These Terms are governed by the laws of Kenya, without regard to conflict-of-law principles.
 
-Recommended fields to finalize:
-
-- governing law
-- venue or forum
-- arbitration terms, if any
-- class action waiver language, if any
-- consumer rights carve-outs where legally required
+Any dispute arising out of or relating to AiVI or these Terms will be subject to the exclusive jurisdiction of the competent courts of Nairobi, Kenya.
 
 ## 21. Contact Information
 
 For terms, legal, or service questions, contact:
 
-- `[Add legal/contact email]`
-- `[Add company address if needed]`
+- `okendo017@gmail.com`
 - or the AiVI support path provided in your environment

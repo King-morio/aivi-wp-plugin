@@ -1486,7 +1486,11 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			));
 			return new \WP_Error(
 				'backend_error',
-				__('Failed to fetch analysis details: ' . $error_message, 'ai-visibility-inspector'),
+				sprintf(
+					/* translators: %s: backend error message returned while loading analysis details. */
+					__( 'Failed to fetch analysis details: %s', 'ai-visibility-inspector' ),
+					sanitize_text_field( $error_message )
+				),
 				array(
 					'status' => 503,
 					'diagnostics' => $diagnostics
@@ -1764,6 +1768,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 
 		// Fallback to error_log for critical errors only
 		if (strpos($event, 'error') !== false) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging is limited to error events for operational support.
 			error_log("AiVI Error [$event]: " . json_encode($context));
 		}
 	}
@@ -1874,7 +1879,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			}
 
 			if ($attempt < $max_attempts) {
-				$jitter_ms = 200 + (function_exists('random_int') ? random_int(0, 600) : mt_rand(0, 600));
+				$jitter_ms = 200 + (function_exists('random_int') ? random_int(0, 600) : wp_rand(0, 600));
 				usleep($jitter_ms * 1000);
 			}
 		}
@@ -1904,7 +1909,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			}
 
 			if ($attempt < $max_attempts) {
-				$jitter_ms = 200 + (function_exists('random_int') ? random_int(0, 600) : mt_rand(0, 600));
+				$jitter_ms = 200 + (function_exists('random_int') ? random_int(0, 600) : wp_rand(0, 600));
 				usleep($jitter_ms * 1000);
 			}
 		}

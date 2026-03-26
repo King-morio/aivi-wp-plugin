@@ -4,7 +4,7 @@ Tags: ai, seo, structured-data, content-analysis, answer-engine
 Requires at least: 5.8
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.0.24
+Stable tag: 1.0.30
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -16,7 +16,7 @@ AiVI is a content intelligence and correction layer for AI-driven search. It ana
 
 Instead of treating content as only a human-reading problem, AiVI helps publishers understand whether a post is usable by AI systems and answer engines before it goes live.
 
-The plugin combines WordPress-side extraction with a managed AiVI backend to surface:
+AiVI reviews content inside WordPress and, where needed, uses its hosted analysis service to surface:
 
 * answer clarity and extractability issues
 * structure and heading issues
@@ -42,7 +42,7 @@ Yes. AiVI supports both Gutenberg and Classic Editor analysis flows.
 
 = Does the plugin include its own analysis engine? =
 
-The plugin performs WordPress-side extraction and preflight checks, then sends requests through managed AiVI backend routes for deeper analysis and guided editing support.
+AiVI reviews content inside WordPress and uses its hosted service for deeper analysis and guided editing support.
 
 = Does AiVI automatically publish or overwrite my edits? =
 
@@ -57,6 +57,35 @@ No. AiVI does not publish for you. The current overlay flow lets you review revi
 5. Use the Review Rail to inspect findings, open details, and act on recommendations.
 
 == Changelog ==
+
+= 1.0.30 =
+
+* cleaned final packaging compatibility details for a smoother WordPress.org validation pass
+
+= 1.0.29 =
+
+* refined WordPress admin compatibility and packaging validation polish for a smoother release check
+
+= 1.0.28 =
+
+* improved WordPress.org compatibility and admin safety handling across the settings and backend flows
+* cleaned packaging compatibility details for a smoother validation pass
+
+= 1.0.27 =
+
+* kept the in-plugin walkthrough screenshots clear while making the plugin package much lighter to install and distribute
+* preserved the customer-facing documentation layout and image flow inside WordPress admin
+
+= 1.0.26 =
+
+* refined the in-plugin guides so privacy, support, and user-help content are easier to read
+* kept the documentation tab focused on customer-facing help content by default
+* simplified connection guidance and reduced technical wording in the plugin UI
+
+= 1.0.25 =
+
+* improved the in-plugin documentation experience with bundled walkthrough screenshots
+* revised documentation rendering so list markers and guide images display more reliably inside WordPress admin
 
 = 1.0.24 =
 
@@ -99,6 +128,26 @@ No. AiVI does not publish for you. The current overlay flow lets you review revi
 * improved packaging, translation readiness, and submission compatibility for WordPress.org
 
 == Upgrade Notice ==
+
+= 1.0.30 =
+
+Recommended update for a cleaner final validation package.
+
+= 1.0.29 =
+
+Recommended update for cleaner validation compatibility across the packaged admin experience.
+
+= 1.0.28 =
+
+Recommended update for improved WordPress.org compatibility and a smoother admin validation pass.
+
+= 1.0.27 =
+
+Recommended update for a lighter install package while keeping the in-plugin guide screenshots and docs flow intact.
+
+= 1.0.26 =
+
+Recommended update for clearer in-plugin docs, simpler connection guidance, and a more customer-friendly documentation tab.
 
 = 1.0.24 =
 

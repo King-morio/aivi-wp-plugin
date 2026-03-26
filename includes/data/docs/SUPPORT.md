@@ -37,17 +37,16 @@ Useful extras:
 
 ## What You Do Not Need to Gather Manually
 
-Normal users do **not** need to manually provide:
+Normal users do **not** need to manually collect raw technical diagnostics before asking for help.
 
-- raw verdict payloads
-- backend debug data
-- internal tokens
-- hidden service identifiers
-- manual run IDs
+In most cases, you do not need to send:
 
-AiVI may use internal run references behind the scenes, but the current user-facing product does not expect normal users to hunt those down manually.
+- raw technical payloads
+- secret tokens or keys
+- hidden internal identifiers
+- technical logs unless support specifically asks
 
-If support specifically asks for a backend-side run reference in a controlled support workflow, they can guide you from there. That should be treated as a support-assisted step, not a default user requirement.
+If support needs something more specific, they should tell you exactly what to provide and why.
 
 ## Helpful Information for Common Issue Types
 
@@ -66,7 +65,7 @@ Include:
 
 Example:
 
-> I analyzed “How Fast Can a Mini Excavator Dig?” in Gutenberg around 2:15 PM Nairobi time. The answer-family results still looked partial after I rewrote the opening answer and re-ran analysis.
+> I analyzed "How Fast Can a Mini Excavator Dig?" in Gutenberg around 2:15 PM Nairobi time. The answer-related results still looked partial after I rewrote the opening answer and re-ran analysis.
 
 ### Connection Issues
 
@@ -126,7 +125,7 @@ Good screenshot tips:
 - include the article title or settings tab when possible
 - avoid including unrelated personal or secret information
 
-## Safe Debugging Information to Share
+## Safe Information to Share
 
 It is usually safe and helpful to share:
 
@@ -148,7 +147,7 @@ Be cautious about sharing:
 
 If support needs anything sensitive, they should give you a clear secure path and explain why it is needed.
 
-## Information AiVI May Already Include in Support Context
+## Information AiVI May Already Include
 
 Depending on the support flow, AiVI may already attach helpful context such as:
 
@@ -156,10 +155,9 @@ Depending on the support flow, AiVI may already attach helpful context such as:
 - plan name
 - connected domain
 - site URL
-- site ID
 - plugin version
 - WordPress version
-- connection or binding status
+- connection status
 - last result summary
 - last sync status
 
@@ -206,4 +204,4 @@ You can use this as a simple template:
 - `PRIVACY.md`
 - `TERMS_OF_SERVICE.md`
 
-This guide is meant to help users send better requests without making them do backend or developer work first.
+This guide is meant to help users send better requests without making them do technical digging first.

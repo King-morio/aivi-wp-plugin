@@ -126,7 +126,7 @@ class Admin_Settings {
 		echo '<p>';
 		printf(
 			/* translators: 1: Site ID, 2: Plugin version */
-			__( 'Site ID: %1$d | Plugin Version: %2$s', 'ai-visibility-inspector' ),
+			esc_html__( 'Site ID: %1$d | Plugin Version: %2$s', 'ai-visibility-inspector' ),
 			intval( $site_id ),
 			esc_html( $version )
 		);
@@ -134,12 +134,12 @@ class Admin_Settings {
 		echo '<p>';
 		printf(
 			/* translators: %s: Connection status label */
-			__( 'Account Connection: %s', 'ai-visibility-inspector' ),
+			esc_html__( 'Account Connection: %s', 'ai-visibility-inspector' ),
 			esc_html( $connection_label )
 		);
 		echo '</p>';
 		echo '<p class="description">';
-		_e( 'Configure the backend orchestration URL and plugin behavior. All API calls will be routed through this backend.', 'ai-visibility-inspector' );
+		esc_html_e( 'Configure the backend orchestration URL and plugin behavior. All API calls will be routed through this backend.', 'ai-visibility-inspector' );
 		echo '</p>';
 	}
 
@@ -157,11 +157,11 @@ class Admin_Settings {
 			   class="regular-text"
 			   placeholder="https://example.execute-api.eu-north-1.amazonaws.com">
 		<p class="description">
-			<?php _e( 'Base URL override for the AiVI backend API. Leave this empty on customer sites to use the built-in production endpoint.', 'ai-visibility-inspector' ); ?>
+			<?php esc_html_e( 'Base URL override for the AiVI backend API. Leave this empty on customer sites to use the built-in production endpoint.', 'ai-visibility-inspector' ); ?>
 		</p>
 		<?php if ( $is_fallback ) : ?>
 			<div class="notice notice-info inline">
-				<p><?php _e( 'No backend override is set. AiVI is using its built-in production backend. Only set this field for staging, local development, or support overrides.', 'ai-visibility-inspector' ); ?></p>
+				<p><?php esc_html_e( 'No backend override is set. AiVI is using its built-in production backend. Only set this field for staging, local development, or support overrides.', 'ai-visibility-inspector' ); ?></p>
 			</div>
 		<?php endif; ?>
 		<?php
@@ -180,7 +180,7 @@ class Admin_Settings {
 			   class="regular-text"
 			   placeholder="Enter your API key">
 		<p class="description">
-			<?php _e( 'Your API key for AiVI services. Leave empty for testing (no validation yet).', 'ai-visibility-inspector' ); ?>
+			<?php esc_html_e( 'Your API key for AiVI services. Leave empty for testing (no validation yet).', 'ai-visibility-inspector' ); ?>
 		</p>
 		<?php
 	}
@@ -197,10 +197,10 @@ class Admin_Settings {
 				   name="<?php echo esc_attr( self::OPTION_KEY ); ?>[enable_web_lookups]"
 				   value="1"
 				   <?php checked( $checked ); ?>>
-			<?php _e( 'Enable optional web lookups for claim verification.', 'ai-visibility-inspector' ); ?>
+			<?php esc_html_e( 'Enable optional web lookups for claim verification.', 'ai-visibility-inspector' ); ?>
 		</label>
 		<p class="description">
-			<?php _e( 'Keeps the default analysis specimen-bound when disabled. When enabled, AiVI may perform external verification for source-sensitive checks and analysis may take longer.', 'ai-visibility-inspector' ); ?>
+			<?php esc_html_e( 'Keeps the default analysis specimen-bound when disabled. When enabled, AiVI may perform external verification for source-sensitive checks and analysis may take longer.', 'ai-visibility-inspector' ); ?>
 		</p>
 		<?php
 	}
@@ -217,7 +217,7 @@ class Admin_Settings {
 				   name="<?php echo esc_attr( self::OPTION_KEY ); ?>[anchor_v2_enabled]"
 				   value="1"
 				   <?php checked( $checked ); ?>>
-			<?php _e( 'Enable deterministic anchor resolver v2 (feature flag).', 'ai-visibility-inspector' ); ?>
+			<?php esc_html_e( 'Enable deterministic anchor resolver v2 (feature flag).', 'ai-visibility-inspector' ); ?>
 		</label>
 		<?php
 	}
@@ -234,7 +234,7 @@ class Admin_Settings {
 				   name="<?php echo esc_attr( self::OPTION_KEY ); ?>[defer_details_enabled]"
 				   value="1"
 				   <?php checked( $checked ); ?>>
-			<?php _e( 'Fetch verbose issue details only on click (feature flag).', 'ai-visibility-inspector' ); ?>
+			<?php esc_html_e( 'Fetch verbose issue details only on click (feature flag).', 'ai-visibility-inspector' ); ?>
 		</label>
 		<?php
 	}
@@ -251,7 +251,7 @@ class Admin_Settings {
 				   name="<?php echo esc_attr( self::OPTION_KEY ); ?>[partial_results_enabled]"
 				   value="1"
 				   <?php checked( $checked ); ?>>
-			<?php _e( 'Allow partial analysis payloads instead of hard-aborting all results (feature flag).', 'ai-visibility-inspector' ); ?>
+			<?php esc_html_e( 'Allow partial analysis payloads instead of hard-aborting all results (feature flag).', 'ai-visibility-inspector' ); ?>
 		</label>
 		<?php
 	}
@@ -268,7 +268,7 @@ class Admin_Settings {
 				   name="<?php echo esc_attr( self::OPTION_KEY ); ?>[compact_prompt_enabled]"
 				   value="1"
 				   <?php checked( $checked ); ?>>
-			<?php _e( 'Enable compact analyzer prompt/output mode for long content reliability (feature flag).', 'ai-visibility-inspector' ); ?>
+			<?php esc_html_e( 'Enable compact analyzer prompt/output mode for long content reliability (feature flag).', 'ai-visibility-inspector' ); ?>
 		</label>
 		<?php
 	}
@@ -288,7 +288,7 @@ class Admin_Settings {
 			   max="1000000"
 			   step="1000">
 		<p class="description">
-			<?php _e( 'Maximum tokens allowed per analysis. Default: 200,000. Admin-only setting.', 'ai-visibility-inspector' ); ?>
+			<?php esc_html_e( 'Maximum tokens allowed per analysis. Default: 200,000. Admin-only setting.', 'ai-visibility-inspector' ); ?>
 		</p>
 		<?php
 	}
@@ -305,10 +305,10 @@ class Admin_Settings {
 				   name="<?php echo esc_attr( self::OPTION_KEY ); ?>[enable_plugin]"
 				   value="1"
 				   <?php checked( $checked ); ?>>
-			<?php _e( 'Enable AiVI functionality on the site. Uncheck to disable all features.', 'ai-visibility-inspector' ); ?>
+			<?php esc_html_e( 'Enable AiVI functionality on the site. Uncheck to disable all features.', 'ai-visibility-inspector' ); ?>
 		</label>
 		<p class="description">
-			<?php _e( 'Use this to quickly disable the plugin in case of issues.', 'ai-visibility-inspector' ); ?>
+			<?php esc_html_e( 'Use this to quickly disable the plugin in case of issues.', 'ai-visibility-inspector' ); ?>
 		</p>
 		<?php
 	}
@@ -396,16 +396,16 @@ class Admin_Settings {
 						<?php
 						settings_fields( self::OPTION_KEY );
 						do_settings_sections( self::PAGE_SLUG );
-						submit_button( __( 'Save operational settings', 'ai-visibility-inspector' ) );
+						submit_button( esc_html__( 'Save operational settings', 'ai-visibility-inspector' ) );
 						?>
 					</form>
 
 					<div class="aivi-operational-settings__test">
-						<h2><?php _e( 'Test backend connection', 'ai-visibility-inspector' ); ?></h2>
-						<p><?php _e( 'Use this only for operational troubleshooting when the customer dashboard connection does not reflect the expected account state.', 'ai-visibility-inspector' ); ?></p>
+						<h2><?php esc_html_e( 'Test backend connection', 'ai-visibility-inspector' ); ?></h2>
+						<p><?php esc_html_e( 'Use this only for operational troubleshooting when the customer dashboard connection does not reflect the expected account state.', 'ai-visibility-inspector' ); ?></p>
 
 						<button type="button" id="aivi-test-connection" class="button button-secondary">
-							<?php _e( 'Test Connection', 'ai-visibility-inspector' ); ?>
+							<?php esc_html_e( 'Test Connection', 'ai-visibility-inspector' ); ?>
 						</button>
 
 						<div id="aivi-test-result" class="notice" style="display: none;"></div>
@@ -418,7 +418,7 @@ class Admin_Settings {
 		jQuery(document).ready(function($) {
 			var inlineAiviSettingsConfig = {
 				restBase: <?php echo wp_json_encode( esc_url_raw( rest_url( 'aivi/v1' ) ) ); ?>,
-				nonce: <?php echo wp_json_encode( wp_create_nonce( 'wp_rest' ) ); ?>,
+				nonce: '<?php echo esc_js( wp_create_nonce( 'wp_rest' ) ); ?>',
 				apiEndpoints: <?php echo wp_json_encode( AIVI_API_ENDPOINTS ); ?>,
 				supportCenter: <?php echo wp_json_encode( $support_center_config ); ?>
 			};
@@ -909,7 +909,7 @@ class Admin_Settings {
 					type: 'POST',
 					data: {
 						action: 'aivi_test_connection',
-						nonce: '<?php echo wp_create_nonce( 'aivi_test_connection' ); ?>'
+						nonce: '<?php echo esc_js( wp_create_nonce( 'aivi_test_connection' ) ); ?>'
 					},
 					success: function(response) {
 						if (response.success) {
@@ -1345,9 +1345,11 @@ class Admin_Settings {
 			),
 		);
 		$blog_id = self::format_dashboard_metric_value( $dashboard_state['site']['blog_id'] ?? null, __( 'Not available', 'ai-visibility-inspector' ) );
-		$requested_settings_tab    = sanitize_key( (string) ( $_GET['aivi_tab'] ?? '' ) );
-		$requested_support_category = sanitize_key( (string) ( $_GET['aivi_support_category'] ?? '' ) );
-		$requested_doc_slug         = sanitize_key( (string) ( $_GET['aivi_doc'] ?? '' ) );
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read-only admin-page query args control which settings/documentation tab is shown.
+		$requested_settings_tab    = sanitize_key( wp_unslash( (string) ( $_GET['aivi_tab'] ?? '' ) ) );
+		$requested_support_category = sanitize_key( wp_unslash( (string) ( $_GET['aivi_support_category'] ?? '' ) ) );
+		$requested_doc_slug         = sanitize_key( wp_unslash( (string) ( $_GET['aivi_doc'] ?? '' ) ) );
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 		$documentation_catalog      = self::get_documentation_catalog();
 		$requested_doc_slug         = self::normalize_documentation_slug( $requested_doc_slug );
 		if ( ! in_array( $requested_settings_tab, array( 'overview', 'billing', 'credits', 'connection', 'support', 'documentation' ), true ) ) {
@@ -1711,13 +1713,20 @@ class Admin_Settings {
 			.aivi-docs-article__body h3{margin:22px 0 10px;font-size:20px;line-height:1.2;color:#10233f;}
 			.aivi-docs-article__body h4{margin:18px 0 8px;font-size:16px;line-height:1.3;color:#10233f;}
 			.aivi-docs-article__body p{margin:0 0 14px;color:#334a66;font-size:14px;line-height:1.85;}
-			.aivi-docs-article__body ul,.aivi-docs-article__body ol{margin:0 0 16px 20px;color:#334a66;font-size:14px;line-height:1.8;}
+			.aivi-docs-article__body ul{margin:0 0 16px;padding-left:22px;list-style:disc outside;color:#334a66;font-size:14px;line-height:1.8;}
+			.aivi-docs-article__body ol{margin:0 0 16px;padding-left:24px;list-style:decimal outside;color:#334a66;font-size:14px;line-height:1.8;}
+			.aivi-docs-article__body li{display:list-item;}
 			.aivi-docs-article__body li + li{margin-top:6px;}
+			.aivi-docs-article__body li > ul,.aivi-docs-article__body li > ol{margin:10px 0 0;}
+			.aivi-docs-article__body li::marker{color:#10233f;}
 			.aivi-docs-article__body a{color:#2153a4;text-decoration:none;font-weight:600;}
 			.aivi-docs-article__body a:hover{text-decoration:underline;}
 			.aivi-docs-article__body code{padding:2px 6px;border-radius:8px;background:#f2f5fa;color:#10233f;font-size:13px;}
 			.aivi-docs-article__body pre{margin:0 0 16px;padding:14px 16px;border-radius:16px;background:#10233f;color:#eef4ff;overflow:auto;}
 			.aivi-docs-article__body pre code{padding:0;background:transparent;color:inherit;}
+			.aivi-docs-figure{margin:0 0 18px;}
+			.aivi-docs-figure img{display:block;width:100%;height:auto;border:1px solid #dce6f1;border-radius:18px;box-shadow:0 16px 32px rgba(15,23,42,.06);background:#f8fbff;}
+			.aivi-docs-figure figcaption{margin-top:10px;color:#516175;font-size:13px;line-height:1.65;}
 			.aivi-docs-utility{padding:18px;}
 			.aivi-docs-utility__card{padding:16px;border:1px solid #dce6f1;border-radius:18px;background:#fff;}
 			.aivi-docs-utility__card + .aivi-docs-utility__card{margin-top:12px;}
@@ -2234,7 +2243,7 @@ class Admin_Settings {
 								<p class="aivi-settings-card__hint"><?php esc_html_e( 'Once the site is connected, the active trial or plan unlocks analysis and billing actions become available across the plugin.', 'ai-visibility-inspector' ); ?></p>
 								<ul class="aivi-settings-list">
 									<li><?php esc_html_e( 'Step 1: confirm the site identity shown below.', 'ai-visibility-inspector' ); ?></li>
-									<li><?php esc_html_e( 'Step 2: either start a new free trial here or paste an operator-issued connection token.', 'ai-visibility-inspector' ); ?></li>
+									<li><?php esc_html_e( 'Step 2: either start a new free trial here or paste an AiVI connection token.', 'ai-visibility-inspector' ); ?></li>
 									<li><?php esc_html_e( 'Step 3: return to Plans or Credits once the connection is active.', 'ai-visibility-inspector' ); ?></li>
 								</ul>
 								<form class="aivi-settings-form" data-account-connect-submit>
@@ -2248,7 +2257,7 @@ class Admin_Settings {
 											<input type="text" id="aivi-connection-label" name="connection_label" value="" autocomplete="off" spellcheck="false" placeholder="<?php esc_attr_e( 'Optional label, e.g. Marketing Site', 'ai-visibility-inspector' ); ?>">
 										</div>
 									</div>
-									<p class="aivi-settings-form__hint"><?php esc_html_e( 'Growth and Pro multi-site connections currently use an operator-issued connection token. Install AiVI on the additional site, open this Connection tab, and paste the token here.', 'ai-visibility-inspector' ); ?></p>
+									<p class="aivi-settings-form__hint"><?php esc_html_e( 'Growth and Pro multi-site connections currently use an AiVI connection token. Install AiVI on the additional site, open its Connection tab, and paste the token there.', 'ai-visibility-inspector' ); ?></p>
 									<div class="aivi-settings-form__actions">
 										<button type="submit" class="button button-secondary aivi-connection-action"><?php esc_html_e( 'Connect with token', 'ai-visibility-inspector' ); ?></button>
 									</div>
@@ -2271,18 +2280,20 @@ class Admin_Settings {
 										printf( esc_html__( 'Binding: %s', 'ai-visibility-inspector' ), esc_html( $binding_status ) );
 										?>
 									</li>
-									<li>
-										<?php
-										/* translators: %s: Internal AiVI site identifier. */
-										printf( esc_html__( 'Site ID: %s', 'ai-visibility-inspector' ), esc_html( $site_id ) );
-										?>
-									</li>
-									<li>
-										<?php
-										/* translators: %s: WordPress blog/site ID. */
-										printf( esc_html__( 'Blog ID: %s', 'ai-visibility-inspector' ), esc_html( $blog_id ) );
-										?>
-									</li>
+									<?php if ( $show_operational_settings ) : ?>
+										<li>
+											<?php
+											/* translators: %s: Internal AiVI site identifier. */
+											printf( esc_html__( 'Site ID: %s', 'ai-visibility-inspector' ), esc_html( $site_id ) );
+											?>
+										</li>
+										<li>
+											<?php
+											/* translators: %s: WordPress blog/site ID. */
+											printf( esc_html__( 'Blog ID: %s', 'ai-visibility-inspector' ), esc_html( $blog_id ) );
+											?>
+										</li>
+									<?php endif; ?>
 									<li>
 										<?php
 										/* translators: %s: Human-readable last sync timestamp. */
@@ -2304,18 +2315,20 @@ class Admin_Settings {
 										printf( esc_html__( 'Binding: %s', 'ai-visibility-inspector' ), esc_html( $binding_status ) );
 										?>
 									</li>
-									<li>
-										<?php
-										/* translators: %s: Internal AiVI site identifier. */
-										printf( esc_html__( 'Site ID: %s', 'ai-visibility-inspector' ), esc_html( $site_id ) );
-										?>
-									</li>
-									<li>
-										<?php
-										/* translators: %s: WordPress blog/site ID. */
-										printf( esc_html__( 'Blog ID: %s', 'ai-visibility-inspector' ), esc_html( $blog_id ) );
-										?>
-									</li>
+									<?php if ( $show_operational_settings ) : ?>
+										<li>
+											<?php
+											/* translators: %s: Internal AiVI site identifier. */
+											printf( esc_html__( 'Site ID: %s', 'ai-visibility-inspector' ), esc_html( $site_id ) );
+											?>
+										</li>
+										<li>
+											<?php
+											/* translators: %s: WordPress blog/site ID. */
+											printf( esc_html__( 'Blog ID: %s', 'ai-visibility-inspector' ), esc_html( $blog_id ) );
+											?>
+										</li>
+									<?php endif; ?>
 									<li>
 										<?php
 										/* translators: %s: Number of site slots available on the current plan. */
@@ -2368,7 +2381,7 @@ class Admin_Settings {
 										} else {
 											printf(
 												/* translators: %s: Number of connected sites allowed on the current plan. */
-												esc_html__( 'This plan allows up to %s connected sites. To bind another site, install AiVI on that site, open its Connection tab, and paste an operator-issued connection token there.', 'ai-visibility-inspector' ),
+												esc_html__( 'This plan allows up to %s connected sites. To bind another site, install AiVI on that site, open its Connection tab, and paste an AiVI connection token there.', 'ai-visibility-inspector' ),
 												esc_html( self::format_dashboard_metric_value( $max_sites_limit, '0' ) )
 											);
 										}
@@ -2388,15 +2401,15 @@ class Admin_Settings {
 												<span class="aivi-settings-checklist__step">1</span>
 												<div class="aivi-settings-checklist__body">
 													<strong><?php esc_html_e( 'Prepare the next site', 'ai-visibility-inspector' ); ?></strong>
-													<span><?php esc_html_e( 'Install AiVI there and open that site’s Connection tab before copying the token from this account.', 'ai-visibility-inspector' ); ?></span>
+													<span><?php esc_html_e( 'Install AiVI there and open that site\'s Connection tab before copying the token for the new connection.', 'ai-visibility-inspector' ); ?></span>
 												</div>
 											</div>
 										<?php endif; ?>
 										<div class="aivi-settings-checklist__item">
 											<span class="aivi-settings-checklist__step">2</span>
 											<div class="aivi-settings-checklist__body">
-												<strong><?php esc_html_e( 'Use an operator-issued token', 'ai-visibility-inspector' ); ?></strong>
-												<span><?php esc_html_e( 'Connection tokens are currently issued from the AiVI operator surface and copied from the latest token panel.', 'ai-visibility-inspector' ); ?></span>
+												<strong><?php esc_html_e( 'Use an AiVI connection token', 'ai-visibility-inspector' ); ?></strong>
+												<span><?php esc_html_e( 'Use the current AiVI connection token for this account and paste it into the next site\'s Connection tab.', 'ai-visibility-inspector' ); ?></span>
 											</div>
 										</div>
 										<div class="aivi-settings-checklist__item">
@@ -2421,7 +2434,7 @@ class Admin_Settings {
 										<h4 class="aivi-settings-token-card__title"><?php esc_html_e( 'Reveal and copy when you are ready to connect the next site', 'ai-visibility-inspector' ); ?></h4>
 										<div class="aivi-settings-form__grid aivi-settings-token-grid" style="grid-template-columns:minmax(0,1fr) auto auto;align-items:end;">
 											<div class="aivi-settings-field" style="margin-bottom:0;">
-												<label for="aivi-issued-connection-token"><?php esc_html_e( 'Issued token', 'ai-visibility-inspector' ); ?></label>
+												<label for="aivi-issued-connection-token"><?php esc_html_e( 'Connection token', 'ai-visibility-inspector' ); ?></label>
 												<input type="password" id="aivi-issued-connection-token" readonly value="<?php echo esc_attr( $latest_connection_token['token'] ?? '' ); ?>" data-aivi-issued-token-input="true" data-token-masked="<?php echo esc_attr( $latest_connection_token['masked_token'] ?? '' ); ?>" data-token-raw="<?php echo esc_attr( $latest_connection_token['token'] ?? '' ); ?>">
 											</div>
 											<div class="aivi-settings-form__actions" style="margin:0;">
@@ -2435,18 +2448,18 @@ class Admin_Settings {
 											<?php
 											printf(
 												/* translators: %s: Token expiration date/time. */
-												esc_html__( 'Issued token expires %s. Keep it hidden until you need to paste it into the next site.', 'ai-visibility-inspector' ),
+												esc_html__( 'Connection token expires %s. Keep it hidden until you need to paste it into the next site.', 'ai-visibility-inspector' ),
 												esc_html( self::format_account_sync_time( $latest_connection_token['expires_at'] ?? '' ) )
 											);
 											?>
 										</p>
 									<?php else : ?>
 										<h4 class="aivi-settings-token-card__title"><?php esc_html_e( 'No active token stored yet', 'ai-visibility-inspector' ); ?></h4>
-										<p class="aivi-settings-token-card__hint"><?php esc_html_e( 'Once an operator issues a seven-day connection token for this account, it will appear here masked by default so you can reveal and copy it on demand.', 'ai-visibility-inspector' ); ?></p>
+										<p class="aivi-settings-token-card__hint"><?php esc_html_e( 'When a connection token is available for this account, it appears here masked by default so you can reveal and copy it when needed.', 'ai-visibility-inspector' ); ?></p>
 									<?php endif; ?>
 									<?php if ( ! empty( $support_url ) ) : ?>
 										<div class="aivi-settings-token-card__actions">
-											<a class="button button-secondary" href="<?php echo esc_url( $support_url ); ?>" target="_blank" rel="noreferrer noopener"><?php esc_html_e( 'Request connection token', 'ai-visibility-inspector' ); ?></a>
+											<a class="button button-secondary" href="<?php echo esc_url( $support_url ); ?>" target="_blank" rel="noreferrer noopener"><?php esc_html_e( 'Request token', 'ai-visibility-inspector' ); ?></a>
 										</div>
 									<?php endif; ?>
 								</div>
@@ -2591,7 +2604,7 @@ class Admin_Settings {
 							<div>
 								<span class="aivi-docs-hero__eyebrow"><?php esc_html_e( 'AiVI knowledge surface', 'ai-visibility-inspector' ); ?></span>
 								<h3 class="aivi-docs-hero__title"><?php esc_html_e( 'Open the right guide without leaving AiVI.', 'ai-visibility-inspector' ); ?></h3>
-								<p class="aivi-docs-hero__desc"><?php esc_html_e( 'Use the documentation hub to understand checks, fix issues, review policy guidance, and work through contributor docs from the same settings workspace.', 'ai-visibility-inspector' ); ?></p>
+								<p class="aivi-docs-hero__desc"><?php esc_html_e( 'Use the documentation hub to understand findings, fix issues, and review trust and policy guidance without leaving AiVI.', 'ai-visibility-inspector' ); ?></p>
 							</div>
 							<div class="aivi-docs-hero__actions">
 								<a class="button button-primary" href="<?php echo esc_url( $documentation_entry_urls['user-guide'] ); ?>" data-aivi-doc-button="user-guide"><?php esc_html_e( 'Start here', 'ai-visibility-inspector' ); ?></a>
@@ -3440,14 +3453,17 @@ class Admin_Settings {
 		$last_sync_raw = sanitize_text_field( (string) ( $dashboard_state['account']['last_sync_at'] ?? $account_state['updated_at'] ?? '' ) );
 		$last_sync_ts = $last_sync_raw !== '' ? strtotime( $last_sync_raw ) : false;
 		$stale_snapshot = ! $last_sync_ts || $last_sync_ts < ( time() - 15 );
-		$should_refresh = in_array( $subscription_status, array( 'created', 'pending' ), true ) || isset( $_GET['aivi_billing_return'] ) || $stale_snapshot;
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read-only billing return flag is used only to decide whether the dashboard snapshot should refresh.
+		$has_billing_return = isset( $_GET['aivi_billing_return'] );
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		$should_refresh = in_array( $subscription_status, array( 'created', 'pending' ), true ) || $has_billing_return || $stale_snapshot;
 		if ( ! $should_refresh ) {
 			return $dashboard_state;
 		}
 
 		$site_id    = sanitize_text_field( (string) ( $site_identity['site_id'] ?? '' ) );
 		$cache_key  = 'aivi_pending_dashboard_refresh_' . md5( $account_id . '|' . $site_id );
-		if ( ! isset( $_GET['aivi_billing_return'] ) ) {
+		if ( ! $has_billing_return ) {
 			$last_refresh = get_transient( $cache_key );
 			if ( $last_refresh ) {
 				return $dashboard_state;
@@ -3748,11 +3764,32 @@ class Admin_Settings {
 	 * @return array<string, string>
 	 */
 	private static function get_documentation_groups() {
-		return array(
+		$labels = array(
 			'start' => __( 'Start Here', 'ai-visibility-inspector' ),
 			'trust' => __( 'Trust & Policy', 'ai-visibility-inspector' ),
 			'build' => __( 'Build & Extend', 'ai-visibility-inspector' ),
 		);
+		$groups_in_use = array();
+
+		foreach ( self::get_documentation_catalog() as $entry ) {
+			$group_key = isset( $entry['group'] ) ? (string) $entry['group'] : '';
+			if ( isset( $labels[ $group_key ] ) ) {
+				$groups_in_use[ $group_key ] = $labels[ $group_key ];
+			}
+		}
+
+		return $groups_in_use;
+	}
+
+	/**
+	 * Whether advanced documentation entries should be visible in the plugin UI.
+	 *
+	 * @return bool
+	 */
+	private static function should_show_advanced_documentation() {
+		$default = defined( 'AIVI_SHOW_ADVANCED_DOCS' ) ? (bool) AIVI_SHOW_ADVANCED_DOCS : false;
+
+		return (bool) apply_filters( 'aivi_show_advanced_docs', $default );
 	}
 
 	/**
@@ -3761,7 +3798,7 @@ class Admin_Settings {
 	 * @return array<string, array<string, string>>
 	 */
 	private static function get_documentation_catalog() {
-		return array(
+		$catalog = array(
 			'user-guide'      => array(
 				'file'     => 'includes/data/docs/USER_GUIDE.md',
 				'title'    => __( 'User Guide', 'ai-visibility-inspector' ),
@@ -3843,6 +3880,12 @@ class Admin_Settings {
 				'audience' => __( 'Current Release', 'ai-visibility-inspector' ),
 			),
 		);
+
+		if ( ! self::should_show_advanced_documentation() ) {
+			unset( $catalog['development'], $catalog['architecture'], $catalog['operations'], $catalog['changelog'] );
+		}
+
+		return $catalog;
 	}
 
 	/**
@@ -3892,7 +3935,7 @@ class Admin_Settings {
 		list( $title, $body ) = self::extract_documentation_heading_and_body( $markdown, $fallback_title );
 		$cache[ $slug ] = array(
 			'title' => $title,
-			'html'  => self::render_documentation_markdown( $body ),
+			'html'  => self::render_documentation_markdown( $body, dirname( ltrim( (string) $entry['file'], '\\/' ) ) ),
 		);
 
 		return $cache[ $slug ];
@@ -3936,12 +3979,11 @@ class Admin_Settings {
 	 * @param string $markdown Markdown body.
 	 * @return string
 	 */
-	private static function render_documentation_markdown( $markdown ) {
+	private static function render_documentation_markdown( $markdown, $source_dir = '' ) {
 		$lines = preg_split( '/\n/', str_replace( array( "\r\n", "\r" ), "\n", (string) $markdown ) );
 		$html = '';
 		$paragraph_lines = array();
-		$list_items = array();
-		$list_type = '';
+		$list_stack = array();
 		$code_lines = array();
 		$inside_code_block = false;
 
@@ -3956,24 +3998,25 @@ class Admin_Settings {
 				return;
 			}
 
-			$html .= '<p>' . self::render_documentation_inline( $text ) . '</p>';
+			$html .= '<p>' . self::render_documentation_inline( $text, $source_dir ) . '</p>';
 		};
 
-		$flush_list = static function () use ( &$html, &$list_items, &$list_type ) {
-			if ( empty( $list_items ) || '' === $list_type ) {
-				$list_items = array();
-				$list_type = '';
+		$close_list_item = static function () use ( &$html, &$list_stack ) {
+			$last_index = count( $list_stack ) - 1;
+			if ( $last_index < 0 || empty( $list_stack[ $last_index ]['li_open'] ) ) {
 				return;
 			}
 
-			$tag = 'ol' === $list_type ? 'ol' : 'ul';
-			$html .= '<' . $tag . '>';
-			foreach ( $list_items as $item ) {
-				$html .= '<li>' . self::render_documentation_inline( $item ) . '</li>';
+			$html .= '</li>';
+			$list_stack[ $last_index ]['li_open'] = false;
+		};
+
+		$flush_lists = static function () use ( &$html, &$list_stack, &$close_list_item ) {
+			while ( ! empty( $list_stack ) ) {
+				$close_list_item();
+				$list = array_pop( $list_stack );
+				$html .= '</' . $list['type'] . '>';
 			}
-			$html .= '</' . $tag . '>';
-			$list_items = array();
-			$list_type = '';
 		};
 
 		$flush_code = static function () use ( &$html, &$code_lines ) {
@@ -3989,7 +4032,7 @@ class Admin_Settings {
 		foreach ( $lines as $line ) {
 			if ( preg_match( '/^\s*```/', $line ) ) {
 				$flush_paragraph();
-				$flush_list();
+				$flush_lists();
 				if ( $inside_code_block ) {
 					$flush_code();
 				}
@@ -4008,48 +4051,87 @@ class Admin_Settings {
 
 			if ( '' === trim( $line ) ) {
 				$flush_paragraph();
-				$flush_list();
+				$flush_lists();
 				continue;
 			}
 
 			if ( preg_match( '/^(#{2,6})\s+(.+)$/', trim( $line ), $matches ) ) {
 				$flush_paragraph();
-				$flush_list();
+				$flush_lists();
 				$level = min( 6, max( 2, strlen( $matches[1] ) ) );
 				$html .= sprintf(
 					'<h%d>%s</h%d>',
 					(int) $level,
-					self::render_documentation_inline( trim( $matches[2] ) ),
+					self::render_documentation_inline( trim( $matches[2] ), $source_dir ),
 					(int) $level
 				);
 				continue;
 			}
 
-			if ( preg_match( '/^\-\s+(.+)$/', trim( $line ), $matches ) ) {
+			if ( preg_match( '/^\!\[([^\]]*)\]\(([^)]+)\)\s*$/', trim( $line ), $matches ) ) {
 				$flush_paragraph();
-				if ( 'ul' !== $list_type ) {
-					$flush_list();
-					$list_type = 'ul';
-				}
-				$list_items[] = trim( $matches[1] );
+				$flush_lists();
+				$html .= self::render_documentation_figure( $matches[1], $matches[2], $source_dir );
 				continue;
 			}
 
-			if ( preg_match( '/^\d+\.\s+(.+)$/', trim( $line ), $matches ) ) {
+			if ( preg_match( '/^(\s*)([-*+]|\d+\.)\s+(.+)$/', rtrim( $line ), $matches ) ) {
 				$flush_paragraph();
-				if ( 'ol' !== $list_type ) {
-					$flush_list();
-					$list_type = 'ol';
+				$indent    = strlen( str_replace( "\t", '    ', $matches[1] ) );
+				$list_type = preg_match( '/^\d+\.$/', $matches[2] ) ? 'ol' : 'ul';
+				$item_text = trim( $matches[3] );
+
+				while ( ! empty( $list_stack ) ) {
+					$last_index   = count( $list_stack ) - 1;
+					$current_list = $list_stack[ $last_index ];
+
+					if ( $indent > $current_list['indent'] ) {
+						$html .= '<' . $list_type . '>';
+						$list_stack[] = array(
+							'type'    => $list_type,
+							'indent'  => $indent,
+							'li_open' => false,
+						);
+						break;
+					}
+
+					if ( $indent === $current_list['indent'] ) {
+						if ( $list_type !== $current_list['type'] ) {
+							$close_list_item();
+							$html .= '</' . $current_list['type'] . '>';
+							array_pop( $list_stack );
+							continue;
+						}
+						break;
+					}
+
+					$close_list_item();
+					$html .= '</' . $current_list['type'] . '>';
+					array_pop( $list_stack );
 				}
-				$list_items[] = trim( $matches[1] );
+
+				if ( empty( $list_stack ) ) {
+					$html .= '<' . $list_type . '>';
+					$list_stack[] = array(
+						'type'    => $list_type,
+						'indent'  => $indent,
+						'li_open' => false,
+					);
+				}
+
+				$close_list_item();
+				$html .= '<li>' . self::render_documentation_inline( $item_text, $source_dir );
+				$last_index = count( $list_stack ) - 1;
+				$list_stack[ $last_index ]['li_open'] = true;
 				continue;
 			}
 
+			$flush_lists();
 			$paragraph_lines[] = trim( $line );
 		}
 
 		$flush_paragraph();
-		$flush_list();
+		$flush_lists();
 		if ( $inside_code_block ) {
 			$flush_code();
 		}
@@ -4063,7 +4145,7 @@ class Admin_Settings {
 	 * @param string $text Inline markdown.
 	 * @return string
 	 */
-	private static function render_documentation_inline( $text ) {
+	private static function render_documentation_inline( $text, $source_dir = '' ) {
 		$placeholders = array();
 		$placeholder_index = 0;
 		$raw_text = (string) $text;
@@ -4080,10 +4162,10 @@ class Admin_Settings {
 
 		$raw_text = preg_replace_callback(
 			'/\[([^\]]+)\]\(([^)]+)\)/',
-			static function ( $matches ) use ( &$placeholders, &$placeholder_index ) {
+			static function ( $matches ) use ( &$placeholders, &$placeholder_index, $source_dir ) {
 				$token = '__AIVI_DOC_TOKEN_' . $placeholder_index++ . '__';
 				$label = esc_html( $matches[1] );
-				$url   = esc_url( $matches[2] );
+				$url   = self::resolve_documentation_resource_url( $matches[2], $source_dir );
 				$placeholders[ $token ] = $url
 					? '<a href="' . $url . '">' . $label . '</a>'
 					: $label;
@@ -4101,6 +4183,73 @@ class Admin_Settings {
 		}
 
 		return $safe;
+	}
+
+	/**
+	 * Render a markdown image as a documentation figure.
+	 *
+	 * @param string $alt        Image alt text.
+	 * @param string $path       Image path.
+	 * @param string $source_dir Markdown source directory.
+	 * @return string
+	 */
+	private static function render_documentation_figure( $alt, $path, $source_dir = '' ) {
+		$url = self::resolve_documentation_resource_url( $path, $source_dir );
+		if ( '' === $url ) {
+			return '';
+		}
+
+		$alt = trim( wp_strip_all_tags( (string) $alt ) );
+		$html  = '<figure class="aivi-docs-figure">';
+		$html .= '<img src="' . esc_url( $url ) . '" alt="' . esc_attr( $alt ) . '" loading="lazy" decoding="async">';
+		if ( '' !== $alt ) {
+			$html .= '<figcaption>' . esc_html( $alt ) . '</figcaption>';
+		}
+		$html .= '</figure>';
+		return $html;
+	}
+
+	/**
+	 * Resolve a markdown resource URL for bundled documentation.
+	 *
+	 * @param string $resource_path Relative or absolute resource path.
+	 * @param string $source_dir    Markdown source directory.
+	 * @return string
+	 */
+	private static function resolve_documentation_resource_url( $resource_path, $source_dir = '' ) {
+		$resource_path = trim( (string) $resource_path );
+		if ( '' === $resource_path ) {
+			return '';
+		}
+
+		$lower_resource_path = strtolower( $resource_path );
+		if (
+			0 === strpos( $lower_resource_path, 'http://' )
+			|| 0 === strpos( $lower_resource_path, 'https://' )
+			|| 0 === strpos( $lower_resource_path, 'mailto:' )
+			|| 0 === strpos( $lower_resource_path, 'tel:' )
+			|| 0 === strpos( $lower_resource_path, 'data:' )
+			|| '#' === $resource_path[0]
+		) {
+			return esc_url( $resource_path );
+		}
+
+		$normalized_path = ltrim( str_replace( '\\', '/', $resource_path ), '/' );
+		$normalized_source_dir = trim( str_replace( '\\', '/', (string) $source_dir ), '/' );
+		$candidates = array();
+		if ( '' !== $normalized_source_dir ) {
+			$candidates[] = trim( $normalized_source_dir . '/' . $normalized_path, '/' );
+		}
+		$candidates[] = $normalized_path;
+
+		foreach ( array_unique( $candidates ) as $candidate ) {
+			$absolute_path = self::get_documentation_file_path( $candidate );
+			if ( file_exists( $absolute_path ) ) {
+				return esc_url( trailingslashit( AIVI_PLUGIN_URL ) . ltrim( $candidate, '/' ) );
+			}
+		}
+
+		return '';
 	}
 
 	/**
@@ -5572,6 +5721,7 @@ class Admin_Settings {
 				'event' => $event,
 				'context' => $context,
 			);
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging is available only when WP_DEBUG is enabled.
 			error_log( 'AiVI: ' . wp_json_encode( $log_entry ) );
 		}
 	}

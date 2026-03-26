@@ -898,7 +898,7 @@ class REST_Preflight
             return '';
         }
 
-        $path = parse_url($src, PHP_URL_PATH);
+        $path = wp_parse_url($src, PHP_URL_PATH);
         if (!is_string($path) || $path === '') {
             $path = $src;
         }

@@ -1,323 +1,144 @@
 # AiVI Privacy Policy
 
-This document explains, at a practical level, what information the AiVI WordPress plugin handles, how that information is used, and where it is stored.
-
-It is written to match the current public plugin surface. Internal operator systems and private backend implementations are intentionally not part of this public repository, so backend retention and processor details may vary by AiVI environment.
+This document explains, at a practical level, what information the AiVI WordPress plugin handles, how that information is used, and where it is generally stored.
 
 ## Scope
 
-This privacy document covers the public AiVI WordPress plugin surface, including:
+This privacy document covers the AiVI experience inside WordPress, including:
 
 - editor analysis flows
 - document metadata editing
 - account, connection, plan, credit, and support surfaces inside WordPress
-- browser-side draft and UI state related to the plugin
+- browser-local draft and interface state related to AiVI
 
-It does **not** publish private implementation details for:
+## What AiVI Handles
 
-- internal control-plane systems
-- private billing infrastructure
-- internal support tooling
-- non-public backend deployment internals
+### 1. Article content and page details
 
-## Roles and Responsibilities
-
-In normal use, there are two main layers:
-
-- **Your WordPress site** — where the plugin runs, stores local settings, and reads content from the editor
-- **The managed AiVI service** — which receives analysis requests and returns deeper results, account state, and related service responses
-
-Your WordPress site controls the plugin-side data described below. The managed AiVI service may also process and retain service data needed to fulfill analysis, account, support, or billing functions.
-
-## Information the Plugin Handles
-
-### 1. Article and editor content
-
-When you run an analysis, the plugin may handle:
+When you run an analysis, AiVI may handle:
 
 - the article title
-- the current editor HTML/content
-- a generated manifest and block map
-- inferred content type
-- token estimates
-- optional document metadata such as:
+- the current editor content
+- document metadata such as:
   - meta description
   - canonical URL
   - language
 
 This information is used to:
 
-- build the WordPress-side preflight payload
-- submit the analysis request
-- anchor findings to blocks or sections
-- render results in the sidebar and overlay
+- analyze the current page
+- return findings in the sidebar and overlay
+- help anchor findings to the right area of the page
 
-### 2. Document metadata
+### 2. Site and account information
 
-The plugin can read and update:
+AiVI may handle site and account details such as:
 
-- post title
-- meta description
-- canonical URL
-- language
-
-These values are stored in WordPress as post title data and post meta where applicable.
-
-### 3. Site identity and environment details
-
-The plugin may collect or derive:
-
-- site ID
-- WordPress blog ID
-- site home URL
+- site identity details
+- connected domain
 - plugin version
 - WordPress version
-- connected domain
+- account, plan, and credit status
+- connection state
 
 This information is used to:
 
-- identify the site to the AiVI service
-- support connection handshakes
-- return the correct account/dashboard state
-- help support and troubleshooting flows
+- determine whether analysis is available
+- keep the AiVI dashboard in sync
+- support connection, billing, and troubleshooting flows
 
-### 4. Contact email
+### 3. Contact email
 
-This is one of the most important pieces to call out clearly.
+If you provide a preferred contact email in billing or support-related flows, AiVI may store and use it to:
 
-AiVI may use an explicit preferred contact email that you enter in plugin surfaces such as billing or support-related flows.
+- support account and billing follow-up
+- route support requests more reliably
 
-The plugin uses this email to:
+If you do not provide one, AiVI can still continue normal plugin usage without silently replacing it with another contact address.
 
-- support account, billing, and support follow-up workflows when you choose to provide a contact address
-- help support or billing-related workflows
+### 4. Support request information
 
-### How it is stored
-
-- If you provide a preferred contact email, the plugin stores it in a WordPress option.
-- If you do not provide one, the plugin can still start a free trial and continue routine account flows without silently substituting the WordPress admin email as your AiVI contact email.
-
-### 5. Trial admission history
-
-To protect self-serve trial access from repeated abuse, AiVI may record lightweight trial-admission history such as:
-
-- source of the admission event
-- site ID
-- site home URL
-- exact connected domain
-- admission timestamp
-
-This information is used to:
-
-- prevent repeated self-serve free-trial claims for the same exact public domain
-- support operator review when suspicious onboarding patterns need manual attention
-- avoid relying on invasive device fingerprinting for first-pass trial controls
-
-### 6. Account, connection, and entitlement data
-
-The plugin can store and display normalized account state such as:
-
-- account ID
-- account label
-- connection status
-- contact email
-- plan code and plan name
-- subscription status
-- trial status
-- site binding status
-- credit balances
-- entitlement flags
-- latest connection token metadata
-- connected sites summary
-
-This information is used to:
-
-- determine whether analysis is allowed
-- power the Overview, Plans, Credits, Connection, Support, and Documentation tabs
-- explain connection, plan, or credit issues in the editor/sidebar
-- keep the local dashboard in sync with the managed service
-
-### 7. Usage and run summary data
-
-The plugin stores a local usage rollup that can include:
-
-- last run ID
-- recent counted run IDs
-- last analysis time
-- last run status
-- credits used this month
-- last run debit
-
-This helps the plugin:
-
-- show usage summaries in settings
-- reflect local account state more accurately
-- avoid double-counting the same run in local summaries
-
-### 8. Billing and payment-related state
-
-Depending on your AiVI environment, the plugin may handle:
-
-- plan selections
-- top-up selections
-- billing return status
-- hosted checkout redirects
-- refreshed plan and credit state
-
-The public plugin does **not** expose internal payment secrets in this repository. However, billing-related state and account status may still be exchanged between WordPress and the managed AiVI service.
-
-### 9. Support request information
-
-When you use the Support tab or an integrated support flow, the plugin may handle:
+When you use the Support tab, AiVI may handle:
 
 - support category
-- priority
 - subject
 - message body
 - contact email
-- support destination/provider information
+- helpful support context such as the connected domain, plugin version, or visible account state
 
-The plugin may also append useful context such as:
+This information is used to make support requests easier to route and resolve.
 
-- account label
-- plan name
-- connected domain
-- site URL
-- site ID
-- plugin version
-- WordPress version
-- connection/binding status
-- last result
-- last sync time
+### 5. Browser-local draft and view state
 
-This context is used to make support requests easier to route and troubleshoot.
+AiVI may store limited browser-local data to improve editing convenience, such as:
 
-### 10. Browser-local draft and UI state
+- compatible overlay draft content
+- local interface state tied to the current article
 
-AiVI uses browser storage for some local editing convenience.
-
-This can include overlay draft data such as:
-
-- post ID
-- run ID
-- analysis content hash
-- editor signature
-- overlay schema version
-- unsaved editable block HTML
-- local save timestamp
-
-This information is stored in the browser’s local storage, not in WordPress options, and is used only to restore compatible unsaved overlay edits.
+This browser-local data is used only to restore compatible unsaved work and related interface state.
 
 ## How AiVI Uses the Information
 
-AiVI uses the handled information to:
+AiVI uses handled information to:
 
 - analyze content and return findings
-- determine whether a site/account is connected and entitled to run analysis
-- support the settings dashboard experience
-- keep local and remote account state synchronized
-- allow document metadata editing
+- show account, plan, and credit state inside WordPress
+- support metadata editing
 - restore compatible unsaved overlay drafts
-- troubleshoot service issues and support requests
-- handle hosted billing, trial, or onboarding flows where applicable
+- handle billing, onboarding, and support flows where applicable
 
-AiVI is not intended to use your content for unrelated advertising or unrelated marketing behavior through the public plugin surface described here.
+AiVI is not intended to use your content for unrelated advertising behavior through the plugin surface described here.
 
 ## Where Information Is Stored
 
 ### In WordPress
 
-Depending on the feature in use, the plugin may store data in:
+Depending on the feature in use, AiVI may store data in:
 
 - WordPress options
 - post meta
 - post title fields
 
-Examples include:
+Examples can include:
 
-- backend URL override
-- optional AiVI API key
-- web lookups setting
-- plugin enabled state
+- metadata values
 - preferred contact email
-- local account/dashboard snapshots
-- usage rollups
-- document meta fields
+- local account snapshots
+- usage summaries
+- plugin settings
 
 ### In the browser
 
-The plugin may store limited local UI state in the browser, especially:
+AiVI may store limited local interface state in the browser, especially:
 
 - compatible overlay draft content
-- local view state tied to the current article/run context
+- local interface state for the current article
 
-### In the managed AiVI service
+### In the AiVI hosted service
 
-When you run analysis or use account/billing/support-connected flows, the plugin may send data to the managed AiVI service. That service may store:
+When you run analysis or use connected account, billing, or support flows, AiVI may send data to its hosted service. That service may handle:
 
-- submitted analysis payloads
-- run metadata
+- analysis requests and results
 - account and connection state
 - billing-related state
 - support-related submissions
 
-The exact backend retention schedule is environment-dependent and is not fully defined inside this public repository.
+## What AiVI May Send
 
-## What the Plugin Sends to the Managed Service
+Depending on the flow, AiVI may send:
 
-### During analysis
+- article content and metadata needed for analysis
+- site and account details needed for connection or dashboard state
+- plan or top-up selections during billing flows
+- support request content and related support context
 
-The plugin may send:
-
-- title
-- content HTML
-- manifest/block map
-- meta description
-- canonical URL
-- language
-- run ID
-- token estimate
-- post ID
-- content type
-- site ID
-- current WordPress user ID
-- feature flags
-- local account state needed for analysis admission and service behavior
-
-### During account and connection flows
-
-The plugin may send:
-
-- site identity
-- site URL
-- site ID
-- blog ID
-- plugin version
-- WordPress version
-- preferred contact email, when you explicitly supply one
-- connection token when connecting a site
-- exact connected domain and trial-admission context needed to decide whether self-serve trial start is allowed
-
-### During billing or support flows
-
-The plugin may send:
-
-- plan or top-up selections
-- billing return parameters where relevant
-- contact email, when you explicitly provide one
-- support request content and support context
+AiVI sends only what is needed for the feature you are using at that time.
 
 ## Optional External Verification
 
-If **Web Lookups** is enabled, the managed AiVI service may perform external verification for source-sensitive checks.
+If **Web Lookups** is enabled, AiVI may perform limited external verification for source-sensitive checks.
 
-At a high level, this can mean:
-
-- consulting public web sources
-- checking external pages for verification support
-- expanding network activity beyond the base specimen-only analysis path
-
-If you want to keep analysis more strictly specimen-bound, leave web lookups disabled.
+If you prefer a more self-contained analysis path, leave web lookups disabled.
 
 ## Retention at a High Level
 
@@ -327,44 +148,43 @@ Data stored in WordPress generally remains until:
 
 - you update it
 - you clear it
-- the plugin resets or overwrites the relevant state
-- the content itself is changed or removed
+- the plugin overwrites the relevant state
+- the related content is changed or removed
 
-### Browser-local draft data
+### Browser-local data
 
-Overlay drafts generally remain until:
+Browser-local draft and interface data generally remains until:
 
-- they are replaced
-- they are cleared
-- they become incompatible with the current run/content state
-- the browser storage is cleared
+- it is replaced
+- it is cleared
+- it becomes incompatible with the current article state
+- browser storage is cleared
 
-### Managed service data
+### Hosted-service data
 
-Analysis, account, support, and service records may be retained by the managed AiVI service for operational purposes such as:
+Analysis, account, support, and billing-related records may be retained by the AiVI hosted service for operational purposes such as:
 
 - delivering results
-- debugging
-- abuse prevention
 - account continuity
 - billing and support workflows
+- security and abuse prevention
 
-Exact durations may vary by environment. If you need an exact retention commitment for your deployment, request that from the AiVI service operator.
+Exact durations can vary by environment.
 
 ## Security Notes
 
-The plugin includes capability checks and sanitization for key settings and REST routes, but no WordPress plugin can replace responsible site administration.
+AiVI includes capability checks and sanitization for key settings and routes, but no WordPress plugin can replace responsible site administration.
 
 You should:
 
 - keep WordPress and the plugin updated
 - restrict admin access appropriately
 - use secure hosting and HTTPS
-- avoid entering unnecessary overrides on production sites
+- avoid entering unnecessary advanced overrides on production sites
 
 ### Important note about API keys
 
-If you configure an optional AiVI API key, it is stored in WordPress and used in requests to the AiVI backend. Treat that key as sensitive operational data on your site.
+If you configure an optional AiVI API key, it is stored in WordPress and used in AiVI service requests. Treat that key as sensitive operational data on your site.
 
 ## Your Controls
 
@@ -372,21 +192,20 @@ You can usually control plugin-handled data by:
 
 - editing or clearing document metadata
 - changing or removing the preferred contact email
-- clearing or updating backend overrides
-- disabling web lookups
 - disconnecting the site from the current AiVI account
+- disabling web lookups
 - clearing browser-local storage where needed
 
-If you need deletion or correction of data handled by the managed AiVI service, contact the AiVI operator or support channel for your environment.
+If you need deletion or correction of data handled by the AiVI hosted service, use the Support tab or the support path provided in your AiVI environment.
 
-## Children’s Data
+## Children's Data
 
 The plugin is intended for site operators, editors, and administrators. It is not designed as a service for children.
 
 ## Changes to This Policy
 
-As AiVI evolves, this document may be updated to reflect changes in the public plugin surface, settings, support flows, and data handling behavior.
+As AiVI evolves, this document may be updated to reflect changes in the plugin surface, support flows, and data-handling behavior.
 
 ## Contact
 
-For privacy or support questions related to your AiVI environment, use the Support tab in the plugin or the support path provided by your AiVI operator.
+For privacy or support questions related to your AiVI environment, use the Support tab in the plugin or the support path provided there.
