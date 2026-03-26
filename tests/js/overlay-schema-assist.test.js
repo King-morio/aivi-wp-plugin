@@ -100,11 +100,11 @@ describe('overlay schema assist regression guard', () => {
         expect(source).toContain("emitHighlightTelemetry('overlay_schema_insert_blocked_conflict'");
         expect(source).toContain("emitHighlightTelemetry('overlay_schema_replaced'");
         expect(source).toContain("dispatcher.updateBlockAttributes(targetClientId, {");
-        expect(source).toContain("Ready to update. AiVI will replace one matching AiVI-managed schema block.");
+        expect(source).toContain("Ready to update. AiVI will replace one matching AiVI-managed schema block in the editor.");
         expect(source).toContain("Ready to insert. AiVI will add a new JSON-LD block at the end of the editor.");
         expect(source).toContain("Already present. Equivalent schema already exists in the editor.");
         expect(source).toContain("Conflict detected. Another schema source already covers this area, so this draft is copy-only.");
-        expect(source).toContain("Replaced existing AiVI-managed schema block in the editor.");
-        expect(source).toContain("Inserted new JSON-LD block at the end of the editor.");
+        expect(source).toContain("Replaced existing AiVI-managed schema block in the editor. Save the post to publish it live.");
+        expect(source).toContain("Inserted new JSON-LD block at the end of the editor. Save the post to publish it live.");
     });
 });

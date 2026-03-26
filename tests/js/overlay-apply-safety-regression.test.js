@@ -3,19 +3,19 @@ const fs = require('fs');
 const path = require('path');
 
 describe('overlay apply safety regression guard', () => {
-    test('makes editor-only persistence explicit in the rail and apply confirmation flow', () => {
+    test('uses the manual copy-and-paste guidance model in the rail instead of top apply actions', () => {
         const overlayPath = path.resolve(__dirname, '../../assets/js/aivi-overlay-editor.js');
         const cssPath = path.resolve(__dirname, '../../assets/css/aivi-overlay-editor.css');
         const source = fs.readFileSync(overlayPath, 'utf8');
         const css = fs.readFileSync(cssPath, 'utf8');
 
-        expect(source).toContain("const OVERLAY_EDITOR_PERSISTENCE_NOTE = 'Apply Changes sends your overlay edits to the WordPress editor. Then click Update or Publish to make them live.';");
+        expect(source).toContain("const OVERLAY_EDITOR_PERSISTENCE_NOTE = 'Edit inside AiVI, then copy the revised text and paste it into the matching WordPress block. Close this panel anytime to return to the editor.';");
         expect(source).toContain("note.className = 'aivi-overlay-rail-note';");
         expect(source).toContain("note.textContent = OVERLAY_EDITOR_PERSISTENCE_NOTE;");
-        expect(source).toContain("const message = 'Your article edits stay inside AiVI until you apply them. This sends those edits to the WordPress editor state. Use Update or Publish afterward to make them live. You can still undo after applying.';");
-        expect(source).toContain("const noticeMessage = sync.failed > 0");
-        expect(source).toContain("showEditorNotice(noticeMessage, 'success');");
-        expect(source).toContain("Review the changed blocks, then click Update or Publish.");
+        expect(source).toContain("closeButton.textContent = 'Close';");
+        expect(source).not.toContain("applyButton.textContent = 'Apply Changes';");
+        expect(source).not.toContain("copyButton.textContent = 'Copy';");
+        expect(source).toContain('head.appendChild(closeButton);');
         expect(css).toContain('.aivi-overlay-rail-note');
     });
 
@@ -23,11 +23,26 @@ describe('overlay apply safety regression guard', () => {
         const overlayPath = path.resolve(__dirname, '../../assets/js/aivi-overlay-editor.js');
         const source = fs.readFileSync(overlayPath, 'utf8');
 
-        expect(source).toContain('function markOverlayEditableChanged(reason) {');
-        expect(source).toContain("body.addEventListener('input', () => markOverlayEditableChanged('input'));");
+        expect(source).toContain('function markOverlayEditableChanged(reason, body) {');
+        expect(source).toContain("body.addEventListener('input', () => markOverlayEditableChanged('input', body));");
         expect(source).not.toContain("body.addEventListener('input', () => scheduleBlockUpdate(nodeRef, body));");
         expect(source).not.toContain("updateBlockFromEditable(active.nodeRef, active.body);");
-        expect(source).toContain("setMetaStatus('Formatting staged in AiVI. Click Apply Changes to send it to the WordPress editor.');");
+        expect(source).toContain("setMetaStatus('Formatting staged in AiVI. Copy the revised text into the matching WordPress block when you are ready.');");
+        expect(source).toContain("if (body) {");
+        expect(source).toContain("markOverlayBodyDirty(body);");
+        expect(source).toContain("setMetaStatus(sync.noChanges ? 'No changes to apply' : 'No editable content found');");
+    });
+
+    test('inline rewrite variants copy text for manual paste instead of auto-applying to the editor', () => {
+        const overlayPath = path.resolve(__dirname, '../../assets/js/aivi-overlay-editor.js');
+        const source = fs.readFileSync(overlayPath, 'utf8');
+
+        expect(source).toContain("copyBtn.textContent = 'Copy';");
+        expect(source).toContain("copyBtn.addEventListener('click', () => handleAccept(item, idx));");
+        expect(source).toContain("info.status = 'Copied for paste';");
+        expect(source).toContain("setMetaStatus('Copied revised text. Paste it into the matching WordPress block, then review and update the post.');");
+        expect(source).not.toContain("acceptBtn.textContent = 'Accept';");
+        expect(source).not.toContain("info.status = 'Applied in editor';");
     });
 
     test('reveals applied Gutenberg blocks after a clean apply', () => {
@@ -63,7 +78,6 @@ describe('overlay apply safety regression guard', () => {
         expect(source).toContain('function isOverlayApplySupportedBlockInfo(blockInfo) {');
         expect(source).toContain("if (!isOverlayApplySupportedBlockInfo(blockInfo)) return 'unsupported_block';");
         expect(source).toContain("return hasUnsupportedTarget ? 'unsupported_block' : 'apply_failed';");
-        expect(source).toContain("info.status = 'Read-only block';");
-        expect(source).toContain("setMetaStatus('AiVI did not rewrite a read-only block. Use the editor directly for rich content.');");
+        expect(source).toContain("if (unsupportedCount > 0) return 'unsupported_block';");
     });
 });

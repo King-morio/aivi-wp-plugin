@@ -208,14 +208,79 @@
     // ============================================
     // fail Ã¢â€ â€™ Ã¢ÂÅ’ (X), partial Ã¢â€ â€™ Ã¢Å¡Â Ã¯Â¸Â (warning), pass Ã¢â€ â€™ Ã¢Å“â€œ (yes, muted when shown)
     const VERDICT_CONFIG = {
-        fail: { icon: 'no', color: COLORS.failIcon, show: true },
-        partial: { icon: 'warning', color: COLORS.partialIcon, show: true },
-        warning: { icon: 'no', color: COLORS.failIcon, show: true },
-        pass: { icon: 'yes', color: COLORS.passIcon, show: true }  // Shown only when toggle ON
+        fail: { icon: 'no', color: COLORS.failIcon, label: 'Fail', show: true },
+        partial: { icon: 'warning', color: COLORS.partialIcon, label: 'Partial', show: true },
+        warning: { icon: 'no', color: COLORS.failIcon, label: 'Fail', show: true },
+        pass: { icon: 'yes', color: COLORS.passIcon, label: 'Pass', show: true }  // Shown only when toggle ON
     };
 
     function getVerdictIcon(verdict) {
         return VERDICT_CONFIG[verdict] || VERDICT_CONFIG.fail;
+    }
+
+    function normalizeIssuePriorityToken(value) {
+        return String(value || '').trim().toLowerCase();
+    }
+
+    function getIssueVerdictPresentation(issue) {
+        const verdict = normalizeIssuePriorityToken(issue && (issue.ui_verdict || issue.verdict || '')) || 'fail';
+        const config = VERDICT_CONFIG[verdict] || VERDICT_CONFIG.fail;
+        if (verdict === 'pass') {
+            return {
+                label: config.label,
+                background: '#edfdf8',
+                border: '#bfeadb',
+                color: COLORS.passIcon
+            };
+        }
+        if (verdict === 'partial') {
+            return {
+                label: config.label,
+                background: COLORS.mediumBg,
+                border: COLORS.warningBorder,
+                color: COLORS.mediumText
+            };
+        }
+        return {
+            label: config.label,
+            background: COLORS.highBg,
+            border: '#f3c2c7',
+            color: COLORS.highText
+        };
+    }
+
+    function getScoreRingColor(pct) {
+        const normalizedPct = Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
+        if (normalizedPct <= 24) return COLORS.failIcon;
+        if (normalizedPct <= 49) return COLORS.partialIcon;
+        if (normalizedPct <= 74) return COLORS.passIcon;
+        return COLORS.inlinePass;
+    }
+
+    function getGlobalScorePill(score) {
+        const normalizedScore = Number.isFinite(score) ? Math.max(0, Math.min(100, score)) : 0;
+        if (normalizedScore >= 75) {
+            return {
+                label: 'Excellent',
+                background: '#edfdf8',
+                border: '#bfeadb',
+                color: '#0b7960'
+            };
+        }
+        if (normalizedScore >= 50) {
+            return {
+                label: 'Good',
+                background: COLORS.lowBg,
+                border: '#bde7c9',
+                color: COLORS.lowText
+            };
+        }
+        return {
+            label: 'Fair',
+            background: COLORS.mediumBg,
+            border: COLORS.warningBorder,
+            color: COLORS.mediumText
+        };
     }
 
     function resolveCanonicalCategoryName(checkId, fallbackCategory) {
@@ -1106,35 +1171,63 @@
             }
             .aivi-analysis-shell {
                 position: relative;
-                min-height: 368px;
+                min-height: 320px;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                padding: 12px;
+                box-sizing: border-box;
                 background: transparent;
             }
             .aivi-analysis-preflight {
-                position: absolute;
-                inset: 0;
-                z-index: 2;
                 display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 14px 12px;
-                background:
-                    radial-gradient(circle at 20% 0%, rgba(47,111,255,.20), rgba(47,111,255,0) 42%),
-                    radial-gradient(circle at 90% 0%, rgba(87,214,255,.12), rgba(87,214,255,0) 38%);
+                flex: 1 1 auto;
+                align-items: stretch;
+                justify-content: stretch;
+                min-height: 0;
             }
             .aivi-analysis-preflight-card {
                 width: 100%;
                 border-radius: 16px;
                 padding: 18px 16px;
-                min-height: 316px;
+                min-height: 262px;
                 box-sizing: border-box;
                 background: linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));
                 border: 1px solid rgba(122,154,224,.22);
                 box-shadow: 0 18px 38px rgba(13,24,48,.28);
-                text-align: center;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
                 align-items: center;
+                gap: 14px;
+                text-align: center;
+            }
+            .aivi-analysis-preflight-meta {
+                color: #8ea7ca;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: .01em;
+            }
+            .aivi-analysis-pill-strip {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 8px;
+                max-width: 220px;
+            }
+            .aivi-analysis-pill {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 7px 10px;
+                border-radius: 999px;
+                background: rgba(255,255,255,.08);
+                border: 1px solid rgba(151,181,246,.14);
+                color: #d8e3f6;
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: .06em;
+                text-transform: uppercase;
             }
             .aivi-analysis-preflight-title {
                 margin: 0;
@@ -1155,30 +1248,34 @@
                 animation: aivi-loader-accent-shift 3.8s ease-in-out infinite;
             }
             .aivi-analysis-banner {
-                position: absolute;
-                top: 14px;
-                left: 12px;
-                right: 12px;
+                position: relative;
                 box-sizing: border-box;
-                min-height: 86px;
+                min-height: 0;
                 border-radius: 16px;
-                padding: 16px;
+                padding: 14px 15px 13px;
                 background: linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.04));
                 border: 1px solid rgba(150,181,255,.18);
                 z-index: 1;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
-                gap: 10px;
+                gap: 8px;
             }
+            .aivi-analysis-banner::before,
             .aivi-analysis-banner::after {
                 content: "";
                 position: absolute;
                 left: 16px;
                 right: 16px;
                 bottom: 0;
-                height: 1px;
-                background: linear-gradient(90deg,rgba(87,214,255,0),rgba(87,214,255,.72),rgba(87,214,255,0));
+                height: 2px;
+                border-radius: 999px;
+                background: linear-gradient(90deg,rgba(87,214,255,0),rgba(87,214,255,.94),rgba(104,221,196,.9),rgba(87,214,255,0));
+                box-shadow: 0 0 10px rgba(87,214,255,.16);
+            }
+            .aivi-analysis-banner::before {
+                top: 0;
+                bottom: auto;
             }
             .aivi-analysis-tag {
                 display: inline-flex;
@@ -1197,18 +1294,14 @@
             .aivi-analysis-banner-title {
                 margin: 0;
                 color: #f5f8ff !important;
-                font-size: 20px;
+                font-size: 16px;
                 font-weight: 900;
-                line-height: 1.06;
+                line-height: 1.2;
                 letter-spacing: -.02em;
                 text-shadow: 0 1px 18px rgba(11,18,33,.24);
             }
             .aivi-analysis-console {
-                position: absolute;
-                top: 114px;
-                left: 12px;
-                right: 12px;
-                bottom: 54px;
+                position: relative;
                 font-family: ${COLORS.fontStack};
                 font-size: 11px;
                 line-height: 1.25;
@@ -1216,24 +1309,52 @@
                 display: flex;
                 flex-direction: column;
                 justify-content: flex-start;
-                gap: 7px;
+                gap: 9px;
+                flex: 1 1 auto;
+                min-height: 0;
+                overflow: auto;
             }
             .aivi-analysis-log-row {
+                position: relative;
                 display: grid;
                 grid-template-columns: minmax(0,1fr) auto;
                 align-items: center;
                 gap: 10px;
-                padding: 9px 10px;
-                min-height: 50px;
-                border-radius: 11px;
+                padding: 10px 11px;
+                min-height: 48px;
+                border-radius: 14px;
                 background: rgba(255,255,255,.07);
                 border: 1px solid rgba(151,181,246,.12);
                 transition: .25s ease;
+            }
+            .aivi-analysis-log-row::before,
+            .aivi-analysis-log-row::after {
+                content: "";
+                position: absolute;
+                left: 12px;
+                right: 12px;
+                height: 2px;
+                border-radius: 999px;
+                background: linear-gradient(90deg,rgba(87,214,255,0),rgba(87,214,255,.6),rgba(104,221,196,.56),rgba(87,214,255,0));
+                box-shadow: 0 0 8px rgba(87,214,255,.1);
+                opacity: .9;
+                pointer-events: none;
+            }
+            .aivi-analysis-log-row::before {
+                top: 0;
+            }
+            .aivi-analysis-log-row::after {
+                bottom: 0;
             }
             .aivi-analysis-log-row.is-live {
                 background: rgba(87,214,255,.10);
                 border-color: rgba(87,214,255,.28);
                 box-shadow: inset 0 0 0 1px rgba(87,214,255,.06);
+            }
+            .aivi-analysis-log-row.is-live::before,
+            .aivi-analysis-log-row.is-live::after {
+                background: linear-gradient(90deg,rgba(87,214,255,0),rgba(87,214,255,.96),rgba(104,221,196,.92),rgba(87,214,255,0));
+                box-shadow: 0 0 12px rgba(87,214,255,.18);
             }
             .aivi-analysis-log-ts {
                 display: none;
@@ -1287,25 +1408,30 @@
                 color: #57d6ff;
             }
             .aivi-analysis-footer {
-                position: absolute;
-                left: 0;
-                right: 0;
-                bottom: 0;
                 display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 8px;
-                padding: 12px 12px 13px;
+                flex-direction: column;
+                align-items: flex-start;
+                justify-content: flex-start;
+                gap: 6px;
+                padding: 10px 2px 0;
                 border-top: 1px solid rgba(138,169,235,.14);
                 color: #8eaad1;
-                font-size: 10px;
+                font-size: 11px;
                 font-weight: 700;
             }
-            .aivi-analysis-footer .aivi-muted {
+            .aivi-analysis-footer-strong {
+                color: #d8e7ff;
+                font-weight: 800;
+                letter-spacing: .01em;
+            }
+            .aivi-analysis-footer-subtle {
                 color: #8eaad1;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
+                line-height: 1.45;
+            }
+            .aivi-analysis-note {
+                color: #9ab0d3;
+                font-size: 11px;
+                line-height: 1.45;
             }
             /* Navigation controls hover */
             .aivi-nav-btn {
@@ -1615,6 +1741,23 @@
         return rows;
     }
 
+    function getAnalysisStartPills(phase) {
+        if (phase === 'queued') {
+            return ['Preparing worker', 'Loading structure'];
+        }
+        if (phase === 'preflight') {
+            return ['Loading structure', 'Checking signals'];
+        }
+        return ['Warming analyzer', 'Loading structure'];
+    }
+
+    function getAnalysisStartFooterCopy(phase) {
+        if (phase === 'queued') {
+            return 'The worker is being prepared before semantic judgment begins.';
+        }
+        return 'This first phase checks structure before semantic judgment begins.';
+    }
+
     function AnalysisProgressPanel(props) {
         const phase = props.phase || 'preflight';
         const analysisStartTime = Math.max(0, Number(props.analysisStartTime || 0));
@@ -1635,12 +1778,12 @@
         const progressElapsedMs = Math.max(0, nowMs - progressStartMs);
         const messageIndex = Math.floor(progressElapsedMs / ANALYSIS_MESSAGE_ROTATE_MS);
         const currentProgressEntry = getAnalysisProgressEntry(messageIndex);
-        const bannerContext = showSplash ? 'Opening Signals' : 'Live Category';
-        const bannerTitle = showSplash ? ANALYSIS_HERO_MESSAGE : currentProgressEntry.contextTag;
+        const bannerContext = 'Live Category';
+        const bannerTitle = currentProgressEntry.contextTag;
         const rows = showSplash ? [] : buildConsoleLogRows(messageIndex, phase, queueMessage);
-        const footerMessage = phase === 'queued'
-            ? 'Preparing analysis worker'
-            : currentProgressEntry.contextTag;
+        const durationNote = 'Most analyses finish in about 4-5 minutes.';
+        const startPills = getAnalysisStartPills(phase);
+        const startFooterCopy = getAnalysisStartFooterCopy(phase);
 
         return createElement('div', { className: 'aivi-analysis-loader' },
             createElement('div', {
@@ -1655,6 +1798,12 @@
                 showSplash
                     ? createElement('div', { className: 'aivi-analysis-preflight' },
                         createElement('div', { className: 'aivi-analysis-preflight-card' },
+                            createElement('div', { className: 'aivi-analysis-preflight-meta' }, `${elapsed}s elapsed`),
+                            createElement('div', { className: 'aivi-analysis-pill-strip' },
+                                startPills.map((pill) =>
+                                    createElement('span', { key: pill, className: 'aivi-analysis-pill' }, pill)
+                                )
+                            ),
                             createElement('h3', { className: 'aivi-analysis-preflight-title' },
                                 'Initializing ',
                                 createElement('span', { className: 'aivi-accent' }, 'AI perspective'),
@@ -1681,8 +1830,11 @@
                         )
                     ],
                 createElement('div', { className: 'aivi-analysis-footer' },
-                    createElement('span', null, `${elapsed}s elapsed`),
-                    createElement('span', { className: 'aivi-muted' }, footerMessage)
+                    showSplash
+                        ? createElement('span', { className: 'aivi-analysis-footer-strong' }, durationNote)
+                        : createElement('span', { className: 'aivi-analysis-footer-strong' }, `${elapsed}s elapsed`),
+                    !showSplash && createElement('span', { className: 'aivi-analysis-note' }, durationNote),
+                    showSplash && createElement('span', { className: 'aivi-analysis-footer-subtle' }, startFooterCopy)
                 )
             )
         );
@@ -1787,7 +1939,7 @@
         const strokeValue = (pct / 100) * totalVisibleDash;
         const dashOffsetValue = circumference - strokeValue; // Offset for value path
 
-        const color = props.color || COLORS.aeoRing;
+        const color = getScoreRingColor(pct);
 
         return createElement('div', { style: { textAlign: 'center' } },
             createElement('div', { style: { position: 'relative', display: 'inline-block' } },
@@ -1835,6 +1987,7 @@
         const aeo = props.aeo || 0;
         const geo = props.geo || 0;
         const lastRun = props.lastRun || 'Just now';
+        const scorePill = getGlobalScorePill(score);
 
         return createElement('div', {
             className: props.animate ? 'aivi-success-animate' : '',
@@ -1865,6 +2018,30 @@
             },
                 createElement('span', null, `AEO ${aeo}`),
                 createElement('span', null, `GEO ${geo}`)
+            ),
+            createElement('div', {
+                style: {
+                    marginTop: 10,
+                    textAlign: 'center'
+                }
+            },
+                createElement('span', {
+                    style: {
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minHeight: 24,
+                        padding: '0 10px',
+                        borderRadius: 999,
+                        background: scorePill.background,
+                        border: '1px solid ' + scorePill.border,
+                        color: scorePill.color,
+                        fontSize: 11,
+                        fontWeight: 800,
+                        letterSpacing: '.08em',
+                        textTransform: 'uppercase'
+                    }
+                }, scorePill.label)
             ),
             createElement('div', {
                 style: {
@@ -1911,6 +2088,7 @@
             const instances = issue.instances || 1;
             const checkId = issue.check_id || issue.id;
             const isPassedCheck = verdict === 'pass';
+            const verdictPill = getIssueVerdictPresentation(issue);
 
             return createElement('div', {
                 key: checkId,
@@ -1946,18 +2124,20 @@
                     }
                 }, issue.name || issue.title || checkId.replace(/_/g, ' ')),
 
-                // Badge: "Needs review" - HIDE for Passed Checks
-                (issue.actionable === false && !isPassedCheck) && createElement('span', {
+                // Verdict pill restores the original row-level truth in the sidebar
+                verdictPill && createElement('span', {
                     style: {
                         fontSize: 11,
-                        padding: '2px 6px',
+                        padding: '2px 8px',
                         borderRadius: 999,
-                        background: COLORS.warning,
-                        border: '1px solid ' + COLORS.warningBorder,
-                        color: COLORS.mediumText,
+                        background: verdictPill.background,
+                        border: '1px solid ' + verdictPill.border,
+                        color: verdictPill.color,
+                        fontWeight: 700,
+                        letterSpacing: '.02em',
                         flexShrink: 0
                     }
-                }, 'Needs review'),
+                }, verdictPill.label),
 
                 // BADGE: Instance Count (Static, Circular) - Only if > 1
                 instances > 1 && createElement('span', {
@@ -3398,6 +3578,22 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                 const groups = {};
                 const allIssues = [];
                 let issueCount = 0;
+                const rawChecksPayload = rawReport && (rawReport.result?.checks || rawReport.checks);
+                const summaryRunId = String(targetReport.run_id || targetReport.analysis_summary?.run_id || '');
+                const rawRunId = rawReport ? String(rawReport.run_id || rawReport.result?.run_id || '') : '';
+                const hasRunAlignedRaw = !!summaryRunId && !!rawRunId && summaryRunId === rawRunId;
+                const rawCheckIndex = new Map();
+
+                if (hasRunAlignedRaw && rawChecksPayload) {
+                    const rawChecksArray = Array.isArray(rawChecksPayload)
+                        ? rawChecksPayload
+                        : Object.entries(rawChecksPayload).map(([key, val]) => ({ ...val, id: key }));
+                    rawChecksArray.forEach((rawCheck) => {
+                        const safeId = String(rawCheck && (rawCheck.id || rawCheck.check_id) || '').trim();
+                        if (!safeId || rawCheckIndex.has(safeId)) return;
+                        rawCheckIndex.set(safeId, rawCheck);
+                    });
+                }
 
                 categories.forEach(cat => {
                     const categoryName = cat.name || cat.id || 'General';
@@ -3407,12 +3603,14 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                     issues.forEach(issue => {
                         const actionable = !!issue.first_instance_node_ref;
                         const resolvedVerdict = (issue.ui_verdict === 'pass' || issue.verdict === 'pass') ? 'pass' : (issue.ui_verdict || 'fail');
+                        const issueCheckId = issue.check_id || issue.id || 'unknown';
+                        const rawCheck = rawCheckIndex.get(issueCheckId);
                         const mappedIssue = {
-                            id: issue.check_id || issue.id || 'unknown',
-                            check_id: issue.check_id || issue.id || 'unknown',
-                            detail_ref: issue.detail_ref || ((issue.check_id || issue.id) ? `check:${issue.check_id || issue.id}` : null),
-                            name: issue.name || issue.check_id || 'Unknown Check',
-                            title: issue.name || issue.check_id || 'Unknown Check',
+                            id: issueCheckId,
+                            check_id: issueCheckId,
+                            detail_ref: issue.detail_ref || (issueCheckId ? `check:${issueCheckId}` : null),
+                            name: issue.name || issueCheckId || 'Unknown Check',
+                            title: issue.name || issueCheckId || 'Unknown Check',
                             category: categoryName,
                             verdict: resolvedVerdict,
                             ui_verdict: resolvedVerdict,
@@ -3422,6 +3620,8 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                             review_summary: issue.review_summary || '',
                             issue_explanation: issue.issue_explanation || '',
                             actionable: actionable,
+                            severity: normalizeIssuePriorityToken(issue.severity || issue.impact || (rawCheck && (rawCheck.severity || rawCheck.impact || rawCheck.priority || rawCheck.importance))) || '',
+                            impact: normalizeIssuePriorityToken(issue.impact || (rawCheck && (rawCheck.impact || rawCheck.severity || rawCheck.priority || rawCheck.importance))) || '',
                             highlights: []
                         };
                         groups[categoryName].push(mappedIssue);
@@ -3433,11 +3633,6 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                         }
                     });
                 });
-
-                const rawChecksPayload = rawReport && (rawReport.result?.checks || rawReport.checks);
-                const summaryRunId = String(targetReport.run_id || targetReport.analysis_summary?.run_id || '');
-                const rawRunId = rawReport ? String(rawReport.run_id || rawReport.result?.run_id || '') : '';
-                const hasRunAlignedRaw = !!summaryRunId && !!rawRunId && summaryRunId === rawRunId;
                 if (showPassedChecks && rawChecksPayload && hasRunAlignedRaw) {
                     const existingIds = new Set(allIssues.map(issue => issue.check_id));
                     const rawChecksArray = Array.isArray(rawChecksPayload)

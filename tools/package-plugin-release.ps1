@@ -1,7 +1,7 @@
 param(
     [string]$OutputDir = "dist",
-    [string]$PackageName = "AiVI-WP-Plugin",
-    [string]$PluginFolderName = "AiVI-WP-Plugin",
+    [string]$PackageName = "ai-visibility-inspector",
+    [string]$PluginFolderName = "ai-visibility-inspector",
     [switch]$ListOnly
 )
 
@@ -17,17 +17,9 @@ $zipPath = Join-Path $outputDirPath ($PackageName + ".zip")
 $allowlist = @(
     "ai-visibility-inspector.php",
     "LICENSE",
-    "readme.md",
-    "USER_GUIDE.md",
-    "CHECK_REFERENCE.md",
-    "TROUBLESHOOTING.md",
-    "PRIVACY.md",
-    "TERMS_OF_SERVICE.md",
-    "SUPPORT.md",
-    "DEVELOPMENT.md",
-    "ARCHITECTURE.md",
-    "OPERATIONS.md",
+    "readme.txt",
     "CHANGELOG.md",
+    "languages",
     "assets",
     "includes"
 )

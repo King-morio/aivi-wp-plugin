@@ -5,6 +5,8 @@
   "main": "assets/js/aivi-sidebar.js",
   "scripts": {
     "test": "jest",
+    "verify:textdomain": "node tests/diagnostics/verify-text-domain-guard.js",
+    "verify:translators": "node tests/diagnostics/verify-translators-comments.js",
     "lint": "eslint assets/js/ --ext .js",
     "lint:fix": "eslint assets/js/ --ext .js --fix",
     "build": "npm run lint && npm run test",

@@ -506,16 +506,17 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 
 		$site_identity = Admin_Settings::get_site_identity_payload();
 		$summary_url = trailingslashit($backend_url) . 'aivi/v1/account/summary';
-		$summary_url = add_query_arg(
-			array(
-				'account_id' => $local_state['account_id'],
-				'site_id' => $site_identity['site_id'],
-				'blog_id' => $site_identity['blog_id'],
-				'home_url' => $site_identity['home_url'],
-				'admin_email' => $site_identity['admin_email'],
-			),
-			$summary_url
+		$summary_query_args = array(
+			'account_id' => $local_state['account_id'],
+			'site_id' => $site_identity['site_id'],
+			'blog_id' => $site_identity['blog_id'],
+			'home_url' => $site_identity['home_url'],
 		);
+		$summary_contact_email = sanitize_email( (string) ( $site_identity['admin_email'] ?? '' ) );
+		if ( '' !== $summary_contact_email ) {
+			$summary_query_args['admin_email'] = $summary_contact_email;
+		}
+		$summary_url = add_query_arg( $summary_query_args, $summary_url );
 
 		$headers = Admin_Settings::get_api_headers();
 		$headers['X-AIVI-Account-Id'] = (string) $local_state['account_id'];
@@ -523,7 +524,9 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 		$headers['X-AIVI-Blog-Id'] = (string) $site_identity['blog_id'];
 		$headers['X-AIVI-Home-Url'] = (string) $site_identity['home_url'];
 		$headers['X-AIVI-Plugin-Version'] = (string) $site_identity['plugin_version'];
-		$headers['X-AIVI-Admin-Email'] = (string) $site_identity['admin_email'];
+		if ( '' !== $summary_contact_email ) {
+			$headers['X-AIVI-Admin-Email'] = $summary_contact_email;
+		}
 
 		$response = $this->wp_remote_get_with_retries(
 			$summary_url,
@@ -724,7 +727,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			if ( '' !== $contact_email && ! is_email( $contact_email ) ) {
 				return new \WP_Error(
 					'invalid_contact_email',
-					__( 'Add a valid contact email before starting the free trial.', 'ai-visibility-inspector' ),
+					__( 'If you add a contact email, make sure it is valid.', 'ai-visibility-inspector' ),
 					array( 'status' => 400 )
 				);
 			}
@@ -1986,16 +1989,17 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 		$local_state = Admin_Settings::get_account_state();
 		$site_identity = Admin_Settings::get_site_identity_payload();
 		$summary_url = trailingslashit( $backend_url ) . 'aivi/v1/account/summary';
-		$summary_url = add_query_arg(
-			array(
-				'account_id' => $local_state['account_id'],
-				'site_id'    => $site_identity['site_id'],
-				'blog_id'    => $site_identity['blog_id'],
-				'home_url'   => $site_identity['home_url'],
-				'admin_email' => $site_identity['admin_email'],
-			),
-			$summary_url
+		$summary_query_args = array(
+			'account_id' => $local_state['account_id'],
+			'site_id'    => $site_identity['site_id'],
+			'blog_id'    => $site_identity['blog_id'],
+			'home_url'   => $site_identity['home_url'],
 		);
+		$summary_contact_email = sanitize_email( (string) ( $site_identity['admin_email'] ?? '' ) );
+		if ( '' !== $summary_contact_email ) {
+			$summary_query_args['admin_email'] = $summary_contact_email;
+		}
+		$summary_url = add_query_arg( $summary_query_args, $summary_url );
 
 		$headers = Admin_Settings::get_api_headers();
 		$headers['X-AIVI-Account-Id'] = (string) $local_state['account_id'];
@@ -2003,7 +2007,9 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 		$headers['X-AIVI-Blog-Id'] = (string) $site_identity['blog_id'];
 		$headers['X-AIVI-Home-Url'] = (string) $site_identity['home_url'];
 		$headers['X-AIVI-Plugin-Version'] = (string) $site_identity['plugin_version'];
-		$headers['X-AIVI-Admin-Email'] = (string) $site_identity['admin_email'];
+		if ( '' !== $summary_contact_email ) {
+			$headers['X-AIVI-Admin-Email'] = $summary_contact_email;
+		}
 
 		$response = $this->wp_remote_get_with_retries(
 			$summary_url,

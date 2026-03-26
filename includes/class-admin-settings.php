@@ -928,26 +928,27 @@ class Admin_Settings {
 				});
 			});
 
-			function getTrialEmailModal() {
-				return $('[data-aivi-trial-email-modal="true"]');
+			function getVisibleTrialContactEmailInput() {
+				return $('[data-aivi-trial-contact-email="true"]:visible').first();
 			}
 
-			function closeTrialEmailModal() {
-				var $modal = getTrialEmailModal();
-				$modal.removeClass('is-open').attr('aria-hidden', 'true').removeData('pendingButton');
-			}
-
-			function openTrialEmailModal($button) {
-				var $modal = getTrialEmailModal();
-				if (!$modal.length) {
-					return false;
+			function resolveTrialContactEmail() {
+				var $input = getVisibleTrialContactEmailInput();
+				var emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+				var $result = $('#aivi-billing-result');
+				if (!$input.length) {
+					return '';
 				}
-				$modal.data('pendingButton', $button && $button.length ? $button.get(0) : null);
-				$modal.addClass('is-open').attr('aria-hidden', 'false');
-				window.setTimeout(function() {
-					$modal.find('[data-aivi-trial-email-input="true"]').trigger('focus').trigger('select');
-				}, 20);
-				return true;
+				var email = String($input.val() || '').trim();
+				if (!email) {
+					return '';
+				}
+				if (!emailPattern.test(email)) {
+					setInlineNotice($result, 'error', '<?php echo esc_js( __( 'If you add a contact email, make sure it is valid.', 'ai-visibility-inspector' ) ); ?>');
+					$input.trigger('focus');
+					return null;
+				}
+				return email;
 			}
 
 			function submitAccountAction(action, $button, payload) {
@@ -1004,51 +1005,22 @@ class Admin_Settings {
 				return true;
 			}
 
-			$('[data-aivi-trial-email-cancel="true"]').on('click', function() {
-				closeTrialEmailModal();
-			});
-
-			$('[data-aivi-trial-email-modal="true"]').on('click', function(event) {
-				if (event.target === this) {
-					closeTrialEmailModal();
-				}
-			});
-
-			$(document).on('keydown', function(event) {
-				if (event.key === 'Escape') {
-					closeTrialEmailModal();
-				}
-			});
-
-			$('[data-aivi-trial-email-submit="true"]').on('click', function() {
-				var $modal = getTrialEmailModal();
-				var $result = $('#aivi-billing-result');
-				var email = String($modal.find('[data-aivi-trial-email-input="true"]').val() || '').trim();
-				var pendingButton = $modal.data('pendingButton');
-				var $button = pendingButton ? $(pendingButton) : $('.aivi-account-action[data-account-action="start_trial"]').first();
-				var emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-				if (!emailPattern.test(email)) {
-					setInlineNotice($result, 'error', '<?php echo esc_js( __( 'Add a valid contact email before starting the free trial.', 'ai-visibility-inspector' ) ); ?>');
-					$modal.find('[data-aivi-trial-email-input="true"]').trigger('focus');
-					return;
-				}
-
-				closeTrialEmailModal();
-				submitAccountAction('start_trial', $button, {
-					contact_email: email
-				});
-			});
-
 			$('.aivi-account-action').on('click', function() {
 				var action = String($(this).data('accountAction') || '').trim();
 				var $button = $(this);
+				var payload = {};
 
-				if (action === 'start_trial' && openTrialEmailModal($button)) {
-					return;
+				if (action === 'start_trial') {
+					var trialContactEmail = resolveTrialContactEmail();
+					if (trialContactEmail === null) {
+						return;
+					}
+					if (trialContactEmail) {
+						payload.contact_email = trialContactEmail;
+					}
 				}
 
-				submitAccountAction(action, $button, {});
+				submitAccountAction(action, $button, payload);
 			});
 
 			$('[data-account-connect-submit]').on('submit', function(event) {
@@ -1322,8 +1294,8 @@ class Admin_Settings {
 		if ( '' === $support_portal_host ) {
 			$support_portal_host = __( 'Support setup pending', 'ai-visibility-inspector' );
 		}
-		$support_contact_email = self::get_preferred_contact_email();
-		$support_contact_email = '' !== $support_contact_email ? $support_contact_email : __( 'Add a contact email first', 'ai-visibility-inspector' );
+		$preferred_contact_email = self::get_preferred_contact_email();
+		$support_contact_email_display = '' !== $preferred_contact_email ? $preferred_contact_email : __( 'Not added yet', 'ai-visibility-inspector' );
 		$support_plugin_version = defined( 'AIVI_VERSION' ) ? AIVI_VERSION : '1.0.0';
 		$support_wp_version = get_bloginfo( 'version' );
 		$current_plan_code = sanitize_text_field( (string) ( $dashboard_state['plan']['plan_code'] ?? $account_state['plan_code'] ?? '' ) );
@@ -1364,7 +1336,7 @@ class Admin_Settings {
 			'context' => array(
 				'account_label' => $account_label,
 				'plan_name' => $plan_name,
-				'email' => $support_contact_email,
+				'email' => $preferred_contact_email,
 				'connected_domain' => $connected_domain,
 				'site_id' => $support_site_id,
 				'site_url' => esc_url_raw( (string) ( $site_identity['home_url'] ?? '' ) ),
@@ -1506,6 +1478,7 @@ class Admin_Settings {
 		$current_support_category_config = $support_category_configs[ $requested_support_category ];
 		$connection_tab_href = $settings_tab_urls['connection'];
 		$billing_tab_href    = $settings_tab_urls['billing'];
+		$billing_plan_grid_href = add_query_arg( 'aivi_tab', 'billing', $settings_page_base_url ) . '#aivi-settings-plan-grid';
 		$credits_tab_href    = $settings_tab_urls['credits'];
 		$support_tab_href    = $settings_tab_urls['support'];
 		$documentation_tab_href = $settings_tab_urls['documentation'];
@@ -1754,14 +1727,6 @@ class Admin_Settings {
 			.aivi-docs-status-list{display:grid;gap:10px;}
 			.aivi-docs-status{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px solid #dce6f1;border-radius:16px;background:#f8fbff;font-size:13px;color:#334a66;}
 			.aivi-docs-status b{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#6b7c92;}
-			.aivi-trial-email-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.48);z-index:100000;}
-			.aivi-trial-email-modal.is-open{display:flex;}
-			.aivi-trial-email-modal__dialog{width:min(100%,520px);background:#fff;border:1px solid #d7e0ee;border-radius:20px;box-shadow:0 24px 60px rgba(15,23,42,.18);padding:24px;}
-			.aivi-trial-email-modal__eyebrow{display:block;margin-bottom:8px;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#6a7d94;}
-			.aivi-trial-email-modal__title{margin:0 0 8px;font-size:24px;line-height:1.15;color:#10233f;}
-			.aivi-trial-email-modal__desc{margin:0 0 16px;color:#516175;line-height:1.6;}
-			.aivi-trial-email-modal__actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px;}
-			.aivi-trial-email-modal__note{margin-top:12px;color:#6a7d94;font-size:12px;line-height:1.55;}
 			.aivi-billing-action.is-busy{opacity:.7;pointer-events:none;}
 			.aivi-connection-action.is-busy{opacity:.7;pointer-events:none;}
 			.aivi-operational-settings{margin-top:22px;padding:18px 20px;border:1px solid #d7e0ee;border-radius:16px;background:#fff;}
@@ -1790,24 +1755,6 @@ class Admin_Settings {
 				<a href="<?php echo esc_url( $settings_tab_urls['documentation'] ); ?>" class="aivi-settings-tab<?php echo 'documentation' === $requested_settings_tab ? ' is-active' : ''; ?>" data-aivi-settings-tab-button="documentation"><?php esc_html_e( 'Documentation', 'ai-visibility-inspector' ); ?></a>
 			</nav>
 			<div id="aivi-billing-result" class="notice inline aivi-billing-result"></div>
-			<div class="aivi-trial-email-modal" data-aivi-trial-email-modal="true" aria-hidden="true">
-				<div class="aivi-trial-email-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="aivi-trial-email-title">
-					<span class="aivi-trial-email-modal__eyebrow"><?php esc_html_e( 'Free trial setup', 'ai-visibility-inspector' ); ?></span>
-					<h3 class="aivi-trial-email-modal__title" id="aivi-trial-email-title"><?php esc_html_e( 'Add the best email for account updates', 'ai-visibility-inspector' ); ?></h3>
-					<p class="aivi-trial-email-modal__desc"><?php esc_html_e( 'We use this email to help with account recovery, billing updates, and multi-site connection support. You can keep using the current site admin email or replace it before your trial starts.', 'ai-visibility-inspector' ); ?></p>
-					<div class="aivi-settings-form">
-						<div class="aivi-settings-field">
-							<label for="aivi-trial-contact-email"><?php esc_html_e( 'Contact email', 'ai-visibility-inspector' ); ?></label>
-							<input type="text" id="aivi-trial-contact-email" data-aivi-trial-email-input="true" value="<?php echo esc_attr( self::get_preferred_contact_email() ); ?>" autocomplete="email" inputmode="email">
-						</div>
-					</div>
-					<p class="aivi-trial-email-modal__note"><?php esc_html_e( 'This email is stored as the preferred contact for future AiVI onboarding on this site.', 'ai-visibility-inspector' ); ?></p>
-					<div class="aivi-trial-email-modal__actions">
-						<button type="button" class="button button-primary" data-aivi-trial-email-submit="true"><?php esc_html_e( 'Continue to free trial', 'ai-visibility-inspector' ); ?></button>
-						<button type="button" class="button button-secondary" data-aivi-trial-email-cancel="true"><?php esc_html_e( 'Cancel', 'ai-visibility-inspector' ); ?></button>
-					</div>
-				</div>
-			</div>
 			<div class="aivi-settings-sections">
 				<section class="aivi-settings-section<?php echo 'overview' === $requested_settings_tab ? ' is-active' : ''; ?>" data-aivi-settings-tab-panel="overview" id="aivi-settings-tab-overview">
 					<div class="aivi-settings-section__head">
@@ -1816,17 +1763,155 @@ class Admin_Settings {
 							<h3 class="aivi-settings-section__title"><?php esc_html_e( 'Current state at a glance', 'ai-visibility-inspector' ); ?></h3>
 							<p class="aivi-settings-section__desc"><?php esc_html_e( 'This tab keeps the essentials visible: current plan, remaining credits, usage this month, and site binding. Customers should land here first.', 'ai-visibility-inspector' ); ?></p>
 						</div>
-						<span class="aivi-settings-meta"><?php printf( esc_html__( 'Last sync %s', 'ai-visibility-inspector' ), esc_html( $last_sync ) ); ?></span>
+						<span class="aivi-settings-meta">
+							<?php
+							/* translators: %s: Human-readable last sync timestamp. */
+							printf( esc_html__( 'Last sync %s', 'ai-visibility-inspector' ), esc_html( $last_sync ) );
+							?>
+						</span>
 					</div>
 					<div class="aivi-settings-grid">
-						<section class="aivi-settings-card"><span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Current plan', 'ai-visibility-inspector' ); ?></span><h4 class="aivi-settings-card__title"><?php echo esc_html( $plan_name ); ?></h4><p class="aivi-settings-card__meta"><?php echo esc_html( $subscription_status ); ?></p><?php if ( '' !== $trial_status_display ) : ?><p class="aivi-settings-card__hint"><?php printf( esc_html__( 'Trial status: %s', 'ai-visibility-inspector' ), esc_html( $trial_status_display ) ); ?></p><?php endif; ?></section>
-						<section class="aivi-settings-card"><span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Credit balance', 'ai-visibility-inspector' ); ?></span><div class="aivi-settings-card__value"><?php echo esc_html( $total_credits ); ?></div><ul class="aivi-settings-list"><li><?php printf( esc_html__( 'Included: %s', 'ai-visibility-inspector' ), esc_html( $included_credits ) ); ?></li><li><?php printf( esc_html__( 'Top-up: %s', 'ai-visibility-inspector' ), esc_html( $topup_credits ) ); ?></li><li><?php printf( esc_html__( 'Last analysis debit: %s', 'ai-visibility-inspector' ), esc_html( $last_run_debit ) ); ?></li></ul></section>
-						<section class="aivi-settings-card"><span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Usage this month', 'ai-visibility-inspector' ); ?></span><div class="aivi-settings-card__value"><?php echo esc_html( $analyses_this_month ); ?></div><ul class="aivi-settings-list"><li><?php printf( esc_html__( 'Credits used this month: %s', 'ai-visibility-inspector' ), esc_html( $credits_used_this_month ) ); ?></li><li><?php printf( esc_html__( 'Last analysis: %s', 'ai-visibility-inspector' ), esc_html( $last_analysis_at ) ); ?></li><li><?php printf( esc_html__( 'Last result: %s', 'ai-visibility-inspector' ), esc_html( $last_run_status ) ); ?></li></ul></section>
-						<section class="aivi-settings-card"><span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Connected site', 'ai-visibility-inspector' ); ?></span><h4 class="aivi-settings-card__title"><?php echo esc_html( $connected_domain ); ?></h4><ul class="aivi-settings-list"><li><?php printf( esc_html__( 'Binding: %s', 'ai-visibility-inspector' ), esc_html( $binding_status ) ); ?></li><li><?php printf( esc_html__( 'Site ID: %s', 'ai-visibility-inspector' ), esc_html( $site_id ) ); ?></li><li><?php printf( esc_html__( 'Blog ID: %s', 'ai-visibility-inspector' ), esc_html( $blog_id ) ); ?></li></ul></section>
+						<section class="aivi-settings-card">
+							<span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Current plan', 'ai-visibility-inspector' ); ?></span>
+							<h4 class="aivi-settings-card__title"><?php echo esc_html( $plan_name ); ?></h4>
+							<p class="aivi-settings-card__meta"><?php echo esc_html( $subscription_status ); ?></p>
+							<?php if ( '' !== $trial_status_display ) : ?>
+								<p class="aivi-settings-card__hint">
+									<?php
+									/* translators: %s: Human-readable trial status label. */
+									printf( esc_html__( 'Trial status: %s', 'ai-visibility-inspector' ), esc_html( $trial_status_display ) );
+									?>
+								</p>
+							<?php endif; ?>
+						</section>
+						<section class="aivi-settings-card">
+							<span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Credit balance', 'ai-visibility-inspector' ); ?></span>
+							<div class="aivi-settings-card__value"><?php echo esc_html( $total_credits ); ?></div>
+							<ul class="aivi-settings-list">
+								<li>
+									<?php
+									/* translators: %s: Remaining included credits. */
+									printf( esc_html__( 'Included: %s', 'ai-visibility-inspector' ), esc_html( $included_credits ) );
+									?>
+								</li>
+								<li>
+									<?php
+									/* translators: %s: Remaining purchased top-up credits. */
+									printf( esc_html__( 'Top-up: %s', 'ai-visibility-inspector' ), esc_html( $topup_credits ) );
+									?>
+								</li>
+								<li>
+									<?php
+									/* translators: %s: Credit cost of the most recent completed analysis. */
+									printf( esc_html__( 'Last analysis debit: %s', 'ai-visibility-inspector' ), esc_html( $last_run_debit ) );
+									?>
+								</li>
+							</ul>
+						</section>
+						<section class="aivi-settings-card">
+							<span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Usage this month', 'ai-visibility-inspector' ); ?></span>
+							<div class="aivi-settings-card__value"><?php echo esc_html( $analyses_this_month ); ?></div>
+							<ul class="aivi-settings-list">
+								<li>
+									<?php
+									/* translators: %s: Credits consumed during the current billing month. */
+									printf( esc_html__( 'Credits used this month: %s', 'ai-visibility-inspector' ), esc_html( $credits_used_this_month ) );
+									?>
+								</li>
+								<li>
+									<?php
+									/* translators: %s: Human-readable timestamp of the last analysis. */
+									printf( esc_html__( 'Last analysis: %s', 'ai-visibility-inspector' ), esc_html( $last_analysis_at ) );
+									?>
+								</li>
+								<li>
+									<?php
+									/* translators: %s: Human-readable outcome of the last analysis run. */
+									printf( esc_html__( 'Last result: %s', 'ai-visibility-inspector' ), esc_html( $last_run_status ) );
+									?>
+								</li>
+							</ul>
+						</section>
+						<section class="aivi-settings-card">
+							<span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Connected site', 'ai-visibility-inspector' ); ?></span>
+							<h4 class="aivi-settings-card__title"><?php echo esc_html( $connected_domain ); ?></h4>
+							<ul class="aivi-settings-list">
+								<li>
+									<?php
+									/* translators: %s: Site binding status label. */
+									printf( esc_html__( 'Binding: %s', 'ai-visibility-inspector' ), esc_html( $binding_status ) );
+									?>
+								</li>
+								<li>
+									<?php
+									/* translators: %s: Internal AiVI site identifier. */
+									printf( esc_html__( 'Site ID: %s', 'ai-visibility-inspector' ), esc_html( $site_id ) );
+									?>
+								</li>
+								<li>
+									<?php
+									/* translators: %s: WordPress blog/site ID. */
+									printf( esc_html__( 'Blog ID: %s', 'ai-visibility-inspector' ), esc_html( $blog_id ) );
+									?>
+								</li>
+							</ul>
+						</section>
 					</div>
 					<div class="aivi-settings-grid aivi-settings-grid--two" style="margin-top:14px;">
-						<section class="aivi-settings-card"><span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Subscription status', 'ai-visibility-inspector' ); ?></span><h4 class="aivi-settings-card__title"><?php echo esc_html( $subscription_status ); ?></h4><ul class="aivi-settings-list"><li><?php printf( esc_html__( 'Account: %s', 'ai-visibility-inspector' ), esc_html( $account_label ) ); ?></li><li><?php printf( esc_html__( 'Max sites: %s', 'ai-visibility-inspector' ), esc_html( $max_sites ) ); ?></li></ul><div class="aivi-settings-card__status aivi-dashboard-card__status--<?php echo esc_attr( $billing_status_tone ); ?>" id="aivi-billing-status"><?php echo esc_html( $billing_status_message['message'] ); ?></div><div class="aivi-settings-actions"><?php if ( $is_connected && $billing_enabled ) : ?><a class="button button-primary" href="<?php echo esc_url( $billing_tab_href ); ?>"><?php esc_html_e( 'Open plans tab', 'ai-visibility-inspector' ); ?></a><?php if ( ! empty( $support_url ) ) : ?><a class="button button-secondary" href="<?php echo esc_url( $support_url ); ?>" target="_blank" rel="noreferrer noopener"><?php esc_html_e( 'Contact support', 'ai-visibility-inspector' ); ?></a><?php endif; ?><?php else : ?><button type="button" class="button button-primary aivi-account-action" data-account-action="start_trial"><?php esc_html_e( 'Start free trial', 'ai-visibility-inspector' ); ?></button><a class="button button-secondary" href="<?php echo esc_url( $connection_tab_href ); ?>"><?php esc_html_e( 'Open connection tab', 'ai-visibility-inspector' ); ?></a><?php endif; ?></div></section>
-						<section class="aivi-settings-card"><span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Recent activity', 'ai-visibility-inspector' ); ?></span><h4 class="aivi-settings-card__title"><?php esc_html_e( 'Latest billing and usage context', 'ai-visibility-inspector' ); ?></h4><ul class="aivi-settings-list"><li><?php printf( esc_html__( 'Last analysis debit: %s', 'ai-visibility-inspector' ), esc_html( $last_run_debit ) ); ?></li><li><?php printf( esc_html__( 'Last sync: %s', 'ai-visibility-inspector' ), esc_html( $last_sync ) ); ?></li><li><?php printf( esc_html__( 'Display state: %s', 'ai-visibility-inspector' ), esc_html( self::get_dashboard_display_label( $display_state ) ) ); ?></li></ul></section>
+						<section class="aivi-settings-card">
+							<span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Subscription status', 'ai-visibility-inspector' ); ?></span>
+							<h4 class="aivi-settings-card__title"><?php echo esc_html( $subscription_status ); ?></h4>
+							<ul class="aivi-settings-list">
+								<li>
+									<?php
+									/* translators: %s: Connected AiVI account label. */
+									printf( esc_html__( 'Account: %s', 'ai-visibility-inspector' ), esc_html( $account_label ) );
+									?>
+								</li>
+								<li>
+									<?php
+									/* translators: %s: Maximum number of sites allowed on the current plan. */
+									printf( esc_html__( 'Max sites: %s', 'ai-visibility-inspector' ), esc_html( $max_sites ) );
+									?>
+								</li>
+							</ul>
+							<div class="aivi-settings-card__status aivi-dashboard-card__status--<?php echo esc_attr( $billing_status_tone ); ?>" id="aivi-billing-status"><?php echo esc_html( $billing_status_message['message'] ); ?></div>
+							<div class="aivi-settings-actions">
+								<?php if ( $is_connected && $billing_enabled ) : ?>
+									<a class="button button-primary" href="<?php echo esc_url( $billing_tab_href ); ?>"><?php esc_html_e( 'Open plans tab', 'ai-visibility-inspector' ); ?></a>
+									<?php if ( ! empty( $support_url ) ) : ?>
+										<a class="button button-secondary" href="<?php echo esc_url( $support_url ); ?>" target="_blank" rel="noreferrer noopener"><?php esc_html_e( 'Contact support', 'ai-visibility-inspector' ); ?></a>
+									<?php endif; ?>
+								<?php else : ?>
+									<button type="button" class="button button-primary aivi-account-action" data-account-action="start_trial"><?php esc_html_e( 'Start free trial', 'ai-visibility-inspector' ); ?></button>
+									<a class="button button-secondary" href="<?php echo esc_url( $connection_tab_href ); ?>"><?php esc_html_e( 'Open connection tab', 'ai-visibility-inspector' ); ?></a>
+								<?php endif; ?>
+							</div>
+						</section>
+						<section class="aivi-settings-card">
+							<span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Recent activity', 'ai-visibility-inspector' ); ?></span>
+							<h4 class="aivi-settings-card__title"><?php esc_html_e( 'Latest billing and usage context', 'ai-visibility-inspector' ); ?></h4>
+							<ul class="aivi-settings-list">
+								<li>
+									<?php
+									/* translators: %s: Credit cost of the most recent completed analysis. */
+									printf( esc_html__( 'Last analysis debit: %s', 'ai-visibility-inspector' ), esc_html( $last_run_debit ) );
+									?>
+								</li>
+								<li>
+									<?php
+									/* translators: %s: Human-readable last sync timestamp. */
+									printf( esc_html__( 'Last sync: %s', 'ai-visibility-inspector' ), esc_html( $last_sync ) );
+									?>
+								</li>
+								<li>
+									<?php
+									/* translators: %s: Account dashboard display state label. */
+									printf( esc_html__( 'Display state: %s', 'ai-visibility-inspector' ), esc_html( self::get_dashboard_display_label( $display_state ) ) );
+									?>
+								</li>
+							</ul>
+						</section>
 					</div>
 				</section>
 				<section class="aivi-settings-section<?php echo 'billing' === $requested_settings_tab ? ' is-active' : ''; ?>" data-aivi-settings-tab-panel="billing" id="aivi-billing-plans">
@@ -1837,7 +1922,7 @@ class Admin_Settings {
 							<p class="aivi-settings-spotlight__desc"><?php esc_html_e( 'Stop guessing what AI will surface. See what your content is missing, and fix it before you publish.', 'ai-visibility-inspector' ); ?></p>
 							<div class="aivi-settings-spotlight__chip-row">
 								<span class="aivi-settings-spotlight__chip aivi-settings-spotlight__chip--highlight"><span class="aivi-settings-spotlight__rating" aria-hidden="true">&#9733;&#9733;&#9733;&#9733;&#9733;</span><?php esc_html_e( 'Early adopters already know.', 'ai-visibility-inspector' ); ?></span>
-								<span class="aivi-settings-spotlight__chip"><?php esc_html_e( 'WordPress 6.9.4 tested', 'ai-visibility-inspector' ); ?></span>
+								<span class="aivi-settings-spotlight__chip"><?php esc_html_e( 'WordPress 6.9 tested', 'ai-visibility-inspector' ); ?></span>
 								<span class="aivi-settings-spotlight__chip"><?php esc_html_e( 'Growth / Pro multi-site', 'ai-visibility-inspector' ); ?></span>
 							</div>
 							<div class="aivi-settings-spotlight__proof-row">
@@ -1887,7 +1972,7 @@ class Admin_Settings {
 							</div>
 							<p class="aivi-settings-spotlight__promo"><?php esc_html_e( 'AiVI gives you visibility into what answer engines actually need so your content is structured, trusted, and ready to be cited.', 'ai-visibility-inspector' ); ?></p>
 							<div class="aivi-settings-spotlight__side-actions">
-								<a class="button button-primary" href="#aivi-settings-plan-grid"><?php esc_html_e( 'Choose your plan', 'ai-visibility-inspector' ); ?></a>
+								<a class="button button-primary" href="<?php echo esc_url( $billing_plan_grid_href ); ?>" data-aivi-settings-tab-link="billing"><?php esc_html_e( 'Choose your plan', 'ai-visibility-inspector' ); ?></a>
 								<a class="button button-secondary" href="<?php echo esc_url( $connection_tab_href ); ?>"><?php esc_html_e( 'View connection requirements', 'ai-visibility-inspector' ); ?></a>
 							</div>
 						</aside>
@@ -1910,10 +1995,30 @@ class Admin_Settings {
 								<div class="aivi-settings-plan-card__price">$0<small><?php esc_html_e( 'for your first site', 'ai-visibility-inspector' ); ?></small></div>
 							</div>
 							<ul class="aivi-settings-plan-card__features">
-								<li><?php printf( esc_html__( '%s credits included', 'ai-visibility-inspector' ), esc_html( $trial_credits ) ); ?></li>
-								<li><?php printf( esc_html__( '%s connected site', 'ai-visibility-inspector' ), esc_html( $trial_sites ) ); ?></li>
-								<li><?php printf( esc_html__( '%s days of access', 'ai-visibility-inspector' ), esc_html( $trial_days ) ); ?></li>
+								<li>
+									<?php
+									/* translators: %s: Number of credits included in the free trial. */
+									printf( esc_html__( '%s credits included', 'ai-visibility-inspector' ), esc_html( $trial_credits ) );
+									?>
+								</li>
+								<li>
+									<?php
+									/* translators: %s: Number of sites included in the free trial. */
+									printf( esc_html__( '%s connected site', 'ai-visibility-inspector' ), esc_html( $trial_sites ) );
+									?>
+								</li>
+								<li>
+									<?php
+									/* translators: %s: Number of free-trial access days. */
+									printf( esc_html__( '%s days of access', 'ai-visibility-inspector' ), esc_html( $trial_days ) );
+									?>
+								</li>
 							</ul>
+							<div class="aivi-settings-field" style="margin-top:4px;">
+								<label for="aivi-trial-contact-email-inline"><?php esc_html_e( 'Contact email (optional)', 'ai-visibility-inspector' ); ?></label>
+								<input type="text" id="aivi-trial-contact-email-inline" data-aivi-trial-contact-email="true" value="<?php echo esc_attr( $preferred_contact_email ); ?>" autocomplete="email" inputmode="email" placeholder="<?php esc_attr_e( 'name@example.com', 'ai-visibility-inspector' ); ?>">
+								<p class="aivi-settings-form__hint"><?php esc_html_e( 'Optional. Add one if you want AiVI billing and support follow-ups tied to a specific address for this site.', 'ai-visibility-inspector' ); ?></p>
+							</div>
 							<div class="aivi-settings-actions">
 								<?php if ( $trial_is_available ) : ?>
 									<button type="button" class="button button-primary aivi-account-action" data-account-action="start_trial"><?php esc_html_e( 'Start free trial', 'ai-visibility-inspector' ); ?></button>
@@ -1970,9 +2075,24 @@ class Admin_Settings {
 									<div class="aivi-settings-plan-card__price"><?php echo esc_html( $plan_price ); ?><small><?php esc_html_e( 'per month', 'ai-visibility-inspector' ); ?></small></div>
 								</div>
 								<ul class="aivi-settings-plan-card__features">
-									<li><?php printf( esc_html__( '%s monthly credits', 'ai-visibility-inspector' ), esc_html( self::format_dashboard_metric_value( $plan_entry['included_credits'] ?? null, '0' ) ) ); ?></li>
-									<li><?php printf( esc_html__( '%s connected site(s)', 'ai-visibility-inspector' ), esc_html( self::format_dashboard_metric_value( $plan_entry['site_limit'] ?? null, '0' ) ) ); ?></li>
-									<li><?php printf( esc_html__( '%s days of history', 'ai-visibility-inspector' ), esc_html( self::format_dashboard_metric_value( $plan_entry['history_days'] ?? null, '0' ) ) ); ?></li>
+									<li>
+										<?php
+										/* translators: %s: Number of monthly credits included in the plan. */
+										printf( esc_html__( '%s monthly credits', 'ai-visibility-inspector' ), esc_html( self::format_dashboard_metric_value( $plan_entry['included_credits'] ?? null, '0' ) ) );
+										?>
+									</li>
+									<li>
+										<?php
+										/* translators: %s: Number of connected sites allowed on the plan. */
+										printf( esc_html__( '%s connected site(s)', 'ai-visibility-inspector' ), esc_html( self::format_dashboard_metric_value( $plan_entry['site_limit'] ?? null, '0' ) ) );
+										?>
+									</li>
+									<li>
+										<?php
+										/* translators: %s: Number of history days included in the plan. */
+										printf( esc_html__( '%s days of history', 'ai-visibility-inspector' ), esc_html( self::format_dashboard_metric_value( $plan_entry['history_days'] ?? null, '0' ) ) );
+										?>
+									</li>
 								</ul>
 								<?php if ( $is_connected ) : ?>
 									<div class="aivi-settings-actions">
@@ -2002,7 +2122,24 @@ class Admin_Settings {
 						</div>
 					</div>
 					<div class="aivi-settings-grid aivi-settings-grid--two" style="margin-bottom:16px;">
-						<section class="aivi-settings-card"><span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Current balance', 'ai-visibility-inspector' ); ?></span><div class="aivi-settings-card__value"><?php echo esc_html( $total_credits ); ?></div><ul class="aivi-settings-list"><li><?php printf( esc_html__( 'Included: %s', 'ai-visibility-inspector' ), esc_html( $included_credits ) ); ?></li><li><?php printf( esc_html__( 'Top-up: %s', 'ai-visibility-inspector' ), esc_html( $topup_credits ) ); ?></li></ul></section>
+						<section class="aivi-settings-card">
+							<span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Current balance', 'ai-visibility-inspector' ); ?></span>
+							<div class="aivi-settings-card__value"><?php echo esc_html( $total_credits ); ?></div>
+							<ul class="aivi-settings-list">
+								<li>
+									<?php
+									/* translators: %s: Remaining included credits. */
+									printf( esc_html__( 'Included: %s', 'ai-visibility-inspector' ), esc_html( $included_credits ) );
+									?>
+								</li>
+								<li>
+									<?php
+									/* translators: %s: Remaining purchased top-up credits. */
+									printf( esc_html__( 'Top-up: %s', 'ai-visibility-inspector' ), esc_html( $topup_credits ) );
+									?>
+								</li>
+							</ul>
+						</section>
 						<section class="aivi-settings-card"><span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Credit grant policy', 'ai-visibility-inspector' ); ?></span><h4 class="aivi-settings-card__title"><?php esc_html_e( 'Granted after verified capture', 'ai-visibility-inspector' ); ?></h4><p class="aivi-settings-card__hint"><?php esc_html_e( 'Top-up credits appear after PayPal capture is verified and reconciled. They extend an active paid subscription instead of replacing it.', 'ai-visibility-inspector' ); ?></p></section>
 					</div>
 					<?php if ( ! $is_connected ) : ?>
@@ -2052,7 +2189,12 @@ class Admin_Settings {
 								</div>
 								<p class="aivi-dashboard-offer__desc"><?php echo esc_html( $topup_desc ); ?></p>
 								<ul class="aivi-dashboard-offer__meta">
-									<li><?php printf( esc_html__( '%s credits added after verified capture', 'ai-visibility-inspector' ), esc_html( self::format_dashboard_metric_value( $topup_entry['credits'] ?? null, '0' ) ) ); ?></li>
+									<li>
+										<?php
+										/* translators: %s: Number of credits granted by this top-up after billing capture. */
+										printf( esc_html__( '%s credits added after verified capture', 'ai-visibility-inspector' ), esc_html( self::format_dashboard_metric_value( $topup_entry['credits'] ?? null, '0' ) ) );
+										?>
+									</li>
 									<?php if ( $is_featured_topup ) : ?>
 										<li><?php esc_html_e( 'Best default choice for active sites that need more room without changing plan behavior.', 'ai-visibility-inspector' ); ?></li>
 									<?php elseif ( $topup_credit_count >= 100000 ) : ?>
@@ -2123,10 +2265,30 @@ class Admin_Settings {
 								<span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Site identity', 'ai-visibility-inspector' ); ?></span>
 								<h4 class="aivi-settings-card__title"><?php echo esc_html( $connected_domain ); ?></h4>
 								<ul class="aivi-settings-list">
-									<li><?php printf( esc_html__( 'Binding: %s', 'ai-visibility-inspector' ), esc_html( $binding_status ) ); ?></li>
-									<li><?php printf( esc_html__( 'Site ID: %s', 'ai-visibility-inspector' ), esc_html( $site_id ) ); ?></li>
-									<li><?php printf( esc_html__( 'Blog ID: %s', 'ai-visibility-inspector' ), esc_html( $blog_id ) ); ?></li>
-									<li><?php printf( esc_html__( 'Last sync: %s', 'ai-visibility-inspector' ), esc_html( $last_sync ) ); ?></li>
+									<li>
+										<?php
+										/* translators: %s: Site binding status label. */
+										printf( esc_html__( 'Binding: %s', 'ai-visibility-inspector' ), esc_html( $binding_status ) );
+										?>
+									</li>
+									<li>
+										<?php
+										/* translators: %s: Internal AiVI site identifier. */
+										printf( esc_html__( 'Site ID: %s', 'ai-visibility-inspector' ), esc_html( $site_id ) );
+										?>
+									</li>
+									<li>
+										<?php
+										/* translators: %s: WordPress blog/site ID. */
+										printf( esc_html__( 'Blog ID: %s', 'ai-visibility-inspector' ), esc_html( $blog_id ) );
+										?>
+									</li>
+									<li>
+										<?php
+										/* translators: %s: Human-readable last sync timestamp. */
+										printf( esc_html__( 'Last sync: %s', 'ai-visibility-inspector' ), esc_html( $last_sync ) );
+										?>
+									</li>
 								</ul>
 							</section>
 						</div>
@@ -2136,10 +2298,30 @@ class Admin_Settings {
 								<span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Site binding', 'ai-visibility-inspector' ); ?></span>
 								<h4 class="aivi-settings-card__title"><?php echo esc_html( $connected_domain ); ?></h4>
 								<ul class="aivi-settings-list">
-									<li><?php printf( esc_html__( 'Binding: %s', 'ai-visibility-inspector' ), esc_html( $binding_status ) ); ?></li>
-									<li><?php printf( esc_html__( 'Site ID: %s', 'ai-visibility-inspector' ), esc_html( $site_id ) ); ?></li>
-									<li><?php printf( esc_html__( 'Blog ID: %s', 'ai-visibility-inspector' ), esc_html( $blog_id ) ); ?></li>
-									<li><?php printf( esc_html__( 'Plan capacity: %s site(s)', 'ai-visibility-inspector' ), esc_html( self::format_dashboard_metric_value( $max_sites_limit > 0 ? $max_sites_limit : null, '1' ) ) ); ?></li>
+									<li>
+										<?php
+										/* translators: %s: Site binding status label. */
+										printf( esc_html__( 'Binding: %s', 'ai-visibility-inspector' ), esc_html( $binding_status ) );
+										?>
+									</li>
+									<li>
+										<?php
+										/* translators: %s: Internal AiVI site identifier. */
+										printf( esc_html__( 'Site ID: %s', 'ai-visibility-inspector' ), esc_html( $site_id ) );
+										?>
+									</li>
+									<li>
+										<?php
+										/* translators: %s: WordPress blog/site ID. */
+										printf( esc_html__( 'Blog ID: %s', 'ai-visibility-inspector' ), esc_html( $blog_id ) );
+										?>
+									</li>
+									<li>
+										<?php
+										/* translators: %s: Number of site slots available on the current plan. */
+										printf( esc_html__( 'Plan capacity: %s site(s)', 'ai-visibility-inspector' ), esc_html( self::format_dashboard_metric_value( $max_sites_limit > 0 ? $max_sites_limit : null, '1' ) ) );
+										?>
+									</li>
 								</ul>
 								<div class="aivi-settings-actions">
 									<button type="button" class="button button-secondary aivi-connection-action" data-connection-action="disconnect"><?php esc_html_e( 'Disconnect this site', 'ai-visibility-inspector' ); ?></button>
@@ -2149,9 +2331,24 @@ class Admin_Settings {
 								<span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Account sync', 'ai-visibility-inspector' ); ?></span>
 								<h4 class="aivi-settings-card__title"><?php echo esc_html( $account_label ); ?></h4>
 								<ul class="aivi-settings-list">
-									<li><?php printf( esc_html__( 'Display state: %s', 'ai-visibility-inspector' ), esc_html( self::get_dashboard_display_label( $display_state ) ) ); ?></li>
-									<li><?php printf( esc_html__( 'Last sync: %s', 'ai-visibility-inspector' ), esc_html( $last_sync ) ); ?></li>
-									<li><?php printf( esc_html__( 'Subscription status: %s', 'ai-visibility-inspector' ), esc_html( $subscription_status ) ); ?></li>
+									<li>
+										<?php
+										/* translators: %s: Account dashboard display state label. */
+										printf( esc_html__( 'Display state: %s', 'ai-visibility-inspector' ), esc_html( self::get_dashboard_display_label( $display_state ) ) );
+										?>
+									</li>
+									<li>
+										<?php
+										/* translators: %s: Human-readable last sync timestamp. */
+										printf( esc_html__( 'Last sync: %s', 'ai-visibility-inspector' ), esc_html( $last_sync ) );
+										?>
+									</li>
+									<li>
+										<?php
+										/* translators: %s: Subscription status label. */
+										printf( esc_html__( 'Subscription status: %s', 'ai-visibility-inspector' ), esc_html( $subscription_status ) );
+										?>
+									</li>
 								</ul>
 								<p class="aivi-settings-card__hint"><?php esc_html_e( 'Disconnecting here removes only this site binding. Other connected sites on the same Growth or Pro account stay attached.', 'ai-visibility-inspector' ); ?></p>
 							</section>
@@ -2164,11 +2361,13 @@ class Admin_Settings {
 										<?php
 										if ( $site_limit_reached ) {
 											printf(
+												/* translators: %s: Number of connected sites allowed on the current plan. */
 												esc_html__( 'This plan allows up to %s connected sites, and every slot is currently in use. Unbind a stale site before connecting a new one.', 'ai-visibility-inspector' ),
 												esc_html( self::format_dashboard_metric_value( $max_sites_limit, '0' ) )
 											);
 										} else {
 											printf(
+												/* translators: %s: Number of connected sites allowed on the current plan. */
 												esc_html__( 'This plan allows up to %s connected sites. To bind another site, install AiVI on that site, open its Connection tab, and paste an operator-issued connection token there.', 'ai-visibility-inspector' ),
 												esc_html( self::format_dashboard_metric_value( $max_sites_limit, '0' ) )
 											);
@@ -2235,6 +2434,7 @@ class Admin_Settings {
 										<p class="aivi-settings-token-card__hint">
 											<?php
 											printf(
+												/* translators: %s: Token expiration date/time. */
 												esc_html__( 'Issued token expires %s. Keep it hidden until you need to paste it into the next site.', 'ai-visibility-inspector' ),
 												esc_html( self::format_account_sync_time( $latest_connection_token['expires_at'] ?? '' ) )
 											);
@@ -2253,7 +2453,12 @@ class Admin_Settings {
 							</div>
 							<section class="aivi-settings-card" style="margin-top:14px;">
 								<span class="aivi-settings-section__eyebrow"><?php esc_html_e( 'Connected sites', 'ai-visibility-inspector' ); ?></span>
-								<h4 class="aivi-settings-card__title"><?php printf( esc_html__( '%1$s of %2$s slots in use', 'ai-visibility-inspector' ), esc_html( self::format_dashboard_metric_value( $site_slots_used, '0' ) ), esc_html( self::format_dashboard_metric_value( $site_slots_total > 0 ? $site_slots_total : $max_sites_limit, '0' ) ) ); ?></h4>
+								<h4 class="aivi-settings-card__title">
+									<?php
+									/* translators: 1: Used site slots, 2: Total available site slots. */
+									printf( esc_html__( '%1$s of %2$s slots in use', 'ai-visibility-inspector' ), esc_html( self::format_dashboard_metric_value( $site_slots_used, '0' ) ), esc_html( self::format_dashboard_metric_value( $site_slots_total > 0 ? $site_slots_total : $max_sites_limit, '0' ) ) );
+									?>
+								</h4>
 								<?php if ( ! empty( $connected_sites ) ) : ?>
 									<ul class="aivi-settings-list">
 										<?php foreach ( $connected_sites as $connected_site ) : ?>
@@ -2327,7 +2532,7 @@ class Admin_Settings {
 										<div class="aivi-support-ticket__meta">
 											<div class="aivi-support-ticket__meta-item"><span><?php esc_html_e( 'Plan', 'ai-visibility-inspector' ); ?></span><strong><?php echo esc_html( $plan_name ); ?></strong></div>
 											<div class="aivi-support-ticket__meta-item aivi-support-ticket__meta-item--wide"><span><?php esc_html_e( 'Site', 'ai-visibility-inspector' ); ?></span><strong><?php echo esc_html( $connected_domain ); ?></strong></div>
-											<div class="aivi-support-ticket__meta-item"><span><?php esc_html_e( 'Email', 'ai-visibility-inspector' ); ?></span><strong><?php echo esc_html( $support_contact_email ); ?></strong></div>
+											<div class="aivi-support-ticket__meta-item"><span><?php esc_html_e( 'Email', 'ai-visibility-inspector' ); ?></span><strong><?php echo esc_html( $support_contact_email_display ); ?></strong></div>
 											<div class="aivi-support-ticket__meta-item"><span><?php esc_html_e( 'Site ID', 'ai-visibility-inspector' ); ?></span><strong><?php echo esc_html( $support_site_id ); ?></strong></div>
 										</div>
 										<div class="aivi-support-ticket__form">
@@ -2349,7 +2554,12 @@ class Admin_Settings {
 											</div>
 										</div>
 										<div class="aivi-support-ticket__actions">
-											<div class="aivi-support-ticket__note"><?php printf( esc_html__( 'Prefilled: site URL, site ID, plugin version %1$s, WordPress %2$s', 'ai-visibility-inspector' ), esc_html( $support_plugin_version ), esc_html( $support_wp_version ) ); ?></div>
+											<div class="aivi-support-ticket__note">
+												<?php
+												/* translators: 1: Plugin version, 2: WordPress version. */
+												printf( esc_html__( 'Prefilled: site URL, site ID, plugin version %1$s, WordPress %2$s', 'ai-visibility-inspector' ), esc_html( $support_plugin_version ), esc_html( $support_wp_version ) );
+												?>
+											</div>
 											<div class="aivi-support-ticket__cta">
 												<?php if ( ! empty( $current_support_category_config['context_link_url'] ) && ! empty( $current_support_category_config['context_link_label'] ) ) : ?>
 													<?php $is_internal_context_link = false !== strpos( (string) $current_support_category_config['context_link_url'], 'page=' . self::PAGE_SLUG ); ?>
@@ -2423,6 +2633,7 @@ class Admin_Settings {
 												<span class="aivi-docs-article__chip">
 													<?php
 													printf(
+														/* translators: %s: Current AiVI plugin version. */
 														esc_html__( 'Plugin v%s', 'ai-visibility-inspector' ),
 														esc_html( $support_plugin_version )
 													);
@@ -2528,6 +2739,20 @@ class Admin_Settings {
 
 				function getDocPanelForSlug(slug) {
 					return shell.querySelector('[data-aivi-doc-panel="' + slug + '"]');
+				}
+
+				function scrollToSettingsTarget(hash) {
+					var selector = String(hash || '').trim();
+					if (!selector || selector.charAt(0) !== '#') {
+						return;
+					}
+					var target = shell.querySelector(selector) || document.querySelector(selector);
+					if (!target || typeof target.scrollIntoView !== 'function') {
+						return;
+					}
+					window.requestAnimationFrame(function() {
+						target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+					});
 				}
 
 				function buildUrlForState(tab, supportCategory, docSlug) {
@@ -2667,6 +2892,10 @@ class Admin_Settings {
 								forceMessage: false,
 								updateHistory: false
 							});
+						}
+
+						if (targetUrl.hash && targetTab !== 'documentation') {
+							scrollToSettingsTarget(targetUrl.hash);
 						}
 
 						if (updateHistory !== false && window.history && window.history.replaceState) {
@@ -3231,16 +3460,17 @@ class Admin_Settings {
 		}
 
 		$summary_url = trailingslashit( $backend_url ) . 'aivi/v1/account/summary';
-		$summary_url = add_query_arg(
-			array(
-				'account_id' => $account_id,
-				'site_id'    => sanitize_text_field( (string) ( $site_identity['site_id'] ?? '' ) ),
-				'blog_id'    => (int) ( $site_identity['blog_id'] ?? 0 ),
-				'home_url'   => esc_url_raw( (string) ( $site_identity['home_url'] ?? '' ) ),
-				'admin_email' => sanitize_email( (string) ( $site_identity['admin_email'] ?? '' ) ),
-			),
-			$summary_url
+		$summary_query_args = array(
+			'account_id' => $account_id,
+			'site_id'    => sanitize_text_field( (string) ( $site_identity['site_id'] ?? '' ) ),
+			'blog_id'    => (int) ( $site_identity['blog_id'] ?? 0 ),
+			'home_url'   => esc_url_raw( (string) ( $site_identity['home_url'] ?? '' ) ),
 		);
+		$summary_contact_email = sanitize_email( (string) ( $site_identity['admin_email'] ?? '' ) );
+		if ( '' !== $summary_contact_email ) {
+			$summary_query_args['admin_email'] = $summary_contact_email;
+		}
+		$summary_url = add_query_arg( $summary_query_args, $summary_url );
 
 		$headers                               = self::get_api_headers();
 		$headers['X-AIVI-Account-Id']          = $account_id;
@@ -3248,7 +3478,9 @@ class Admin_Settings {
 		$headers['X-AIVI-Blog-Id']             = (string) ( (int) ( $site_identity['blog_id'] ?? 0 ) );
 		$headers['X-AIVI-Home-Url']            = esc_url_raw( (string) ( $site_identity['home_url'] ?? '' ) );
 		$headers['X-AIVI-Plugin-Version']      = sanitize_text_field( (string) ( $site_identity['plugin_version'] ?? '' ) );
-		$headers['X-AIVI-Admin-Email']         = sanitize_email( (string) ( $site_identity['admin_email'] ?? '' ) );
+		if ( '' !== $summary_contact_email ) {
+			$headers['X-AIVI-Admin-Email'] = $summary_contact_email;
+		}
 
 		$response = wp_remote_get(
 			$summary_url,
@@ -3483,7 +3715,13 @@ class Admin_Settings {
 		$missing_auth = is_string( $body ) && stripos( $body, 'Missing Authentication Token' ) !== false;
 
 		if ( $status_code === 200 && is_array( $decoded ) && ! empty( $decoded['ok'] ) ) {
-			$message = isset( $decoded['service'] ) ? sprintf( __( 'Connection OK. Service: %s', 'ai-visibility-inspector' ), $decoded['service'] ) : __( 'Connection OK.', 'ai-visibility-inspector' );
+			$message = isset( $decoded['service'] )
+				? sprintf(
+					/* translators: %s: Backend service name returned by the connection check. */
+					__( 'Connection OK. Service: %s', 'ai-visibility-inspector' ),
+					$decoded['service']
+				)
+				: __( 'Connection OK.', 'ai-visibility-inspector' );
 			wp_send_json_success( array( 'message' => $message ) );
 		}
 
@@ -3492,7 +3730,16 @@ class Admin_Settings {
 		}
 
 		$error_detail = is_array( $decoded ) ? wp_json_encode( $decoded ) : $body;
-		wp_send_json_error( array( 'message' => sprintf( __( 'Connection test failed (HTTP %d): %s', 'ai-visibility-inspector' ), $status_code, $error_detail ) ) );
+		wp_send_json_error(
+			array(
+				'message' => sprintf(
+					/* translators: 1: HTTP status code, 2: Backend error details. */
+					__( 'Connection test failed (HTTP %1$d): %2$s', 'ai-visibility-inspector' ),
+					$status_code,
+					$error_detail
+				),
+			)
+		);
 	}
 
 	/**
@@ -3516,7 +3763,7 @@ class Admin_Settings {
 	private static function get_documentation_catalog() {
 		return array(
 			'user-guide'      => array(
-				'file'     => 'USER_GUIDE.md',
+				'file'     => 'includes/data/docs/USER_GUIDE.md',
 				'title'    => __( 'User Guide', 'ai-visibility-inspector' ),
 				'summary'  => __( 'Analyze content, read findings, rerun safely, and use the main settings tabs.', 'ai-visibility-inspector' ),
 				'group'    => 'start',
@@ -3524,7 +3771,7 @@ class Admin_Settings {
 				'audience' => __( 'Editor Workflow', 'ai-visibility-inspector' ),
 			),
 			'check-reference' => array(
-				'file'     => 'CHECK_REFERENCE.md',
+				'file'     => 'includes/data/docs/CHECK_REFERENCE.md',
 				'title'    => __( 'Check Reference', 'ai-visibility-inspector' ),
 				'summary'  => __( 'Understand the main check families, verdicts, and common edge cases.', 'ai-visibility-inspector' ),
 				'group'    => 'start',
@@ -3532,7 +3779,7 @@ class Admin_Settings {
 				'audience' => __( 'Analysis Logic', 'ai-visibility-inspector' ),
 			),
 			'troubleshooting' => array(
-				'file'     => 'TROUBLESHOOTING.md',
+				'file'     => 'includes/data/docs/TROUBLESHOOTING.md',
 				'title'    => __( 'Troubleshooting', 'ai-visibility-inspector' ),
 				'summary'  => __( 'Work through stale results, missing highlights, connection issues, and rerun confusion.', 'ai-visibility-inspector' ),
 				'group'    => 'start',
@@ -3540,7 +3787,7 @@ class Admin_Settings {
 				'audience' => __( 'Recovery Flow', 'ai-visibility-inspector' ),
 			),
 			'privacy'         => array(
-				'file'     => 'PRIVACY.md',
+				'file'     => 'includes/data/docs/PRIVACY.md',
 				'title'    => __( 'Privacy', 'ai-visibility-inspector' ),
 				'summary'  => __( 'See what the plugin captures, stores, and sends during normal AiVI usage.', 'ai-visibility-inspector' ),
 				'group'    => 'trust',
@@ -3548,7 +3795,7 @@ class Admin_Settings {
 				'audience' => __( 'Trust', 'ai-visibility-inspector' ),
 			),
 			'terms-of-service' => array(
-				'file'     => 'TERMS_OF_SERVICE.md',
+				'file'     => 'includes/data/docs/TERMS_OF_SERVICE.md',
 				'title'    => __( 'Terms of Service', 'ai-visibility-inspector' ),
 				'summary'  => __( 'Review current service boundaries, responsibilities, and commercial assumptions.', 'ai-visibility-inspector' ),
 				'group'    => 'trust',
@@ -3556,7 +3803,7 @@ class Admin_Settings {
 				'audience' => __( 'Trust', 'ai-visibility-inspector' ),
 			),
 			'support-guide'   => array(
-				'file'     => 'SUPPORT.md',
+				'file'     => 'includes/data/docs/SUPPORT.md',
 				'title'    => __( 'Support Guide', 'ai-visibility-inspector' ),
 				'summary'  => __( 'Learn how to contact support, what to include, and how to describe an issue clearly.', 'ai-visibility-inspector' ),
 				'group'    => 'trust',
@@ -3564,7 +3811,7 @@ class Admin_Settings {
 				'audience' => __( 'Support', 'ai-visibility-inspector' ),
 			),
 			'development'     => array(
-				'file'     => 'DEVELOPMENT.md',
+				'file'     => 'includes/data/docs/DEVELOPMENT.md',
 				'title'    => __( 'Development', 'ai-visibility-inspector' ),
 				'summary'  => __( 'Use the current contributor workflow, testing commands, and packaging helpers.', 'ai-visibility-inspector' ),
 				'group'    => 'build',
@@ -3572,7 +3819,7 @@ class Admin_Settings {
 				'audience' => __( 'Contributors', 'ai-visibility-inspector' ),
 			),
 			'architecture'    => array(
-				'file'     => 'ARCHITECTURE.md',
+				'file'     => 'includes/data/docs/ARCHITECTURE.md',
 				'title'    => __( 'Architecture', 'ai-visibility-inspector' ),
 				'summary'  => __( 'Understand the plugin surface, request lifecycle, sidebar, overlay, and managed backend boundary.', 'ai-visibility-inspector' ),
 				'group'    => 'build',
@@ -3580,7 +3827,7 @@ class Admin_Settings {
 				'audience' => __( 'System Design', 'ai-visibility-inspector' ),
 			),
 			'operations'      => array(
-				'file'     => 'OPERATIONS.md',
+				'file'     => 'includes/data/docs/OPERATIONS.md',
 				'title'    => __( 'Operations', 'ai-visibility-inspector' ),
 				'summary'  => __( 'Follow the current packaging, specimen verification, and public snapshot release flow.', 'ai-visibility-inspector' ),
 				'group'    => 'build',
@@ -4102,10 +4349,7 @@ class Admin_Settings {
 	 */
 	public static function get_preferred_contact_email() {
 		$stored = sanitize_email( (string) get_option( self::CONTACT_EMAIL_OPTION_KEY, '' ) );
-		if ( $stored !== '' ) {
-			return $stored;
-		}
-		return sanitize_email( (string) get_bloginfo( 'admin_email' ) );
+		return $stored;
 	}
 
 	/**
