@@ -7,18 +7,18 @@ describe('sidebar billing CTA regression', () => {
     test('routes billing prompts back to the WordPress dashboard anchors', () => {
         const source = fs.readFileSync(sidebarPath, 'utf8');
         expect(source).toContain('function buildAdminDashboardUrl(anchor) {');
-        expect(source).toContain("buildAccountAction('Buy credits', '#aivi-billing-topups', true)");
-        expect(source).toContain("buildAccountAction('Change plan', '#aivi-billing-plans', false)");
+        expect(source).toContain("buildAccountAction('Buy credits', '#aivi-billing-topups', false)");
+        expect(source).toContain("buildAccountAction('Change plan', '#aivi-billing-plans', true)");
         expect(source).toContain("buildAccountAction('Manage plan', '#aivi-billing-status', true)");
         expect(source).not.toContain('billing_subscribe');
         expect(source).not.toContain('billing_topup');
     });
 
-    test('renders account status actions as dashboard links', () => {
+    test('renders the connected account card with inline actions and web-lookups toggle', () => {
         const source = fs.readFileSync(sidebarPath, 'utf8');
-        expect(source).toContain('Array.isArray(summary.actions) && summary.actions.length > 0');
-        expect(source).toContain("key: `${summary.kind}-action-${index}`");
-        expect(source).toContain('href: action.href');
-        expect(source).toContain('action.primary ?');
+        expect(source).toContain("justifyContent: summary.canBuyCredits ? 'space-between' : 'center'");
+        expect(source).toContain('Verify with web lookups');
+        expect(source).toContain('summary.manageHref && createElement(\'a\'');
+        expect(source).toContain('summary.canBuyCredits && summary.buyCreditsHref');
     });
 });

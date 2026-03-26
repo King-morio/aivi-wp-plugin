@@ -17,38 +17,61 @@
       "GEO": 45
     },
     "intro_weight_in_aeo": 0.12,
+    "integrity_guardrails": {
+      "unsupported_claims": {
+        "primary_checks": [
+          "claim_provenance_and_evidence",
+          "no_exaggerated_claims"
+        ],
+        "supporting_checks": [
+          "external_authoritative_sources",
+          "citation_format_and_context",
+          "numeric_claim_consistency",
+          "contradictions_and_coherence",
+          "factual_statements_well_formed",
+          "intro_factual_entities"
+        ],
+        "verdict_points": {
+          "fail": 2,
+          "partial": 1,
+          "pass": 0
+        },
+        "levels": [
+          {
+            "id": "moderate",
+            "min_primary_failures": 1,
+            "min_signal_points": 6,
+            "max_aeo_score": 36,
+            "max_global_score": 70
+          },
+          {
+            "id": "severe",
+            "min_primary_failures": 2,
+            "min_signal_points": 8,
+            "max_aeo_score": 28,
+            "max_global_score": 60
+          }
+        ]
+      }
+    },
     "check_weights": {
       "intro_focus_factuality": {
-        "intro_focus_and_factuality.v1": {
-          "max_points": 6.6,
-          "category": "AEO",
-          "applicable_content_types": [
-            "all"
-          ]
-        },
-        "intro_first_sentence_topic": {
-          "max_points": 0,
-          "category": "AEO",
-          "applicable_content_types": [
-            "all"
-          ]
-        },
         "intro_wordcount": {
-          "max_points": 0,
+          "max_points": 1.8,
           "category": "AEO",
           "applicable_content_types": [
             "all"
           ]
         },
         "intro_readability": {
-          "max_points": 0,
+          "max_points": 1.8,
           "category": "AEO",
           "applicable_content_types": [
             "all"
           ]
         },
         "intro_factual_entities": {
-          "max_points": 0,
+          "max_points": 3,
           "category": "AEO",
           "applicable_content_types": [
             "all"
@@ -63,7 +86,7 @@
         }
       },
       "answer_extractability": {
-        "direct_answer_first_120": {
+        "immediate_answer_placement": {
           "max_points": 10,
           "category": "AEO",
           "applicable_content_types": [
@@ -127,7 +150,7 @@
             "all"
           ]
         },
-        "orphan_headings": {
+        "heading_topic_fulfillment": {
           "max_points": 4,
           "category": "GEO",
           "applicable_content_types": [
@@ -136,6 +159,13 @@
         },
         "heading_fragmentation": {
           "max_points": 4,
+          "category": "GEO",
+          "applicable_content_types": [
+            "all"
+          ]
+        },
+        "heading_like_text_uses_heading_markup": {
+          "max_points": 3,
           "category": "GEO",
           "applicable_content_types": [
             "all"
@@ -171,8 +201,27 @@
             "all"
           ]
         },
+        "article_jsonld_presence_and_completeness": {
+          "max_points": 5,
+          "category": "GEO",
+          "applicable_content_types": [
+            "article",
+            "post",
+            "news",
+            "newsarticle",
+            "blog",
+            "blogposting"
+          ]
+        },
         "schema_matches_content": {
           "max_points": 6,
+          "category": "GEO",
+          "applicable_content_types": [
+            "all"
+          ]
+        },
+        "canonical_clarity": {
+          "max_points": 3,
           "category": "GEO",
           "applicable_content_types": [
             "all"
@@ -219,6 +268,13 @@
           "category": "GEO",
           "applicable_content_types": [
             "howto"
+          ]
+        },
+        "itemlist_jsonld_presence_and_completeness": {
+          "max_points": 4,
+          "category": "GEO",
+          "applicable_content_types": [
+            "all"
           ]
         }
       },
@@ -313,6 +369,13 @@
             "all"
           ]
         },
+        "ai_crawler_accessibility": {
+          "max_points": 3,
+          "category": "GEO",
+          "applicable_content_types": [
+            "all"
+          ]
+        },
         "accessibility_basics": {
           "max_points": 4,
           "category": "GEO",
@@ -378,6 +441,13 @@
         }
       },
       "citability_verifiability": {
+        "original_evidence_signal": {
+          "max_points": 4,
+          "category": "GEO",
+          "applicable_content_types": [
+            "all"
+          ]
+        },
         "claim_pattern_detection": {
           "max_points": 4,
           "category": "GEO",

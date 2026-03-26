@@ -11,6 +11,7 @@ const PAYPAL_ENV_KEYS = Object.freeze({
     PLAN_IDS: Object.freeze({
         starter: 'PAYPAL_PLAN_ID_STARTER',
         growth: 'PAYPAL_PLAN_ID_GROWTH',
+        growth_intro: 'PAYPAL_PLAN_ID_GROWTH_INTRO',
         pro: 'PAYPAL_PLAN_ID_PRO'
     })
 });
@@ -20,9 +21,9 @@ const TRIAL_CATALOG = Object.freeze({
     label: 'Free Trial',
     billing_type: 'trial',
     price_usd: 0,
-    included_credits: 15000,
+    included_credits: 5000,
     site_limit: 1,
-    duration_days: 14
+    duration_days: 7
 });
 
 const PLAN_CATALOG = Object.freeze({
@@ -41,13 +42,14 @@ const PLAN_CATALOG = Object.freeze({
         label: 'Growth',
         billing_type: 'subscription',
         price_usd: 22,
-        included_credits: 150000,
+        included_credits: 100000,
         site_limit: 3,
         history_days: 90,
         intro_offer: Object.freeze({
             type: 'percent_off_first_cycle',
             percent_off: 50
         }),
+        paypal_intro_plan_env_key: PAYPAL_ENV_KEYS.PLAN_IDS.growth_intro,
         paypal_plan_env_key: PAYPAL_ENV_KEYS.PLAN_IDS.growth
     }),
     pro: Object.freeze({
@@ -55,7 +57,7 @@ const PLAN_CATALOG = Object.freeze({
         label: 'Pro',
         billing_type: 'subscription',
         price_usd: 59,
-        included_credits: 450000,
+        included_credits: 250000,
         site_limit: 10,
         history_days: 365,
         paypal_plan_env_key: PAYPAL_ENV_KEYS.PLAN_IDS.pro
@@ -98,6 +100,7 @@ const getPayPalConfig = (env = process.env) => ({
     planIds: Object.freeze({
         starter: sanitizeString(env[PAYPAL_ENV_KEYS.PLAN_IDS.starter]),
         growth: sanitizeString(env[PAYPAL_ENV_KEYS.PLAN_IDS.growth]),
+        growth_intro: sanitizeString(env[PAYPAL_ENV_KEYS.PLAN_IDS.growth_intro]),
         pro: sanitizeString(env[PAYPAL_ENV_KEYS.PLAN_IDS.pro])
     })
 });
@@ -136,6 +139,9 @@ const resolvePlanCodeByProviderPlanId = (config, providerPlanId) => {
     }
 
     const planIds = config?.planIds || {};
+    if (sanitizeString(planIds.growth_intro) === target) {
+        return 'growth';
+    }
     return Object.keys(PLAN_CATALOG).find((code) => sanitizeString(planIds[code]) === target) || null;
 };
 

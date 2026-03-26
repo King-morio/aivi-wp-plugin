@@ -169,6 +169,7 @@ These are not rollout blockers, but their staging values must be explicit.
 - `PAYPAL_CANCEL_URL`
 - `PAYPAL_PLAN_ID_STARTER`
 - `PAYPAL_PLAN_ID_GROWTH`
+- `PAYPAL_PLAN_ID_GROWTH_INTRO`
 - `PAYPAL_PLAN_ID_PRO`
 
 ### Account/support links
@@ -324,7 +325,9 @@ Chosen control-plane hostnames:
 
 ### Production guardrails
 
-- keep `AIVI_BILLING_READY=false` until staging proof exists
+- keep the built-in production backend default active for customer installs
+- keep hosted billing enabled by default for customer installs
+- use `AIVI_BILLING_READY=false` only as a staging/local override when you need to hold billing off temporarily
 - keep bootstrap token disabled
 - keep admin console outside the customer plugin package
 - do not expose billing/admin internals to browser payloads

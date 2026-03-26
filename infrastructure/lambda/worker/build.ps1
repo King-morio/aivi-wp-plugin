@@ -34,6 +34,25 @@ if (-not (Test-Path $scoringSource)) {
 }
 Copy-Item $scoringSource -Destination $sharedTargetDir -Force
 
+# Ensure shared runtime scoring modules are bundled
+$sharedRuntimeTargetDir = Join-Path $PSScriptRoot "shared"
+$sharedRuntimeFiles = @(
+    "billing-account-state.js",
+    "credit-ledger.js",
+    "credit-pricing.js",
+    "score-contract.js",
+    "scoring-policy.js"
+)
+New-Item -ItemType Directory -Path $sharedRuntimeTargetDir -Force | Out-Null
+foreach ($runtimeFile in $sharedRuntimeFiles) {
+    $runtimeSource = Join-Path $PSScriptRoot "..\shared\$runtimeFile"
+    if (-not (Test-Path $runtimeSource)) {
+        Write-Host "Missing shared runtime file at $runtimeSource" -ForegroundColor Red
+        exit 1
+    }
+    Copy-Item $runtimeSource -Destination (Join-Path $sharedRuntimeTargetDir $runtimeFile) -Force
+}
+
 # Create zip package (including schemas and prompts for 44-checks)
 # C1 FIX: Added preflight-handler.js for deterministic checks
 Write-Host "Creating deployment package..." -ForegroundColor Yellow

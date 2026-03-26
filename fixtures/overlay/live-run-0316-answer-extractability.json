@@ -1,0 +1,136 @@
+{
+  "manifest": {
+    "title": "The 2026 AI Playbook Everyone Is Using Right Now",
+    "block_map": [
+      {
+        "node_ref": "block-0",
+        "signature": "sig-0",
+        "block_type": "core/paragraph",
+        "text": "In 2026, it feels like every serious team has adopted the same AI workflow, and it is often described as the obvious next step: add an assistant to writing, planning, and customer support, then measure the gains. People repeat the benefits confidently, but the details about when the evidence was produced and which conditions were tested are not always clear."
+      },
+      {
+        "node_ref": "block-1",
+        "signature": "sig-1",
+        "block_type": "core/heading",
+        "text": "What Changed \"This Year\""
+      },
+      {
+        "node_ref": "block-2",
+        "signature": "sig-2",
+        "block_type": "core/paragraph",
+        "text": "This year, the strongest teams supposedly moved from experimentation to full adoption, and many guides say the switch already happened across most industries. In practice, those statements depend heavily on sector, region, and regulatory context, but they are often presented as if they apply everywhere."
+      }
+    ]
+  },
+  "analysisResult": {
+    "run_id": "550a7004-60ce-4fc5-842e-56cf4deec550",
+    "scores": {
+      "AEO": 18,
+      "GEO": 17,
+      "GLOBAL": 35
+    },
+    "checks": {
+      "immediate_answer_placement": {
+        "verdict": "partial",
+        "ui_verdict": "partial",
+        "confidence": 0.45,
+        "explanation": "Answer appears at 121-150 words after the question anchor.",
+        "ai_explanation_pack": null,
+        "highlights": [
+          {
+            "scope": "span",
+            "snippet": "This year, the strongest teams supposedly moved from experimentation to full adoption",
+            "message": "Answer appears at 121-150 words after the question anchor.",
+            "node_ref": "block-2",
+            "signature": "sig-2",
+            "start": 0,
+            "end": 85,
+            "instance_index": 0,
+            "text": "This year, the strongest teams supposedly moved from experimentation to full adoption",
+            "context": "This year, the strongest teams supposedly moved from experimentation to full adoption, and many guides say the switch already",
+            "anchor_status": "anchored",
+            "anchor_strategy": "exact_snippet",
+            "server_recalculated": false
+          }
+        ],
+        "suggestions": []
+      },
+      "answer_sentence_concise": {
+        "verdict": "fail",
+        "ui_verdict": "fail",
+        "confidence": 0.85,
+        "explanation": "Answer sentence has 32 words, which is below the 40-60 word threshold.",
+        "ai_explanation_pack": null,
+        "highlights": [
+          {
+            "scope": "sentence",
+            "snippet": "This year, the strongest teams supposedly moved from experimentation to full adoption, and many guides say the switch already happened across most industries.",
+            "message": "Answer sentence has 32 words, which is below the 40-60 word threshold.",
+            "node_ref": "block-2",
+            "signature": "sig-2",
+            "start": 0,
+            "end": 158,
+            "instance_index": 0,
+            "text": "This year, the strongest teams supposedly moved from experimentation to full adoption, and many guides say the switch already happened across most industries.",
+            "context": "This year, the strongest teams supposedly moved from experimentation to full adoption, and many guides say the switch already happened across most industries. In practice, those statements depend heavily on sector, region, and regulatory context, but they are often presented as if they apply everywhere.",
+            "anchor_status": "anchored",
+            "anchor_strategy": "exact_snippet",
+            "server_recalculated": false
+          }
+        ],
+        "suggestions": []
+      },
+      "question_answer_alignment": {
+        "verdict": "pass",
+        "ui_verdict": "pass",
+        "confidence": 0.92,
+        "explanation": "The answer directly addresses the question about changes this year.",
+        "ai_explanation_pack": null,
+        "highlights": [],
+        "suggestions": [],
+        "failed_candidates": [],
+        "cannot_anchor": true,
+        "non_inline": true,
+        "non_inline_reason": "no_candidates"
+      },
+      "clear_answer_formatting": {
+        "verdict": "partial",
+        "ui_verdict": "partial",
+        "confidence": 0.65,
+        "explanation": "Answer is not separated into clear steps or bullet points for better readability.",
+        "ai_explanation_pack": null,
+        "highlights": [
+          {
+            "scope": "block",
+            "snippet": "This year, the strongest teams supposedly moved from experimentation to full adoption, and many guides say the switch already happened across most industries. In practice, those statements depend heavily on sector, region, and regulatory context, but they are often presented as if they apply everywhere.",
+            "message": "Answer is not separated into clear steps or bullet points for better readability.",
+            "node_ref": "block-2",
+            "signature": "sig-2",
+            "start": 0,
+            "end": 304,
+            "instance_index": 0,
+            "text": "This year, the strongest teams supposedly moved from experimentation to full adoption, and many guides say the switch already happened across most industries. In practice, those statements depend heavily on sector, region, and regulatory context, but they are often presented as if they apply everywhere.",
+            "context": "This year, the strongest teams supposedly moved from experimentation to full adoption, and many guides say the switch already happened across most industries. In practice, those statements depend heavily on sector, region, and regulatory context, but they are often presented as if they apply everywhere.",
+            "anchor_status": "anchored",
+            "anchor_strategy": "exact_snippet",
+            "server_recalculated": false
+          }
+        ],
+        "suggestions": []
+      },
+      "faq_structure_opportunity": {
+        "verdict": "pass",
+        "ui_verdict": "pass",
+        "confidence": 0.88,
+        "explanation": "The content is not structured as a FAQ, so no opportunity for improvement.",
+        "ai_explanation_pack": null,
+        "highlights": [],
+        "suggestions": [],
+        "failed_candidates": [],
+        "cannot_anchor": true,
+        "non_inline": true,
+        "non_inline_reason": "no_candidates"
+      }
+    }
+  }
+}

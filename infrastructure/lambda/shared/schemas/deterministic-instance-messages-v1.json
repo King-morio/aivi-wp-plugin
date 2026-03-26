@@ -34,7 +34,7 @@
         "Stable internal sources improve extractability and citation reliability."
       ]
     },
-    "orphan_headings": {
+    "heading_topic_fulfillment": {
       "lead": "This heading has {{word_count}} supporting words (minimum {{min_words}}).",
       "variants": [
         "Thin section context can weaken extractability for LLM-based answer engines.",
@@ -43,11 +43,11 @@
       ]
     },
     "heading_fragmentation": {
-      "lead": "This heading sits in a fragmented section with only {{word_count}} supporting words.",
+      "lead": "This heading hands off to another heading before the section is framed.",
       "variants": [
-        "Fragmented structure can dilute topical coherence for LLM-based answer engines.",
-        "Denser supporting context improves section-level retrievability and citation confidence.",
-        "Adding complete supporting detail helps answer engines form well-grounded summaries."
+        "Too many top-level handoffs can make the outline feel over-split to answer engines.",
+        "Add a grounding paragraph before nested subheadings so the section lands before it branches.",
+        "Merge adjacent top-level headings when they really belong to one stronger section."
       ]
     },
     "appropriate_paragraph_length": {

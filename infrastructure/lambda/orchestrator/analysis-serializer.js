@@ -20,6 +20,7 @@ let cachedDefinitions = null;
 let cachedRuntimeContract = null;
 let cachedDefinitionChecksLookup = null;
 let cachedDeterministicExplanationCatalog = null;
+let cachedDeterministicInstanceCatalog = null;
 const readJsonFile = (filePath) => {
     const raw = fs.readFileSync(filePath, 'utf8');
     return JSON.parse(String(raw).replace(/^\uFEFF/, ''));
@@ -38,6 +39,15 @@ const resolveDeterministicExplanationCatalogPath = () => {
         path.join(__dirname, 'shared', 'schemas', 'deterministic-explanations-v1.json'),
         path.join(__dirname, 'schemas', 'deterministic-explanations-v1.json'),
         path.join(__dirname, '..', 'shared', 'schemas', 'deterministic-explanations-v1.json')
+    ];
+    const existing = candidates.find((candidate) => fs.existsSync(candidate));
+    return existing || null;
+};
+const resolveDeterministicInstanceCatalogPath = () => {
+    const candidates = [
+        path.join(__dirname, 'shared', 'schemas', 'deterministic-instance-messages-v1.json'),
+        path.join(__dirname, 'schemas', 'deterministic-instance-messages-v1.json'),
+        path.join(__dirname, '..', 'shared', 'schemas', 'deterministic-instance-messages-v1.json')
     ];
     const existing = candidates.find((candidate) => fs.existsSync(candidate));
     return existing || null;
@@ -86,6 +96,35 @@ const loadDeterministicExplanationCatalog = () => {
         cachedDeterministicExplanationCatalog = { checks: {} };
     }
     return cachedDeterministicExplanationCatalog;
+};
+
+const loadDeterministicInstanceCatalog = () => {
+    if (cachedDeterministicInstanceCatalog) return cachedDeterministicInstanceCatalog;
+    const catalogPath = resolveDeterministicInstanceCatalogPath();
+    if (!catalogPath) {
+        cachedDeterministicInstanceCatalog = { checks: {} };
+        return cachedDeterministicInstanceCatalog;
+    }
+    try {
+        cachedDeterministicInstanceCatalog = readJsonFile(catalogPath);
+    } catch (error) {
+        console.error('Failed to load deterministic instance catalog:', error.message);
+        cachedDeterministicInstanceCatalog = { checks: {} };
+    }
+    return cachedDeterministicInstanceCatalog;
+};
+
+const getDeterministicReviewLead = (checkId) => {
+    const catalog = loadDeterministicInstanceCatalog();
+    const checks = catalog && typeof catalog === 'object' && catalog.checks && typeof catalog.checks === 'object'
+        ? catalog.checks
+        : {};
+    const entry = checks[String(checkId || '')];
+    if (!entry || typeof entry !== 'object') return '';
+    const reviewLead = typeof entry.review_lead === 'string' ? entry.review_lead.trim() : '';
+    if (reviewLead) return reviewLead;
+    const lead = typeof entry.lead === 'string' ? entry.lead.trim() : '';
+    return lead;
 };
 
 const buildDefinitionChecksLookup = () => {
@@ -194,17 +233,71 @@ const isSyntheticDiagnosticCheck = (checkData) => {
         || provenance === 'synthetic';
 };
 
+const getScoreNeutralReason = (checkData) => {
+    if (!checkData || typeof checkData !== 'object') return '';
+    const directReason = typeof checkData.score_neutral_reason === 'string'
+        ? checkData.score_neutral_reason.trim().toLowerCase()
+        : '';
+    if (directReason) return directReason;
+    const nestedReason = typeof checkData.details?.score_neutral_reason === 'string'
+        ? checkData.details.score_neutral_reason.trim().toLowerCase()
+        : '';
+    return nestedReason;
+};
+
+const isInternalSchemaBridgeDiagnostic = (checkData) => {
+    if (!checkData || typeof checkData !== 'object') return false;
+    return checkData.diagnostic_only === true && getScoreNeutralReason(checkData) === 'schema_bridge_internal';
+};
+
+const NEUTRAL_RELEASE_SCHEMA_REASONS = new Set([
+    'content_type_unavailable',
+    'schema_types_absent',
+    'schema_companion_only'
+]);
+
+const isNeutralDeterministicSchemaDiagnostic = (checkId, checkData) => {
+    if (!checkData || typeof checkData !== 'object') return false;
+    const normalizedId = String(checkId || '').trim();
+    if (normalizedId !== 'schema_matches_content') return false;
+    const provenance = typeof checkData.provenance === 'string'
+        ? checkData.provenance.toLowerCase().trim()
+        : '';
+    if (provenance !== 'deterministic') return false;
+    if (checkData.score_neutral !== true && checkData.details?.score_neutral !== true) return false;
+    return NEUTRAL_RELEASE_SCHEMA_REASONS.has(getScoreNeutralReason(checkData));
+};
+
+const isVerificationAvailabilityDiagnostic = (checkId, checkData) => {
+    if (!checkData || typeof checkData !== 'object') return false;
+    const normalizedId = String(checkId || '').trim();
+    if (normalizedId !== 'no_broken_internal_links') return false;
+    const provenance = typeof checkData.provenance === 'string'
+        ? checkData.provenance.toLowerCase().trim()
+        : '';
+    if (provenance !== 'deterministic') return false;
+    const nonInlineReason = typeof checkData.non_inline_reason === 'string'
+        ? checkData.non_inline_reason.trim().toLowerCase()
+        : '';
+    return nonInlineReason === 'link_status_unavailable';
+};
+
 const LEGACY_NON_INLINE_REASON_BY_CHECK = {
     metadata_checks: 'metadata_document_scope',
     valid_jsonld_schema: 'jsonld_document_scope',
+    article_jsonld_presence_and_completeness: 'article_schema_non_inline',
     schema_matches_content: 'schema_content_alignment_non_inline',
+    canonical_clarity: 'canonical_document_scope',
     semantic_html_usage: 'semantic_structure_non_inline',
+    heading_like_text_uses_heading_markup: 'heading_like_markup_non_inline',
     supported_schema_types_validation: 'schema_validation_non_inline',
     faq_jsonld_presence_and_completeness: 'faq_schema_non_inline',
     howto_jsonld_presence_and_completeness: 'howto_schema_non_inline',
     howto_schema_presence_and_completeness: 'howto_schema_non_inline',
+    itemlist_jsonld_presence_and_completeness: 'itemlist_schema_non_inline',
     author_identified: 'missing_author_byline',
     author_bio_present: 'missing_author_bio',
+    ai_crawler_accessibility: 'crawler_accessibility_non_inline',
     intro_schema_suggestion: 'intro_schema_non_inline',
     intro_wordcount: 'intro_wordcount_non_inline',
     intro_readability: 'intro_readability_non_inline',
@@ -240,6 +333,12 @@ const SYNTHETIC_FALLBACK_REASONS = new Set([
     'truncated_response'
 ]);
 const isSyntheticFallbackReason = (value) => SYNTHETIC_FALLBACK_REASONS.has(String(value || '').trim().toLowerCase());
+const shouldExposeRecommendationInRail = ({ checkData, failureReason }) => {
+    const normalizedReason = String(failureReason || '').trim().toLowerCase();
+    if (!normalizedReason) return true;
+    if (!isSyntheticFallbackReason(normalizedReason)) return true;
+    return isDeterministicCheckData(checkData);
+};
 
 const AGGREGATE_INLINE_MESSAGE_PATTERNS = [
     /\b\d+\s+[a-z0-9_-]+\(s\)/i,
@@ -293,6 +392,7 @@ const resolveInlineIssueMessage = ({ checkId, checkData, preferredMessage, fallb
     const preferred = String(preferredMessage || '').trim();
     const fallback = String(fallbackMessage || '').trim();
     const deterministic = isDeterministicCheckData(checkData);
+    const reviewLead = deterministic ? clampGuidanceText(getDeterministicReviewLead(checkId), 220) : '';
     if (preferred) {
         if (!deterministic || !isAggregateInlineMessage(preferred)) {
             return preferred;
@@ -302,6 +402,9 @@ const resolveInlineIssueMessage = ({ checkId, checkData, preferredMessage, fallb
         if (!deterministic || !isAggregateInlineMessage(fallback)) {
             return fallback;
         }
+    }
+    if (deterministic && reviewLead) {
+        return reviewLead;
     }
     if (deterministic) {
         return buildDeterministicInlineFallbackMessage(checkId, checkData);
@@ -315,20 +418,45 @@ const GENERIC_REPAIR_INSTRUCTION_PATTERNS = [
     /^review this section manually/i
 ];
 
-const SEMANTIC_WHY_IT_MATTERS_VARIANTS = [
-    ({ checkName, definitionDescription }) => definitionDescription
-        ? `${checkName} checks ${definitionDescription}. When this signal is weak, extraction precision and citation confidence can drop.`
-        : `${checkName} is a quality signal for answer extraction. Weak results can reduce citation confidence.`,
-    ({ checkName, definitionDescription }) => definitionDescription
-        ? `Answer engines rely on ${checkName} because it reflects ${definitionDescription}. Failing here can lower trust and retrieval reliability.`
-        : `Answer engines use ${checkName} as a trust cue. Weak performance here can reduce retrieval reliability and answer quality.`,
-    ({ checkName, definitionDescription }) => definitionDescription
-        ? `This finding impacts how models interpret ${definitionDescription}. Better quality in ${checkName} usually improves grounding and summary accuracy.`
-        : `This finding affects grounding quality. Stronger ${checkName} signals typically improve summary accuracy and citation stability.`,
-    ({ checkName, definitionDescription }) => definitionDescription
-        ? `${checkName} influences whether evidence is treated as reliable for machine summaries. Gaps in ${definitionDescription} can weaken citability.`
-        : `${checkName} influences whether evidence is treated as reliable in machine summaries. Weak signals here can limit citability.`
-];
+const SEMANTIC_WHY_IT_MATTERS_BY_CHECK = {
+    immediate_answer_placement: 'Answer engines are more reliable when the direct answer appears immediately, not after supporting setup.',
+    answer_sentence_concise: 'A concise opening answer is easier to scan, quote, and reuse in answer-driven results.',
+    question_answer_alignment: 'The opening answer is easier to trust when it clearly matches the user query instead of implying it indirectly.',
+    clear_answer_formatting: 'Dense answer formatting makes the main point harder to scan and extract quickly.',
+    faq_structure_opportunity: 'Explicit Q&A structure helps answer engines identify reusable FAQ pairs and extract them more reliably.',
+    faq_jsonld_generation_suggestion: 'FAQ schema is only reliable when the visible content already reads as clear question-and-answer pairs.',
+    article_jsonld_presence_and_completeness: 'Primary article schema helps machines confirm that this page is a citable article, not just generic markup.',
+    itemlist_jsonld_presence_and_completeness: 'Strong visible lists are easier to reuse when their boundaries and order are explicit in machine-readable form.',
+    readability_adaptivity: 'Readable sentences are easier to scan quickly and less likely to be skipped or misread in extracted answers.',
+    howto_schema_presence_and_completeness: 'Step-based content needs complete HowTo structure before machines can reuse it confidently.',
+    howto_jsonld_presence_and_completeness: 'Step-based content needs complete HowTo structure before machines can reuse it confidently.',
+    howto_semantic_validity: 'When a section promises instructions, answer engines extract it more reliably if each step is explicit, ordered, and action-led.',
+    external_authoritative_sources: 'Named, recognizable sources placed near a claim make that claim easier to trust, cite, and reuse.',
+    claim_provenance_and_evidence: 'Claims with concrete nearby support are easier to trust, quote, and reuse in answer-driven results.',
+    original_evidence_signal: 'Original evidence gives answer engines something distinctive to cite instead of generic summary text.',
+    citation_format_and_context: 'Claims are easier to verify when the supporting source appears with the statement or immediately after it.',
+    temporal_claim_check: 'Time-sensitive claims need clear timing so readers and models can judge whether they are still valid.',
+    named_entities_detected: 'Specific names reduce ambiguity and help models connect claims to the right people, companies, products, or places.',
+    entity_disambiguation: 'Specific entity naming reduces ambiguity and helps models connect the claim to the right subject.',
+    claim_pattern_detection: 'Absolute claims without support are harder to trust and more likely to be down-ranked.',
+    no_exaggerated_claims: 'Exaggerated claims weaken trust and make the content less reusable as a reliable answer source.',
+    promotional_or_commercial_intent: 'Neutral wording is easier to trust and more likely to be cited than sales-style language.',
+    internal_link_context_relevance: 'Relevant internal links help readers and crawlers follow supporting context without guessing.'
+};
+const SEMANTIC_WHY_IT_MATTERS_BY_REASON = {
+    block_wide: 'Broad, section-level claims are easier to extract when the main point is separated from supporting detail.',
+    too_wide: 'Tighter sections are easier for answer engines to interpret, extract, and cite accurately.',
+    low_precision: 'Specific wording makes the claim easier to trust and less likely to be misread by answer systems.',
+    external_sources_document_scope: 'Named external sources make factual claims easier to verify and safer to reuse.',
+    claim_evidence_section_scope: 'Claims without nearby evidence are harder to trust and reuse with confidence.',
+    citation_support_document_scope: 'Claims and sources need to stay close together so the evidence is immediately clear.',
+    internal_links_document_scope: 'Supportive internal links help readers and crawlers follow the argument without guesswork.',
+    article_schema_non_inline: 'Article-like pages are easier to trust when a primary article schema is present and complete.',
+    faq_jsonld_generation_non_inline: 'FAQ schema only works well when the visible content already follows a clear Q&A pattern.',
+    howto_schema_non_inline: 'HowTo extraction works best when the visible content is already broken into explicit steps.',
+    itemlist_schema_non_inline: 'Visible ranked or resource-style lists are easier to parse when ItemList schema expresses the same items and order.',
+    heading_like_markup_non_inline: 'Structural section labels are easier to parse when they use real heading markup instead of paragraph styling alone.'
+};
 
 const clampGuidanceText = (value, max = 280) => {
     const text = String(value || '').replace(/\s+/g, ' ').trim();
@@ -360,6 +488,206 @@ const normalizeStepText = (value, max = 220) => {
     return /[.!?]$/.test(text) ? text : `${text}.`;
 };
 
+const countWords = (value) => String(value || '').trim().split(/\s+/).filter(Boolean).length;
+
+const trimToWordLimit = (value, maxWords = 60) => {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+    const words = text.split(' ');
+    if (words.length <= maxWords) return text;
+    return `${words.slice(0, maxWords).join(' ').replace(/[.,;:!?-]+$/g, '').trim()}...`;
+};
+
+const buildSemanticWhyItMatters = ({ checkName, checkId, failureReason }) => {
+    const normalizedCheckId = String(checkId || '').trim();
+    const normalizedReason = String(failureReason || '').trim().toLowerCase();
+    const byCheck = SEMANTIC_WHY_IT_MATTERS_BY_CHECK[normalizedCheckId];
+    if (byCheck) return clampGuidanceText(byCheck, 220);
+    const byReason = SEMANTIC_WHY_IT_MATTERS_BY_REASON[normalizedReason];
+    if (byReason) return clampGuidanceText(byReason, 220);
+    return clampGuidanceText(
+        `${String(checkName || 'This issue')} weakens trust, extraction quality, or citation reliability for this section.`,
+        220
+    );
+};
+
+const buildSemanticRecommendationNarrative = ({
+    checkId,
+    checkName,
+    failureReason,
+    actionSuggestion,
+    rewriteTarget,
+    whyItMatters,
+    summaryMessage,
+    fixSteps = []
+}) => {
+    const conciseSummary = trimToWordLimit(clampGuidanceText(summaryMessage || '', 220), 20);
+    const conciseWhy = trimToWordLimit(clampGuidanceText(whyItMatters || '', 180), 18);
+    const fixCandidates = [];
+    const pushFixCandidate = (value) => {
+        const normalized = normalizeStepText(value, 180);
+        if (!normalized || isLowValueGuidanceStep(normalized)) return;
+        if (fixCandidates.some((candidate) => isNearDuplicateText(candidate, normalized))) return;
+        fixCandidates.push(normalized);
+    };
+    pushFixCandidate(resolveCheckAwareFixHint({
+        checkId,
+        failureReason,
+        actionSuggestion,
+        rewriteTarget
+    }));
+    normalizeGuidanceSteps(fixSteps).forEach((step) => pushFixCandidate(step));
+
+    const sentenceOneParts = [];
+    if (conciseSummary) {
+        sentenceOneParts.push(conciseSummary);
+    }
+    if (conciseWhy && !isNearDuplicateText(conciseWhy, conciseSummary)) {
+        sentenceOneParts.push(conciseWhy);
+    }
+    const sentenceOne = ensureSentence(trimToWordLimit(sentenceOneParts.join(' '), 36));
+
+    const primaryFix = fixCandidates.find((candidate) =>
+        candidate
+        && !isNearDuplicateText(candidate, sentenceOne)
+        && !isNearDuplicateText(candidate, conciseSummary)
+        && !isNearDuplicateText(candidate, conciseWhy)
+    ) || '';
+    const sentenceTwo = primaryFix ? ensureSentence(trimToWordLimit(primaryFix, 20)) : '';
+
+    const narrativeParts = [sentenceOne, sentenceTwo].filter(Boolean);
+    let narrative = trimToWordLimit(narrativeParts.join(' ').replace(/\s+/g, ' ').trim(), 60);
+
+    if (countWords(narrative) < 40) {
+        const secondaryFix = fixCandidates.find((candidate) =>
+            candidate
+            && !isNearDuplicateText(candidate, primaryFix)
+            && !isNearDuplicateText(candidate, narrative)
+            && !isNearDuplicateText(candidate, sentenceOne)
+        ) || '';
+        if (secondaryFix) {
+            narrative = trimToWordLimit(
+                [...narrativeParts, ensureSentence(trimToWordLimit(secondaryFix, 14))]
+                    .filter(Boolean)
+                    .join(' ')
+                    .replace(/\s+/g, ' ')
+                    .trim(),
+                60
+            );
+        }
+    }
+
+    return narrative;
+};
+
+const resolveNonSemanticNarrativeCloser = ({ checkId, failureReason }) => {
+    const normalizedCheckId = String(checkId || '').trim().toLowerCase();
+    const normalizedReason = String(failureReason || '').trim().toLowerCase();
+    if (normalizedCheckId === 'single_h1' || normalizedReason === 'missing_required_h1') {
+        return 'Keep one H1 for the page topic and nest deeper sections under H2/H3.';
+    }
+    if (normalizedCheckId === 'metadata_checks' || normalizedReason === 'metadata_document_scope') {
+        return 'Keep metadata aligned with the page topic and visible claims.';
+    }
+    if (normalizedCheckId === 'author_identified' || normalizedReason === 'missing_author_byline') {
+        return 'Keep authorship details visible and consistent with the site profile.';
+    }
+    if (normalizedCheckId === 'author_bio_present' || normalizedReason === 'missing_author_bio') {
+        return 'Keep expertise details visible and consistent with the author profile.';
+    }
+    if (normalizedCheckId === 'schema_matches_content' || normalizedReason === 'schema_content_alignment_non_inline') {
+        return 'Keep structured fields aligned with the exact visible wording.';
+    }
+    if (normalizedCheckId === 'semantic_html_usage' || normalizedReason === 'semantic_structure_non_inline') {
+        return 'Keep structure and visible content aligned after the markup update.';
+    }
+    if (normalizedCheckId === 'intro_schema_suggestion' || normalizedReason === 'intro_schema_non_inline') {
+        return 'Keep the structured fields consistent with the visible intro.';
+    }
+    if (normalizedCheckId === 'intro_readability' || normalizedReason === 'intro_readability_non_inline') {
+        return 'Keep the revised intro direct, scannable, and easy to parse.';
+    }
+    if (normalizedCheckId === 'intro_focus_and_factuality.v1' || normalizedReason === 'intro_composite_non_inline') {
+        return 'Keep the opening direct, specific, and supported by one concrete fact.';
+    }
+    if (normalizedCheckId === 'appropriate_paragraph_length') {
+        return 'Keep each paragraph focused on one claim and one support detail.';
+    }
+    return 'Keep the revised copy specific, visible, and aligned with the page topic.';
+};
+
+const buildNonSemanticRecommendationNarrative = ({
+    checkId,
+    failureReason,
+    summaryMessage,
+    whyItMatters,
+    fixSteps = []
+}) => {
+    const conciseSummary = trimToWordLimit(clampGuidanceText(summaryMessage || '', 220), 20);
+    const conciseWhy = trimToWordLimit(clampGuidanceText(whyItMatters || '', 180), 18);
+    const fixCandidates = normalizeGuidanceSteps(fixSteps).filter((step) =>
+        step
+        && !isLowValueGuidanceStep(step)
+    );
+
+    const sentenceOneParts = [];
+    if (conciseSummary) {
+        sentenceOneParts.push(conciseSummary);
+    }
+    if (conciseWhy && !isNearDuplicateText(conciseWhy, conciseSummary)) {
+        sentenceOneParts.push(conciseWhy);
+    }
+    const sentenceOne = ensureSentence(trimToWordLimit(sentenceOneParts.join(' '), 38));
+
+    const usedParts = [sentenceOne].filter(Boolean);
+    const pickNextCandidate = () => fixCandidates.find((candidate) =>
+        candidate
+        && !usedParts.some((part) => isNearDuplicateText(candidate, part))
+        && !isNearDuplicateText(candidate, conciseSummary)
+        && !isNearDuplicateText(candidate, conciseWhy)
+    ) || '';
+
+    const primaryFix = pickNextCandidate();
+    if (primaryFix) {
+        usedParts.push(ensureSentence(trimToWordLimit(primaryFix, 18)));
+    }
+
+    if (countWords(usedParts.join(' ')) < 40) {
+        const secondaryFix = pickNextCandidate();
+        if (secondaryFix) {
+            usedParts.push(ensureSentence(trimToWordLimit(secondaryFix, 14)));
+        }
+    }
+
+    if (countWords(usedParts.join(' ')) < 40) {
+        const closer = normalizeStepText(resolveNonSemanticNarrativeCloser({ checkId, failureReason }), 180);
+        if (
+            closer
+            && !usedParts.some((part) => isNearDuplicateText(closer, part))
+            && !isNearDuplicateText(closer, conciseSummary)
+            && !isNearDuplicateText(closer, conciseWhy)
+        ) {
+            usedParts.push(ensureSentence(trimToWordLimit(closer, 16)));
+        }
+    }
+
+    return trimToWordLimit(usedParts.join(' ').replace(/\s+/g, ' ').trim(), 60);
+};
+
+const normalizeComparisonText = (value) => String(value || '')
+    .toLowerCase()
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const isNearDuplicateText = (left, right) => {
+    const a = normalizeComparisonText(left);
+    const b = normalizeComparisonText(right);
+    if (!a || !b) return false;
+    return a === b || a.includes(b) || b.includes(a);
+};
+
 const normalizeGuidanceSteps = (value) => {
     const raw = Array.isArray(value)
         ? value
@@ -376,6 +704,15 @@ const LOW_VALUE_STEP_PATTERNS = [
     /^review this section manually/i,
     /^rewrite only the flagged inline span\.?$/i,
     /^rewrite only the flagged text\.?$/i,
+    /^revise the quoted passage/i,
+    /^start from the quoted passage/i,
+    /^edit the quoted section/i,
+    /^locate the section/i,
+    /^locate the flagged snippet/i,
+    /^edit this specific snippet/i,
+    /^re-run analysis/i,
+    /^run analysis again/i,
+    /^apply one high-impact edit/i,
     /^use jump to block/i,
     /^view details/i,
     /^this issue is absence-based/i,
@@ -389,6 +726,7 @@ const isLowValueGuidanceStep = (value) => {
 };
 
 const buildRecommendationDepthSteps = ({
+    checkId,
     checkName,
     snippet,
     actionSuggestion,
@@ -400,10 +738,12 @@ const buildRecommendationDepthSteps = ({
         ? existingSteps.filter((step) => !isLowValueGuidanceStep(step))
         : [];
     const steps = [...seedSteps];
-    const operation = String(rewriteTarget?.operation || '').toLowerCase().trim();
-    const actionStep = isGenericRepairInstruction(actionSuggestion)
-        ? ''
-        : normalizeStepText(actionSuggestion, 220);
+    const actionStep = resolveCheckAwareFixHint({
+        checkId,
+        failureReason,
+        actionSuggestion,
+        rewriteTarget
+    });
     const syntheticFallback = isSyntheticFallbackReason(failureReason);
 
     if (syntheticFallback) {
@@ -413,40 +753,16 @@ const buildRecommendationDepthSteps = ({
         const syntheticSteps = [];
         if (actionStep) {
             syntheticSteps.push(actionStep);
-        } else if (snippet) {
-            syntheticSteps.push('Start with the quoted passage and strengthen one concrete claim with explicit support.');
         } else {
-            syntheticSteps.push(`Apply the highest-impact edit for ${checkName}: tighten one core claim and add concrete evidence.`);
+            syntheticSteps.push(`Tighten the core claim for ${checkName} and add one concrete supporting detail.`);
         }
-        syntheticSteps.push(`Re-run analysis and confirm ${checkName} returns pass.`);
         return normalizeGuidanceSteps(syntheticSteps).slice(0, 2);
     }
-    const needsScaffold = steps.length < 2;
-
-    if (needsScaffold) {
-        if (snippet) {
-            steps.push('Start from the quoted passage and rewrite one clear claim with no filler language.');
-        } else {
-            steps.push(`Locate the section tied to ${checkName} and rewrite the weakest sentence first.`);
-        }
-
-        if (operation === 'convert_to_list' || operation === 'convert_to_steps') {
-            steps.push('Convert dense prose into short bullets so each point carries one concrete action or fact.');
-        } else if (operation === 'heading_support_range') {
-            steps.push('Keep the heading intact and strengthen the supporting sentences directly below it.');
-        } else {
-            steps.push('Add one concrete supporting detail (fact, number, condition, or source cue) near the revised claim.');
-        }
-
-        if (actionStep) {
-            steps.push(actionStep);
-        }
-        steps.push(`Re-run analysis and confirm ${checkName} passes.`);
-    } else if (actionStep && steps.length < 4) {
+    if (steps.length === 0 && actionStep) {
         steps.push(actionStep);
     }
 
-    return normalizeGuidanceSteps(steps).slice(0, 4);
+    return normalizeGuidanceSteps(steps).slice(0, 3);
 };
 
 const enrichRecommendationExplanationPack = (pack, context = {}) => {
@@ -458,8 +774,9 @@ const enrichRecommendationExplanationPack = (pack, context = {}) => {
         : `${checkName} did not provide sufficiently explicit, supportable evidence in this section.`;
 
     const whatFailed = clampGuidanceText(normalized.what_failed || fallbackWhatFailed, 280);
-    const whyItMatters = clampGuidanceText(normalized.why_it_matters || context.whyFallback || '', 300);
+    const whyItMatters = clampGuidanceText(normalized.why_it_matters || context.whyFallback || '', 220);
     const depthSteps = buildRecommendationDepthSteps({
+        checkId: context.checkId || '',
         checkName,
         snippet,
         actionSuggestion: context.actionSuggestion || '',
@@ -468,26 +785,284 @@ const enrichRecommendationExplanationPack = (pack, context = {}) => {
         failureReason: context.failureReason || ''
     });
     const syntheticFallback = isSyntheticFallbackReason(context.failureReason);
+    const isSemantic = context.isSemantic === true;
+    const finalDepthSteps = isSemantic ? depthSteps.slice(0, 1) : depthSteps;
+    const preservedIssueExplanation = clampGuidanceText(normalized.issue_explanation || '', 420);
+    const preserveIssueExplanationForCheck = ANSWER_EXTRACTABILITY_DETAIL_CHECKS.has(String(context.checkId || '').trim());
+    const canonicalIssueExplanation = (!syntheticFallback && preserveIssueExplanationForCheck && preservedIssueExplanation)
+        ? preservedIssueExplanation
+        : ((!syntheticFallback && isSemantic)
+            ? buildSemanticRecommendationNarrative({
+                checkId: context.checkId || '',
+                checkName,
+                failureReason: context.failureReason || '',
+                actionSuggestion: context.actionSuggestion || '',
+                rewriteTarget: context.rewriteTarget || null,
+                whyItMatters,
+                summaryMessage: normalized.what_failed || fallbackWhatFailed,
+                fixSteps: finalDepthSteps
+            })
+            : (!syntheticFallback
+                ? buildNonSemanticRecommendationNarrative({
+                    checkId: context.checkId || '',
+                    failureReason: context.failureReason || '',
+                    summaryMessage: normalized.what_failed || fallbackWhatFailed,
+                    whyItMatters,
+                    fixSteps: finalDepthSteps
+                })
+                : ''));
 
     const merged = {
         what_failed: whatFailed,
         ...(whyItMatters ? { why_it_matters: whyItMatters } : {}),
-        ...(depthSteps.length ? { how_to_fix_steps: depthSteps } : {}),
-        ...(!syntheticFallback && normalized.example_pattern
+        ...(finalDepthSteps.length ? { how_to_fix_steps: finalDepthSteps } : {}),
+        ...(canonicalIssueExplanation ? { issue_explanation: canonicalIssueExplanation } : {}),
+        ...(!isSemantic && !syntheticFallback && normalized.example_pattern
             ? { example_pattern: normalized.example_pattern }
-            : (!syntheticFallback && context.examplePattern ? { example_pattern: context.examplePattern } : {}))
+            : (!isSemantic && !syntheticFallback && context.examplePattern ? { example_pattern: context.examplePattern } : {}))
     };
 
     return normalizeExplanationPack(merged);
 };
 
-const normalizeExplanationPack = (rawPack) => {
+const QUESTION_ANCHOR_GATED_CHECKS = new Set([
+    'immediate_answer_placement',
+    'answer_sentence_concise',
+    'question_answer_alignment',
+    'clear_answer_formatting'
+]);
+
+const ANSWER_EXTRACTABILITY_DETAIL_CHECKS = new Set([
+    'immediate_answer_placement',
+    'answer_sentence_concise',
+    'question_answer_alignment',
+    'clear_answer_formatting',
+    'faq_structure_opportunity'
+]);
+
+const INTERNAL_GUARDRAIL_EXPLANATION_PATTERNS = [
+    /strict question anchor/i,
+    /cannot be evaluated/i,
+    /remains unproven/i,
+    /could not be validated/i,
+    /no strict question anchors? (?:were|was) detected/i
+];
+
+const isInternalGuardrailExplanation = (value) => {
+    const text = String(value || '').trim();
+    if (!text) return false;
+    return INTERNAL_GUARDRAIL_EXPLANATION_PATTERNS.some((pattern) => pattern.test(text));
+};
+
+const buildQuestionAnchorEditorialExplanation = (checkId, reason) => {
+    const normalizedCheckId = String(checkId || '').trim();
+    const normalizedReason = String(reason || '').trim().toLowerCase();
+    if (normalizedCheckId === 'faq_structure_opportunity') {
+        return normalizedReason === 'invalid_or_missing_question_anchor'
+            ? 'The article contains answerable topics, but the question-and-answer structure is too ambiguous to support reliable FAQ extraction.'
+            : 'The content shares useful information, but it is not organized into explicit question-and-answer pairs that support FAQ extraction.';
+    }
+    if (normalizedCheckId === 'faq_jsonld_generation_suggestion') {
+        return normalizedReason === 'invalid_or_missing_question_anchor'
+            ? 'The article hints at answerable topics, but the question-and-answer path is too ambiguous to support reliable FAQ schema guidance.'
+            : 'The content is not framed as clear question-and-answer pairs, so FAQ schema support is only partial.';
+    }
+    const answerFallbackByCheck = {
+        immediate_answer_placement: normalizedReason === 'invalid_or_missing_question_anchor'
+            ? 'The topic is covered, but the opening does not show a clear query-to-answer path that supports immediate answer extraction.'
+            : 'The opening is informative, but it does not present a clear question-led setup for direct answer extraction in the first section.',
+        answer_sentence_concise: normalizedReason === 'invalid_or_missing_question_anchor'
+            ? 'The answer idea is present, but the query-to-answer path is too ambiguous to confirm a concise extractable answer sentence.'
+            : 'The content includes useful detail, but it is not structured as concise question-led answer sentences.',
+        question_answer_alignment: normalizedReason === 'invalid_or_missing_question_anchor'
+            ? 'The response appears relevant, but the query-to-answer path is too ambiguous to verify strong question-answer alignment.'
+            : 'The section is informative, but it is not organized into explicit question-led answers that prove clear alignment.',
+        clear_answer_formatting: normalizedReason === 'invalid_or_missing_question_anchor'
+            ? 'The content covers the topic, but the query-to-answer path is too ambiguous to support clearly formatted answer extraction.'
+            : 'The section shares useful information, but it is not formatted as explicit question-and-answer blocks for clear extraction.'
+    };
+    if (answerFallbackByCheck[normalizedCheckId]) {
+        return answerFallbackByCheck[normalizedCheckId];
+    }
+    return normalizedReason === 'invalid_or_missing_question_anchor'
+        ? 'The article covers the topic, but the query-to-answer path is too ambiguous to support strong direct-answer extraction.'
+        : 'The content is informative, but it is not structured around explicit question prompts that support direct-answer extraction.';
+};
+
+const buildQuestionAnchorEditorialWhy = (checkId) => {
+    if (String(checkId || '').trim() === 'faq_structure_opportunity') {
+        return 'Reusable FAQ sections work best when repeated user questions are grouped into short, explicit question-and-answer pairs.';
+    }
+    return 'Explicit query-to-answer structure makes answer spans easier to extract, trust, and cite consistently.';
+};
+
+const getAnswerExtractabilitySnippetWordCount = (context = {}) => {
+    const candidates = [
+        context.snippet,
+        context.checkData?.details?.answer_snippet,
+        context.checkData?.details?.selected_answer_snippet,
+        context.checkData?.details?.answer_sentence,
+        context.checkData?.details?.first_answer_sentence
+    ];
+    const snippet = candidates
+        .map((value) => String(value || '').replace(/\s+/g, ' ').trim())
+        .find(Boolean) || '';
+    return snippet ? countWords(snippet) : 0;
+};
+
+const buildConciseAnswerSnippetFallbackText = () => (
+    'The opening answer does not yet read as a clean reusable snippet. Keep the first answer near 40-60 words and make sure it stands alone without extra setup or filler.'
+);
+
+const hasImplausibleConciseAnswerMath = (text, context = {}) => {
+    if (String(context.checkId || '').trim() !== 'answer_sentence_concise') {
+        return false;
+    }
+    const snippetWordCount = getAnswerExtractabilitySnippetWordCount(context);
+    if (!snippetWordCount) {
+        return false;
+    }
+    const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!normalized) {
+        return false;
+    }
+
+    const overThresholdMatch = normalized.match(
+        /(\d+)\s+words?\s+over\s+the\s+ideal\s+(\d+)(?:\s*-\s*(\d+))?[\s-]*word\s+threshold/i
+    );
+    if (overThresholdMatch) {
+        const overBy = Number(overThresholdMatch[1]);
+        const high = Number(overThresholdMatch[3] || overThresholdMatch[2]);
+        const expectedWordCount = high + overBy;
+        if (snippetWordCount <= high) {
+            return true;
+        }
+        if (Math.abs(expectedWordCount - snippetWordCount) >= 18) {
+            return true;
+        }
+    }
+
+    const explicitWordCountMatch = normalized.match(
+        /(?:opening answer|answer sentence|first sentence|opening sentence|answer)\s+(?:is|has)\s+(\d+)\s+words?/i
+    );
+    if (explicitWordCountMatch) {
+        const claimedWordCount = Number(explicitWordCountMatch[1]);
+        if (Math.abs(claimedWordCount - snippetWordCount) >= 18) {
+            return true;
+        }
+    }
+
+    return false;
+};
+
+const sanitizeGuardrailTextForUser = (value, context = {}) => {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    if (!isInternalGuardrailExplanation(text)) {
+        return text;
+    }
+    const checkId = String(context.checkId || '').trim();
+    const reason = String(
+        context.guardrailReason
+        || context.failureReason
+        || context.checkData?.guardrail_reason
+        || ''
+    ).trim().toLowerCase();
+    if (!QUESTION_ANCHOR_GATED_CHECKS.has(checkId)) {
+        return text;
+    }
+    if (context.field === 'why_it_matters') {
+        return buildQuestionAnchorEditorialWhy(checkId);
+    }
+    if (context.field === 'issue_explanation') {
+        return '';
+    }
+    return buildQuestionAnchorEditorialExplanation(checkId, reason);
+};
+
+const normalizeAnswerExtractabilityFailureText = (value, context = {}) => {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    const checkId = String(context.checkId || '').trim();
+
+    if (
+        checkId === 'immediate_answer_placement'
+        && (
+            /answer appears at 121-150 words after the question anchor/i.test(text)
+            || /direct answer starts at \d+ words/i.test(text)
+        )
+    ) {
+        return 'The check did not confirm a direct answer within the first 120 words after the selected question anchor.';
+    }
+
+    if (
+        checkId === 'answer_sentence_concise'
+        && /lacks (?:direct|specific) evidence|evidence for the claim/i.test(text)
+    ) {
+        const wordCountMatch = text.match(/(\d+)\s+words?/i);
+        if (wordCountMatch) {
+            return `The opening answer is ${wordCountMatch[1]} words, which is near the target range but still below the ideal reusable answer band.`;
+        }
+        return 'The opening answer is near the target range, but it still falls short of the ideal reusable answer band.';
+    }
+
+    if (checkId === 'answer_sentence_concise' && hasImplausibleConciseAnswerMath(text, context)) {
+        return buildConciseAnswerSnippetFallbackText();
+    }
+
+    return text;
+};
+
+const resolveRawIssueExplanationForUser = (value, context = {}, fallbackMessage = '') => {
+    const checkId = String(context.checkId || '').trim();
+    if (!ANSWER_EXTRACTABILITY_DETAIL_CHECKS.has(checkId)) {
+        return '';
+    }
+    const guardrailReason = String(
+        context.guardrailReason
+        || context.checkData?.guardrail_reason
+        || ''
+    ).trim().toLowerCase();
+    if (
+        context.checkData?.guardrail_adjusted
+        || guardrailReason === 'no_strict_question_anchor'
+        || guardrailReason === 'invalid_or_missing_question_anchor'
+    ) {
+        return '';
+    }
+    const sanitized = clampGuidanceText(
+        sanitizeGuardrailTextForUser(value || '', { ...context, field: 'issue_explanation' }),
+        420
+    );
+    if (!sanitized) {
+        return '';
+    }
+    const normalizedExtractability = normalizeAnswerExtractabilityFailureText(sanitized, context);
+    if (normalizedExtractability && normalizedExtractability !== sanitized) {
+        return '';
+    }
+    if (isNearDuplicateText(sanitized, fallbackMessage)) {
+        return '';
+    }
+    return sanitized;
+};
+
+const normalizeExplanationPack = (rawPack, context = {}) => {
     if (!rawPack || typeof rawPack !== 'object') return null;
-    const whatFailed = clampGuidanceText(rawPack.what_failed || rawPack.message || '', 280);
-    const whyItMatters = clampGuidanceText(rawPack.why_it_matters || '', 300);
+    const whatFailed = clampGuidanceText(
+        sanitizeGuardrailTextForUser(rawPack.what_failed || rawPack.message || '', { ...context, field: 'what_failed' }),
+        280
+    );
+    const whyItMatters = clampGuidanceText(
+        sanitizeGuardrailTextForUser(rawPack.why_it_matters || '', { ...context, field: 'why_it_matters' }),
+        300
+    );
     const howToFixSteps = normalizeGuidanceSteps(rawPack.how_to_fix_steps);
     const examplePattern = clampGuidanceText(rawPack.example_pattern || '', 240);
-    const issueExplanation = clampGuidanceText(rawPack.issue_explanation || '', 900);
+    const issueExplanation = clampGuidanceText(
+        sanitizeGuardrailTextForUser(rawPack.issue_explanation || '', { ...context, field: 'issue_explanation' }),
+        420
+    );
     if (!whatFailed && !whyItMatters && howToFixSteps.length === 0 && !examplePattern && !issueExplanation) {
         return null;
     }
@@ -508,17 +1083,6 @@ const stableHash = (value) => {
         hash |= 0;
     }
     return Math.abs(hash);
-};
-
-const buildSemanticWhyItMatters = ({ checkName, definitionDescription, checkId, runId, instanceIndex }) => {
-    const variants = SEMANTIC_WHY_IT_MATTERS_VARIANTS;
-    const seed = `${String(runId || '')}:${String(checkId || '')}:${Number.isFinite(instanceIndex) ? instanceIndex : 0}:semantic-why`;
-    const idx = stableHash(seed) % variants.length;
-    const selected = variants[idx];
-    const raw = typeof selected === 'function'
-        ? selected({ checkName, definitionDescription })
-        : '';
-    return clampGuidanceText(raw, 300);
 };
 
 const pickDeterministicVariant = (variants, seed) => {
@@ -546,9 +1110,27 @@ const buildDeterministicExplanationPack = ({ checkId, runId, instanceIndex, mess
     const selectedVariant = pickDeterministicVariant(variantPool, seed);
     const normalizedVariant = normalizeExplanationPack(selectedVariant);
     if (normalizedVariant) {
-        return normalizedVariant;
+        const preferredWhatFailed = clampGuidanceText(message || '', 280);
+        return normalizeExplanationPack({
+            ...normalizedVariant,
+            what_failed: preferredWhatFailed
+                && !isAggregateInlineMessage(preferredWhatFailed)
+                && clampGuidanceText(snippet || '', 40)
+                ? preferredWhatFailed
+                : normalizedVariant.what_failed
+        });
     }
     const fallbackSteps = [];
+    const fallbackStepByCheckId = {
+        canonical_clarity: 'Set one absolute canonical URL that points to this page\'s preferred canonical URL.',
+        ai_crawler_accessibility: 'Remove restrictive indexing or snippet directives if this page should be reusable by answer engines.',
+        itemlist_jsonld_presence_and_completeness: 'Add ItemList JSON-LD that mirrors the visible list entries and their order.',
+        heading_like_text_uses_heading_markup: 'Convert the pseudo-heading paragraph into a real heading that matches the surrounding outline.'
+    };
+    const preferredSpecificStep = String(fallbackStepByCheckId[String(checkId || '').trim()] || '').trim();
+    if (preferredSpecificStep) {
+        fallbackSteps.push(preferredSpecificStep);
+    }
     if (snippet) {
         fallbackSteps.push('Edit this specific snippet first, then tighten the surrounding sentence for clarity.');
     } else {
@@ -618,21 +1200,49 @@ const isGenericRepairInstruction = (value) => {
 const composeIssueExplanationNarrative = (pack) => {
     const normalized = normalizeExplanationPack(pack);
     if (!normalized) return '';
-    const explicit = clampGuidanceText(stripGuidanceScaffold(pack && pack.issue_explanation ? pack.issue_explanation : ''), 900);
-    if (explicit) return explicit;
-    const parts = [];
-    if (normalized.what_failed) parts.push(ensureSentence(normalized.what_failed));
-    if (normalized.why_it_matters) parts.push(ensureSentence(normalized.why_it_matters));
-    if (Array.isArray(normalized.how_to_fix_steps) && normalized.how_to_fix_steps.length) {
-        normalized.how_to_fix_steps.slice(0, 3).forEach((step) => {
-            const sentence = ensureSentence(step);
-            if (sentence) parts.push(sentence);
-        });
+    const explicit = trimToWordLimit(
+        clampGuidanceText(stripGuidanceScaffold(pack && pack.issue_explanation ? pack.issue_explanation : ''), 420),
+        60
+    );
+    if (explicit && !isInternalGuardrailExplanation(explicit)) return explicit;
+    const firstSentenceParts = [];
+    if (normalized.what_failed) {
+        firstSentenceParts.push(trimToWordLimit(normalized.what_failed, 22));
     }
-    if (normalized.example_pattern) {
-        parts.push(ensureSentence(`For example, ${normalized.example_pattern}`));
+    if (normalized.why_it_matters && !isNearDuplicateText(normalized.what_failed, normalized.why_it_matters)) {
+        firstSentenceParts.push(trimToWordLimit(normalized.why_it_matters, 16));
     }
-    return clampGuidanceText(parts.join(' ').replace(/\s+/g, ' ').trim(), 900);
+    const sentenceOne = ensureSentence(trimToWordLimit(firstSentenceParts.join(' '), 34));
+    const fixStep = Array.isArray(normalized.how_to_fix_steps)
+        ? normalized.how_to_fix_steps.find((step) =>
+            step
+            && !isLowValueGuidanceStep(step)
+            && !isNearDuplicateText(step, sentenceOne)
+            && !isNearDuplicateText(step, normalized.what_failed)
+            && !isNearDuplicateText(step, normalized.why_it_matters)
+        )
+        : '';
+    const sentenceTwo = fixStep ? ensureSentence(trimToWordLimit(fixStep, 24)) : '';
+    return trimToWordLimit([sentenceOne, sentenceTwo].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(), 60);
+};
+
+const REVIEW_SUMMARY_BY_CHECK = {
+    immediate_answer_placement: 'The section reaches the answer only after setup instead of leading with it.',
+    answer_sentence_concise: 'The opening answer does not stand alone as a clean reusable snippet for quoting and reuse.',
+    question_answer_alignment: 'The response stays near the topic, but it does not cleanly resolve the exact question being asked.',
+    clear_answer_formatting: 'The answer is understandable, but the main point stays buried in dense prose instead of standing out clearly.',
+    faq_structure_opportunity: 'The section answers repeated user questions, but the answers stay packed into prose instead of reusable FAQ pairs.'
+};
+
+const composeReviewSummaryNarrative = (pack, context = {}) => {
+    const explicit = clampGuidanceText(String(pack && pack.review_summary || '').trim(), 220);
+    if (explicit) {
+        return ensureSentence(trimToWordLimit(explicit, 26));
+    }
+    const checkId = String(context.checkId || '').trim();
+    const fallback = REVIEW_SUMMARY_BY_CHECK[checkId];
+    if (!fallback) return '';
+    return ensureSentence(trimToWordLimit(fallback, 26));
 };
 
 const inferExamplePattern = ({ rewriteTarget, failureReason, checkId }) => {
@@ -650,6 +1260,87 @@ const inferExamplePattern = ({ rewriteTarget, failureReason, checkId }) => {
         return 'State the claim directly, add a verifiable source near it, and include one concrete number/date.';
     }
     return 'Lead with a direct statement, add one supporting fact, then close with a concrete next step.';
+};
+
+const resolveCheckAwareFixHint = ({
+    checkId,
+    failureReason,
+    actionSuggestion,
+    rewriteTarget
+}) => {
+    const normalizedCheckId = String(checkId || '').trim();
+    const normalizedReason = String(failureReason || '').trim().toLowerCase();
+    const operation = String(rewriteTarget?.operation || '').trim().toLowerCase();
+    const suggested = normalizeStepText(actionSuggestion, 160);
+
+    if (suggested && !isGenericRepairInstruction(suggested) && !isLowValueGuidanceStep(suggested)) {
+        return suggested;
+    }
+    if (normalizedCheckId === 'faq_jsonld_generation_suggestion' && normalizedReason === 'faq_jsonld_generation_non_inline') {
+        return 'Rewrite the content into visible Q&A pairs before adding FAQ schema.';
+    }
+
+    const byCheckId = {
+        immediate_answer_placement: 'Place one direct answer sentence immediately after the question heading, then move setup or caveats after it.',
+        answer_sentence_concise: 'Keep the opening answer near 40-60 words total. Two or three short sentences are fine if they deliver one complete answer.',
+        question_answer_alignment: 'Use the query term in the opening answer and answer it directly, not indirectly.',
+        clear_answer_formatting: 'Split the opening answer into short, scannable sentences or bullets so the main point stands alone.',
+        faq_structure_opportunity: 'Only convert this section into FAQ format if it answers repeated user questions with short, direct answers.',
+        faq_jsonld_generation_suggestion: 'Generate FAQ schema from the detected FAQ-ready pairs and review the draft before inserting it.',
+        article_jsonld_presence_and_completeness: 'Generate Article JSON-LD for this page and review the required fields before inserting it.',
+        readability_adaptivity: 'Shorten long sentences, reduce clause stacking, and replace jargon so the passage scans cleanly on first read.',
+        appropriate_paragraph_length: 'Split this paragraph into 2-3 shorter paragraphs, keeping one claim and one support detail per paragraph.',
+        external_authoritative_sources: 'Name the source directly and place it next to the factual claim it supports.',
+        claim_provenance_and_evidence: 'Add one concrete source, statistic, date, or example directly next to the claim.',
+        original_evidence_signal: 'Add one first-hand example, proprietary observation, or original measurement that only this page can provide.',
+        citation_format_and_context: 'Place the claim and its named source in the same sentence or the next sentence.',
+        temporal_claim_check: 'Add an explicit date, time window, or update marker wherever the claim implies recency or change over time.',
+        named_entities_detected: 'Name the relevant person, company, product, or place explicitly instead of relying on generic labels or pronouns.',
+        promotional_or_commercial_intent: 'Replace hype or imperative language with neutral wording and one verifiable supporting detail.',
+        internal_link_context_relevance: 'Add one relevant internal link next to the concept it supports, using descriptive anchor text.',
+        howto_schema_presence_and_completeness: 'Generate HowTo schema from the detected steps and review the draft before inserting it.',
+        howto_jsonld_presence_and_completeness: 'Rewrite the section as numbered steps before adding HowTo schema.',
+        howto_semantic_validity: 'Turn the section into ordered steps with one action per step and no promotional filler.',
+        itemlist_jsonld_presence_and_completeness: 'Generate ItemList JSON-LD from the visible list entries and review the draft before inserting it.',
+        heading_like_text_uses_heading_markup: 'Convert this section label into a real heading block that matches the surrounding outline level.',
+        semantic_html_usage: 'Replace generic containers with semantic headings, sections, or lists that match the visible structure.',
+        canonical_clarity: 'Set one absolute canonical URL that points to this page’s preferred public version.',
+        ai_crawler_accessibility: 'Remove restrictive indexing or snippet directives if this page should be reusable by answer engines.'
+    };
+    if (Object.prototype.hasOwnProperty.call(byCheckId, normalizedCheckId)) {
+        return byCheckId[normalizedCheckId];
+    }
+
+    if (operation === 'convert_to_list' || operation === 'convert_to_steps') {
+        return 'Convert the dense sentence into bullets or steps so each item carries one action or fact.';
+    }
+    if (operation === 'heading_support_range') {
+        return 'Keep the heading and rewrite the supporting lines so each sentence adds one concrete supporting point.';
+    }
+
+    const byReason = {
+        block_wide: 'Break the section into shorter claim-level sentences so one idea stands on its own.',
+        too_wide: 'Narrow the section to one main claim and one supporting detail.',
+        low_precision: 'Replace vague wording with one explicit claim and one concrete support detail.',
+        external_sources_document_scope: 'Add one named authoritative source near the strongest factual claim.',
+        claim_evidence_section_scope: 'Support the main claim with one statistic, source, or example in the same section.',
+        citation_support_document_scope: 'Put the claim and its citation together so the evidence is immediately visible.',
+        internal_links_document_scope: 'Add a relevant internal link where the supporting concept is first mentioned.',
+        article_schema_non_inline: 'Add primary Article JSON-LD with headline, author, date, and page reference that matches this page.',
+        faq_jsonld_generation_non_inline: 'Rewrite the content into visible Q&A pairs before adding FAQ schema.',
+        howto_schema_non_inline: 'Rewrite the content into numbered steps before adding HowTo schema.',
+        itemlist_schema_non_inline: 'Add ItemList JSON-LD that mirrors the visible list entries and their order.',
+        heading_like_markup_non_inline: 'Convert the pseudo-heading paragraph into a real heading that matches the surrounding outline.',
+        semantic_structure_non_inline: 'Use headings, sections, and lists that match the visible structure of the content.',
+        missing_required_h1: 'Add one clear H1 that states the main page topic in plain language.',
+        missing_author_byline: 'Add a visible byline near the title with the author name.',
+        missing_author_bio: 'Add a short author bio that shows relevant expertise for this topic.'
+    };
+    if (Object.prototype.hasOwnProperty.call(byReason, normalizedReason)) {
+        return byReason[normalizedReason];
+    }
+
+    return 'Rewrite the section so the main claim is explicit, specific, and supported by one concrete detail.';
 };
 
 const buildIssueExplanationPack = ({
@@ -673,15 +1364,27 @@ const buildIssueExplanationPack = ({
         || 'this check',
         120
     );
-    const definitionDescription = clampGuidanceText(
-        definitionMeta?.description || definitionMeta?.category_description || '',
-        220
-    );
     const normalizedFailureReason = String(failureReason || '').trim().toLowerCase();
+    const explanationContext = {
+        checkId,
+        failureReason,
+        checkData,
+        guardrailReason: checkData?.guardrail_reason || '',
+        snippet
+    };
+    const guardrailReason = String(explanationContext.guardrailReason || normalizedFailureReason || '').trim().toLowerCase();
+    const questionAnchorGuardrailActive = QUESTION_ANCHOR_GATED_CHECKS.has(String(checkId || '').trim())
+        && (guardrailReason === 'no_strict_question_anchor' || guardrailReason === 'invalid_or_missing_question_anchor');
     const resolvedMessage = clampGuidanceText(
-        message
-        || checkData?.explanation
-        || `${checkName} did not meet the required quality threshold.`,
+        normalizeAnswerExtractabilityFailureText(
+            sanitizeGuardrailTextForUser(
+                message
+                || checkData?.explanation
+                || `${checkName} did not meet the required quality threshold.`,
+                { ...explanationContext, field: 'what_failed' }
+            ),
+            explanationContext
+        ),
         260
     );
     if (isSyntheticFallbackReason(normalizedFailureReason)) {
@@ -693,31 +1396,42 @@ const buildIssueExplanationPack = ({
             failureReason: normalizedFailureReason
         });
     }
-    const aiPack = normalizeExplanationPack(sourcePack)
-        || normalizeExplanationPack(checkData?.ai_explanation_pack)
-        || normalizeExplanationPack(checkData?.explanation_pack);
+    const aiPack = normalizeExplanationPack(sourcePack, explanationContext)
+        || normalizeExplanationPack(checkData?.ai_explanation_pack, explanationContext)
+        || normalizeExplanationPack(checkData?.explanation_pack, explanationContext);
+    const rawIssueExplanation = resolveRawIssueExplanationForUser(
+        checkData?.issue_explanation || checkData?.explanation || '',
+        explanationContext,
+        resolvedMessage
+    );
     if (aiPack) {
-        const preferredActionSuggestion = !isGenericRepairInstruction(actionSuggestion)
-            ? normalizeStepText(actionSuggestion, 220)
-            : '';
+        const preferredActionSuggestion = resolveCheckAwareFixHint({
+            checkId,
+            failureReason,
+            actionSuggestion,
+            rewriteTarget
+        });
         const merged = {
             ...aiPack,
-            what_failed: aiPack.what_failed || resolvedMessage,
-            why_it_matters: aiPack.why_it_matters || buildSemanticWhyItMatters({
-                checkName,
-                definitionDescription,
-                checkId,
-                runId,
-                instanceIndex
-            })
+            what_failed: resolvedMessage,
+            why_it_matters: aiPack.why_it_matters || (
+                questionAnchorGuardrailActive
+                    ? buildQuestionAnchorEditorialWhy(checkId)
+                    : buildSemanticWhyItMatters({
+                        checkName,
+                        checkId,
+                        failureReason: normalizedFailureReason
+                    })
+            )
         };
+        if (rawIssueExplanation && !merged.issue_explanation) {
+            merged.issue_explanation = rawIssueExplanation;
+        }
         if (preferredActionSuggestion && (!Array.isArray(merged.how_to_fix_steps) || merged.how_to_fix_steps.length === 0)) {
             merged.how_to_fix_steps = [preferredActionSuggestion];
         }
-        if (!merged.example_pattern) {
-            merged.example_pattern = inferExamplePattern({ rewriteTarget, failureReason, checkId });
-        }
-        return normalizeExplanationPack(merged);
+        delete merged.example_pattern;
+        return normalizeExplanationPack(merged, explanationContext);
     }
 
     if (isDeterministicCheckData(checkData)) {
@@ -734,32 +1448,26 @@ const buildIssueExplanationPack = ({
 
     const whyItMatters = buildSemanticWhyItMatters({
         checkName,
-        definitionDescription,
         checkId,
-        runId,
-        instanceIndex
+        failureReason: normalizedFailureReason
     });
-    const steps = [];
-    if (snippet) {
-        steps.push('Locate the flagged snippet and edit only the smallest sentence/section needed.');
-    } else {
-        steps.push(`Locate the section tied to ${checkName} and isolate the weakest passage first.`);
-    }
-    const actionStep = isGenericRepairInstruction(actionSuggestion)
-        ? ''
-        : normalizeStepText(actionSuggestion, 220);
-    if (actionStep) {
-        steps.push(actionStep);
-    } else {
-        steps.push('Rewrite for clarity and specificity: remove filler, keep one clear claim, and add concrete support.');
-    }
-    steps.push(`Re-run analysis and confirm ${checkName} returns pass.`);
+    const resolvedWhyItMatters = questionAnchorGuardrailActive
+        ? buildQuestionAnchorEditorialWhy(checkId)
+        : whyItMatters;
+    const steps = [
+        resolveCheckAwareFixHint({
+            checkId,
+            failureReason,
+            actionSuggestion,
+            rewriteTarget
+        })
+    ].filter(Boolean);
 
     return {
         what_failed: resolvedMessage,
-        why_it_matters: whyItMatters,
-        how_to_fix_steps: steps.slice(0, 3),
-        example_pattern: inferExamplePattern({ rewriteTarget, failureReason, checkId })
+        why_it_matters: resolvedWhyItMatters,
+        how_to_fix_steps: steps.slice(0, 1),
+        ...(rawIssueExplanation ? { issue_explanation: rawIssueExplanation } : {})
     };
 };
 
@@ -787,6 +1495,13 @@ const getRuntimeContractCheckPolicy = (checkId) => {
         evidence_mode: String(entry.evidence_mode || '').trim().toLowerCase(),
         rewrite_mode: String(entry.rewrite_mode || '').trim().toLowerCase(),
         allowed_scopes: allowedScopes,
+        schema_assist_mode: String(entry.schema_assist_mode || '').trim().toLowerCase(),
+        schema_assist_insert_mode: String(entry.schema_assist_insert_mode || '').trim().toLowerCase(),
+        schema_assist_source_check_id: String(entry.schema_assist_source_check_id || '').trim(),
+        schema_assist_target_scope: String(entry.schema_assist_target_scope || '').trim().toLowerCase(),
+        schema_assist_identity_basis: String(entry.schema_assist_identity_basis || '').trim().toLowerCase(),
+        schema_assist_conflict_strategy: String(entry.schema_assist_conflict_strategy || '').trim().toLowerCase(),
+        schema_assist_replace_scope: String(entry.schema_assist_replace_scope || '').trim().toLowerCase(),
         rewrite_target_policy: String(entry.rewrite_target_policy || '').trim().toLowerCase(),
         rewrite_allowed_ops: Array.isArray(entry.rewrite_allowed_ops)
             ? entry.rewrite_allowed_ops.map((op) => String(op || '').trim()).filter(Boolean)
@@ -795,6 +1510,258 @@ const getRuntimeContractCheckPolicy = (checkId) => {
             ? entry.rewrite_context_window
             : null
     };
+};
+
+const resolveSchemaAssistMode = (schemaAssist, contractPolicy) => {
+    const explicit = String(contractPolicy?.schema_assist_mode || '').trim().toLowerCase();
+    if (explicit) return explicit;
+    if (schemaAssist?.can_insert === true) return 'generate_copy_insert';
+    if (schemaAssist?.can_copy === true) return 'generate_copy';
+    return 'unavailable';
+};
+
+const resolveSchemaAssistInsertMode = (schemaAssist, contractPolicy) => {
+    const explicit = String(contractPolicy?.schema_assist_insert_mode || '').trim().toLowerCase();
+    if (explicit) return explicit;
+    if (schemaAssist?.can_insert === true) return 'jsonld_conflict_aware_insert';
+    if (schemaAssist?.can_copy === true) return 'copy_only';
+    return 'unavailable';
+};
+
+const deriveSchemaAssistInsertCapability = (schemaAssist, _contractPolicy, schemaAssistMode, insertMode) => {
+    if (schemaAssist?.can_insert === true && insertMode === 'jsonld_conflict_aware_insert') {
+        return 'conflict_aware_insert';
+    }
+    if (schemaAssist?.can_insert === true && schemaAssistMode === 'generate_copy_insert') {
+        return 'insert';
+    }
+    if (schemaAssist?.can_copy === true) {
+        return 'copy_only';
+    }
+    return 'unavailable';
+};
+
+const buildSchemaAssistInsertPolicyHints = (contractPolicy, schemaAssistMode, insertMode) => {
+    const hints = {};
+    if (schemaAssistMode) hints.schema_assist_mode = schemaAssistMode;
+    if (insertMode) hints.insert_mode = insertMode;
+    if (contractPolicy?.schema_assist_target_scope) {
+        hints.target_scope = contractPolicy.schema_assist_target_scope;
+    }
+    if (contractPolicy?.schema_assist_identity_basis) {
+        hints.identity_basis = contractPolicy.schema_assist_identity_basis;
+    }
+    if (contractPolicy?.schema_assist_conflict_strategy) {
+        hints.conflict_strategy = contractPolicy.schema_assist_conflict_strategy;
+    }
+    if (contractPolicy?.schema_assist_replace_scope) {
+        hints.replace_scope = contractPolicy.schema_assist_replace_scope;
+    }
+    if (insertMode === 'jsonld_conflict_aware_insert') {
+        hints.exact_match_action = 'no_op_existing_match';
+        hints.managed_target_action = 'replace_existing_ai_block_when_single_clear_match';
+        hints.external_conflict_action = 'copy_only_external_conflict';
+        hints.default_insert_action = 'append_new_block';
+    }
+    return Object.keys(hints).length ? hints : null;
+};
+
+const attachSchemaAssistPolicy = (checkId, schemaAssist) => {
+    if (!schemaAssist || typeof schemaAssist !== 'object') return schemaAssist;
+    const contractPolicy = getRuntimeContractCheckPolicy(String(checkId || '').trim()) || null;
+    const schemaAssistMode = resolveSchemaAssistMode(schemaAssist, contractPolicy);
+    const insertMode = resolveSchemaAssistInsertMode(schemaAssist, contractPolicy);
+    const insertCapability = deriveSchemaAssistInsertCapability(schemaAssist, contractPolicy, schemaAssistMode, insertMode);
+    const insertPolicyHints = buildSchemaAssistInsertPolicyHints(contractPolicy, schemaAssistMode, insertMode);
+    return {
+        ...schemaAssist,
+        schema_assist_mode: schemaAssistMode,
+        schema_assist_insert_mode: insertMode,
+        insert_capability: insertCapability,
+        ...(contractPolicy?.schema_assist_source_check_id
+            ? { schema_assist_source_check_id: contractPolicy.schema_assist_source_check_id }
+            : {}),
+        ...(insertPolicyHints ? { insert_policy_hints: insertPolicyHints } : {})
+    };
+};
+
+const shouldForceBlockLevelRelease = (checkId) => String(checkId || '').trim() === 'lists_tables_presence';
+
+const shouldSuppressCheckRelease = (checkId, checks) => {
+    const normalizedId = String(checkId || '').trim();
+    const checkData = checks?.[normalizedId];
+    if (isInternalSchemaBridgeDiagnostic(checkData)) {
+        return true;
+    }
+    if (isNeutralDeterministicSchemaDiagnostic(normalizedId, checkData)) {
+        return true;
+    }
+    if (isVerificationAvailabilityDiagnostic(normalizedId, checkData)) {
+        return true;
+    }
+    if (normalizedId === 'internal_link_context_relevance') {
+        const linkCount = Number(checks?.no_broken_internal_links?.details?.internal_link_count || 0);
+        if (linkCount === 0) return true;
+    }
+    return false;
+};
+
+const resolveSerializerScope = (checkId, requestedScope) => {
+    const normalizeSerializerScopeValue = (value) => {
+        const normalized = String(value || '').trim().toLowerCase();
+        return normalized === 'sentence' || normalized === 'span' || normalized === 'block'
+            ? normalized
+            : 'span';
+    };
+    const normalizedRequested = normalizeSerializerScopeValue(requestedScope || 'span');
+    if (shouldForceBlockLevelRelease(checkId)) return 'block';
+    const policy = getRuntimeContractCheckPolicy(checkId);
+    const allowedScopes = Array.isArray(policy?.allowed_scopes)
+        ? policy.allowed_scopes
+            .map((scope) => normalizeSerializerScopeValue(scope))
+            .filter((scope) => scope === 'sentence' || scope === 'span' || scope === 'block')
+        : [];
+    if (!allowedScopes.length) return normalizedRequested;
+    if (allowedScopes.length === 1) return allowedScopes[0];
+    if (allowedScopes.includes(normalizedRequested)) return normalizedRequested;
+    if (allowedScopes.includes('block')) return 'block';
+    if (allowedScopes.includes('sentence')) return 'sentence';
+    if (allowedScopes.includes('span')) return 'span';
+    return normalizedRequested;
+};
+
+const isBlockOnlySerializerCheck = (checkId) => shouldForceBlockLevelRelease(checkId);
+
+const OPPORTUNITY_RELEASE_COLLAPSE_CHECKS = new Set([
+    'lists_tables_presence',
+    'faq_structure_opportunity',
+    'clear_answer_formatting',
+    'howto_semantic_validity',
+    'readability_adaptivity'
+]);
+
+const isOpportunityReleaseCollapseCheck = (checkId, checkData) => {
+    const normalizedCheckId = String(checkId || '').trim();
+    const provenance = String(checkData?.provenance || '').trim().toLowerCase();
+    return OPPORTUNITY_RELEASE_COLLAPSE_CHECKS.has(normalizedCheckId) && provenance !== 'deterministic';
+};
+
+const buildReleaseBlockMetaByNodeRef = (blockMap) => {
+    const map = new Map();
+    (Array.isArray(blockMap) ? blockMap : []).forEach((block, index) => {
+        const nodeRef = typeof block?.node_ref === 'string' ? block.node_ref.trim() : '';
+        if (!nodeRef) return;
+        map.set(nodeRef, {
+            index,
+            block_type: typeof block?.block_type === 'string' ? block.block_type.toLowerCase() : ''
+        });
+    });
+    return map;
+};
+
+const buildReleaseHighlightCollapseKey = (checkId, checkData, highlight) => {
+    if (!isOpportunityReleaseCollapseCheck(checkId, checkData)) {
+        return '';
+    }
+    if (String(highlight?.anchor_recovery_strategy || '').trim() !== 'selector_cross_block') {
+        return '';
+    }
+    const selector = highlight?.text_quote_selector && typeof highlight.text_quote_selector === 'object'
+        ? highlight.text_quote_selector
+        : (highlight?.quote && typeof highlight.quote === 'object' ? highlight.quote : {});
+    const selectorExact = normalizeComparisonText(selector?.exact || '');
+    const boundary = highlight?.boundary && typeof highlight.boundary === 'object' ? highlight.boundary : {};
+    const boundaryKey = [
+        normalizeComparisonText(boundary?.first_words || ''),
+        normalizeComparisonText(boundary?.last_words || '')
+    ].filter(Boolean).join('|');
+    const messageKey = normalizeComparisonText(highlight?.message || checkData?.explanation || '');
+    const seed = selectorExact || boundaryKey;
+    if (!seed) {
+        return '';
+    }
+    return [String(checkId || '').trim(), messageKey || 'no_message', seed].join('|');
+};
+
+const chooseReleaseGroupPrimaryHighlight = (highlights, blockMetaByNodeRef) => {
+    const items = Array.isArray(highlights) ? highlights.filter((item) => item && typeof item === 'object') : [];
+    if (!items.length) {
+        return null;
+    }
+    const ranked = items.slice().sort((left, right) => {
+        const leftNodeRef = typeof left?.node_ref === 'string' ? left.node_ref.trim() : '';
+        const rightNodeRef = typeof right?.node_ref === 'string' ? right.node_ref.trim() : '';
+        const leftMeta = leftNodeRef ? blockMetaByNodeRef.get(leftNodeRef) : null;
+        const rightMeta = rightNodeRef ? blockMetaByNodeRef.get(rightNodeRef) : null;
+        const leftHeadingPenalty = String(leftMeta?.block_type || '').includes('heading') ? 1 : 0;
+        const rightHeadingPenalty = String(rightMeta?.block_type || '').includes('heading') ? 1 : 0;
+        if (leftHeadingPenalty !== rightHeadingPenalty) {
+            return leftHeadingPenalty - rightHeadingPenalty;
+        }
+        const leftLength = String(left?.snippet || left?.text || '').trim().length;
+        const rightLength = String(right?.snippet || right?.text || '').trim().length;
+        if (leftLength !== rightLength) {
+            return rightLength - leftLength;
+        }
+        const leftIndex = Number.isInteger(leftMeta?.index) ? leftMeta.index : Number.MAX_SAFE_INTEGER;
+        const rightIndex = Number.isInteger(rightMeta?.index) ? rightMeta.index : Number.MAX_SAFE_INTEGER;
+        return leftIndex - rightIndex;
+    });
+    return ranked[0];
+};
+
+const collapseReleaseHighlightGroups = ({ checkId, checkData, highlights, blockMap = [] }) => {
+    const items = Array.isArray(highlights) ? highlights.filter((item) => item && typeof item === 'object') : [];
+    if (!items.length) {
+        return [];
+    }
+    const blockMetaByNodeRef = buildReleaseBlockMetaByNodeRef(blockMap);
+    const groups = [];
+    let currentGroup = null;
+
+    items.forEach((highlight, rawIndex) => {
+        const collapseKey = buildReleaseHighlightCollapseKey(checkId, checkData, highlight);
+        const nodeRef = typeof highlight?.node_ref === 'string' ? highlight.node_ref.trim() : '';
+        const blockMeta = nodeRef ? blockMetaByNodeRef.get(nodeRef) : null;
+        const blockIndex = Number.isInteger(blockMeta?.index) ? blockMeta.index : null;
+        const isContiguous = currentGroup
+            && collapseKey
+            && currentGroup.collapse_key === collapseKey
+            && (
+                !Number.isInteger(blockIndex)
+                || !Number.isInteger(currentGroup.last_block_index)
+                || blockIndex <= currentGroup.last_block_index + 1
+            );
+
+        if (isContiguous) {
+            currentGroup.highlights.push(highlight);
+            if (Number.isInteger(blockIndex)) {
+                currentGroup.last_block_index = blockIndex;
+            }
+            currentGroup.source_instance_indexes.push(rawIndex);
+            return;
+        }
+
+        currentGroup = {
+            collapse_key: collapseKey || `single:${rawIndex}`,
+            highlights: [highlight],
+            last_block_index: blockIndex,
+            source_instance_indexes: [rawIndex]
+        };
+        groups.push(currentGroup);
+    });
+
+    return groups.map((group, collapsedIndex) => ({
+        instance_index: collapsedIndex,
+        issue_key: `${String(checkId || '').trim()}:${collapsedIndex}`,
+        primary_highlight: chooseReleaseGroupPrimaryHighlight(group.highlights, blockMetaByNodeRef) || group.highlights[0],
+        highlights: group.highlights.slice(),
+        source_instance_indexes: group.source_instance_indexes.slice(),
+        collapsed: !String(group.collapse_key || '').startsWith('single:') && group.highlights.length > 1,
+        collapse_reason: !String(group.collapse_key || '').startsWith('single:') && group.highlights.length > 1
+            ? 'selector_cross_block'
+            : ''
+    }));
 };
 
 const resolveEvidencePolicy = (checkId, checkData) => {
@@ -1191,6 +2158,15 @@ const serializeForSidebar = (fullAnalysis, runId = 'unknown', options = {}) => {
     const checks = fullAnalysis.checks || {};
 
     Object.entries(checks).forEach(([checkId, checkData]) => {
+        if (shouldSuppressCheckRelease(checkId, checks)) {
+            transformationLog.push({
+                check_id: checkId,
+                original_verdict: checkData?.verdict || 'unknown',
+                ui_verdict: mapVerdictToUiVerdict(checkData?.verdict || 'fail'),
+                suppressed: 'scope_not_triggered'
+            });
+            return;
+        }
         if (isSyntheticDiagnosticCheck(checkData)) {
             transformationLog.push({
                 check_id: checkId,
@@ -1233,8 +2209,30 @@ const serializeForSidebar = (fullAnalysis, runId = 'unknown', options = {}) => {
 
         // Include fail/partial checks as issues with full highlight data
         if (uiVerdict === 'fail' || uiVerdict === 'partial') {
-            const effectiveHighlights = checkData.highlights || [];
-            const instanceCount = effectiveHighlights.length;
+            const highlightGroups = collapseReleaseHighlightGroups({
+                checkId,
+                checkData,
+                highlights: checkData.highlights || []
+            });
+            const effectiveHighlights = highlightGroups.length
+                ? highlightGroups.map((group) => ({
+                    ...(group.primary_highlight || {}),
+                    instance_index: group.instance_index,
+                    issue_key: group.issue_key,
+                    collapsed: group.collapsed === true,
+                    collapse_reason: group.collapse_reason || '',
+                    collapsed_member_count: Array.isArray(group.highlights) ? group.highlights.length : 1,
+                    collapsed_source_instance_indexes: Array.isArray(group.source_instance_indexes)
+                        ? group.source_instance_indexes.slice()
+                        : []
+                }))
+                : (checkData.highlights || []);
+            const failedCandidates = Array.isArray(checkData.failed_candidates) ? checkData.failed_candidates : [];
+            const candidateHighlights = Array.isArray(checkData.candidate_highlights) ? checkData.candidate_highlights : [];
+            const allInstances = [...effectiveHighlights, ...failedCandidates, ...candidateHighlights];
+            const instanceCount = allInstances.length > 0
+                ? allInstances.length
+                : Math.max(Number(checkData.instance_count || 0), 1);
 
             const compactHighlights = effectiveHighlights.map((highlight, highlightIndex) => {
                 const snippet = highlight.snippet || highlight.text || '';
@@ -1285,6 +2283,7 @@ const serializeForSidebar = (fullAnalysis, runId = 'unknown', options = {}) => {
                 });
                 compactHighlight.explanation_pack = highlightExplanationPack;
                 compactHighlight.issue_explanation = composeIssueExplanationNarrative(highlightExplanationPack);
+                compactHighlight.review_summary = composeReviewSummaryNarrative(highlightExplanationPack, { checkId });
                 if (rewriteContext.rewrite_target) {
                     compactHighlight.rewrite_target = rewriteContext.rewrite_target;
                 }
@@ -1293,16 +2292,12 @@ const serializeForSidebar = (fullAnalysis, runId = 'unknown', options = {}) => {
                 }
                 return compactHighlight;
             });
-            const firstInstanceNodeRef = effectiveHighlights.length > 0 && effectiveHighlights[0].node_ref
-                ? effectiveHighlights[0].node_ref
+            const firstInstanceSource = allInstances.length > 0
+                ? allInstances[0]
                 : null;
-            const firstInstanceSource = effectiveHighlights.length > 0
-                ? effectiveHighlights[0]
-                : ((Array.isArray(checkData.failed_candidates) && checkData.failed_candidates.length > 0)
-                    ? checkData.failed_candidates[0]
-                    : ((Array.isArray(checkData.candidate_highlights) && checkData.candidate_highlights.length > 0)
-                        ? checkData.candidate_highlights[0]
-                        : null));
+            const firstInstanceNodeRef = firstInstanceSource && firstInstanceSource.node_ref
+                ? firstInstanceSource.node_ref
+                : null;
             const firstInstanceSnippet = firstInstanceSource
                 ? String(firstInstanceSource.snippet || firstInstanceSource.text || '').trim()
                 : '';
@@ -1321,10 +2316,23 @@ const serializeForSidebar = (fullAnalysis, runId = 'unknown', options = {}) => {
                 highlight: effectiveHighlights.length > 0 ? effectiveHighlights[0] : null,
                 fallbackSource: firstInstanceSource
             });
+            const preferExplanationSummary = Boolean(
+                checkData?.guardrail_adjusted
+                && (
+                    String(checkData?.guardrail_reason || '').trim().toLowerCase() === 'no_strict_question_anchor'
+                    || String(checkData?.guardrail_reason || '').trim().toLowerCase() === 'invalid_or_missing_question_anchor'
+                )
+            );
+            const summaryFailureMessage = clampGuidanceText(
+                preferExplanationSummary
+                    ? (checkData.explanation || effectiveHighlights[0]?.message || firstInstanceSource?.message || '')
+                    : (effectiveHighlights[0]?.message || firstInstanceSource?.message || checkData.explanation || ''),
+                220
+            );
             const issueExplanationPack = buildIssueExplanationPack({
                 checkId,
                 checkData,
-                message: checkData.explanation || '',
+                message: summaryFailureMessage,
                 actionSuggestion: issueRewriteContext?.repair_intent?.instruction || checkData.explanation || '',
                 snippet: firstInstanceSnippet,
                 failureReason: '',
@@ -1352,6 +2360,7 @@ const serializeForSidebar = (fullAnalysis, runId = 'unknown', options = {}) => {
                 },
                 explanation_pack: issueExplanationPack,
                 issue_explanation: composeIssueExplanationNarrative(issueExplanationPack),
+                review_summary: composeReviewSummaryNarrative(issueExplanationPack, { checkId }),
                 highlights: includeHighlights ? compactHighlights : []
             };
             if (issueRewriteContext.rewrite_target) {
@@ -1511,7 +2520,7 @@ const prepareSidebarPayload = (fullAnalysis, options = {}) => {
  * @param {number} instanceIndex - Optional instance index for highlights
  * @returns {Object|null} - Full check details or null if not found
  */
-const extractCheckDetails = (fullAnalysis, checkId, instanceIndex = null) => {
+const extractCheckDetails = (fullAnalysis, checkId, instanceIndex = null, manifest = null) => {
     const checks = fullAnalysis.checks || {};
     const check = checks[checkId];
 
@@ -1530,6 +2539,7 @@ const extractCheckDetails = (fullAnalysis, checkId, instanceIndex = null) => {
     const candidateHighlights = Array.isArray(check.candidate_highlights) ? check.candidate_highlights : [];
     const failedCandidates = Array.isArray(check.failed_candidates) ? check.failed_candidates : [];
     const fallbackMessage = typeof check.explanation === 'string' ? check.explanation : '';
+    const blockMap = Array.isArray(manifest?.block_map) ? manifest.block_map : [];
     const normalizeScope = (value) => {
         if (value === 'sentence' || value === 'span' || value === 'block') return value;
         return 'span';
@@ -1586,6 +2596,28 @@ const extractCheckDetails = (fullAnalysis, checkId, instanceIndex = null) => {
             anchor_strategy: highlight.anchor_strategy || null
         };
     };
+    const highlightGroups = collapseReleaseHighlightGroups({
+        checkId,
+        checkData: check,
+        highlights,
+        blockMap
+    });
+    const effectiveHighlights = highlightGroups.length
+        ? highlightGroups.map((group) => normalizeHighlight({
+            ...(group.primary_highlight || {}),
+            instance_index: group.instance_index,
+            issue_key: group.issue_key,
+            collapsed: group.collapsed === true,
+            collapse_reason: group.collapse_reason || '',
+            collapsed_member_count: Array.isArray(group.highlights) ? group.highlights.length : 1,
+            collapsed_source_instance_indexes: Array.isArray(group.source_instance_indexes)
+                ? group.source_instance_indexes.slice()
+                : []
+        }))
+        : highlights.map((highlight) => normalizeHighlight(highlight));
+    const allInstances = [...effectiveHighlights, ...failedCandidates, ...candidateHighlights];
+    details.highlights = effectiveHighlights;
+    details.instance_count = effectiveHighlights.length;
     const normalizeCandidate = (candidate) => {
         if (!candidate || typeof candidate !== 'object') return candidate;
         const snippet = candidate.snippet || candidate.text || (candidate.quote && candidate.quote.exact) || '';
@@ -1605,14 +2637,13 @@ const extractCheckDetails = (fullAnalysis, checkId, instanceIndex = null) => {
 
     // If instance index specified, filter highlights to that instance
     if (instanceIndex !== null) {
-        if (highlights[instanceIndex]) {
-            details.focused_highlight = normalizeHighlight(highlights[instanceIndex]);
-        } else if (failedCandidates[instanceIndex]) {
-            details.focused_failed_candidate = normalizeCandidate(failedCandidates[instanceIndex]);
-            details.cannot_anchor = true;
-        } else if (candidateHighlights[instanceIndex]) {
-            details.focused_failed_candidate = normalizeCandidate(candidateHighlights[instanceIndex]);
-            details.cannot_anchor = true;
+        if (allInstances[instanceIndex]) {
+            if (instanceIndex < effectiveHighlights.length) {
+                details.focused_highlight = effectiveHighlights[instanceIndex];
+            } else {
+                details.focused_failed_candidate = normalizeCandidate(allInstances[instanceIndex]);
+                details.cannot_anchor = true;
+            }
         }
     }
 
@@ -1636,6 +2667,7 @@ function buildHighlightedHtml(manifest, analysisResult) {
     const generatedAt = new Date().toISOString();
     const stabilityReleaseMode = isStabilityReleaseModeEnabled();
     const crypto = require('crypto');
+    const categoryLookup = buildCategoryLookup();
     const runMetadata = (analysisResult && analysisResult.run_metadata && typeof analysisResult.run_metadata === 'object')
         ? analysisResult.run_metadata
         : ((manifest && manifest.run_metadata && typeof manifest.run_metadata === 'object')
@@ -1851,7 +2883,7 @@ function buildHighlightedHtml(manifest, analysisResult) {
     };
     const DETERMINISTIC_HEADING_INLINE_CHECKS = new Set([
         'heading_fragmentation',
-        'orphan_headings',
+        'heading_topic_fulfillment',
         'logical_heading_hierarchy'
     ]);
     const evaluateInlinePrecision = ({
@@ -1949,11 +2981,46 @@ function buildHighlightedHtml(manifest, analysisResult) {
 
     const signatureToNodeRef = new Map();
     const nodeRefToText = new Map();
+    const nodeRefToBlock = new Map();
     blockMap.forEach((b) => {
         if (!b) return;
         if (b.signature && b.node_ref) signatureToNodeRef.set(String(b.signature), String(b.node_ref));
         if (b.node_ref) nodeRefToText.set(String(b.node_ref), normalizeText(b.text || b.text_content || ''));
+        if (b.node_ref) nodeRefToBlock.set(String(b.node_ref), b);
     });
+
+    const getMediaPreview = (block) => {
+        const meta = block && typeof block === 'object' && block.meta && typeof block.meta === 'object'
+            ? block.meta
+            : {};
+        const src = String(
+            meta.image_src
+            || (Array.isArray(meta.image_sources) && meta.image_sources.length ? meta.image_sources[0] : '')
+            || ''
+        ).trim();
+        if (!src) {
+            return null;
+        }
+        return {
+            src,
+            alt: String(meta.image_alt || '').trim(),
+            caption: String(meta.image_caption || '').trim()
+        };
+    };
+
+    const renderPreviewBodyHtml = (block, renderedTextHtml) => {
+        const media = getMediaPreview(block);
+        if (!media) {
+            return renderedTextHtml;
+        }
+        const captionHtml = media.caption
+            ? `<figcaption>${escapeHtml(media.caption)}</figcaption>`
+            : '';
+        const labelHtml = renderedTextHtml
+            ? `<div class="aivi-overlay-media-label">${renderedTextHtml}</div>`
+            : '';
+        return `<figure class="aivi-overlay-media-block"><img src="${escapeAttr(media.src)}" alt="${escapeAttr(media.alt)}" />${captionHtml}${labelHtml}</figure>`;
+    };
 
     const highlightsByNodeRef = new Map();
     const unhighlightableIssues = [];
@@ -2024,6 +3091,9 @@ function buildHighlightedHtml(manifest, analysisResult) {
             }));
             schemaAssist = null;
         }
+        if (schemaAssist && typeof schemaAssist === 'object') {
+            schemaAssist = attachSchemaAssistPolicy(normalizedCheckId, schemaAssist);
+        }
         schemaAssistCache.set(normalizedCheckId, schemaAssist || null);
         return schemaAssist;
     };
@@ -2064,9 +3134,90 @@ function buildHighlightedHtml(manifest, analysisResult) {
         }
         return '';
     };
+    const resolveDocumentScopeContextNodeRef = (checkData) => {
+        if (!checkData || typeof checkData !== 'object') return '';
+        const details = checkData.details && typeof checkData.details === 'object' ? checkData.details : {};
+        const directCandidates = [
+            details.context_node_ref,
+            details.heading_node_ref,
+            details.primary_node_ref
+        ];
+        for (const candidate of directCandidates) {
+            if (typeof candidate === 'string' && candidate.trim()) {
+                return candidate.trim();
+            }
+        }
+        const detectedSteps = Array.isArray(details.detected_steps) ? details.detected_steps : [];
+        for (const step of detectedSteps) {
+            const stepNodeRef = resolveNodeRef(step);
+            if (stepNodeRef) {
+                return stepNodeRef;
+            }
+            if (typeof step?.heading_node_ref === 'string' && step.heading_node_ref.trim()) {
+                return step.heading_node_ref.trim();
+            }
+        }
+        for (const step of detectedSteps) {
+            const stepText = normalizeText(step?.text || '').toLowerCase();
+            if (!stepText) {
+                continue;
+            }
+            for (const [candidateNodeRef, blockText] of nodeRefToText.entries()) {
+                if (blockText && blockText.includes(stepText)) {
+                    return candidateNodeRef;
+                }
+            }
+        }
+        const detectedPairs = Array.isArray(details.detected_pairs) ? details.detected_pairs : [];
+        for (const pair of detectedPairs) {
+            const pairNodeRef = resolveNodeRef(pair);
+            if (pairNodeRef) {
+                return pairNodeRef;
+            }
+            if (typeof pair?.heading_node_ref === 'string' && pair.heading_node_ref.trim()) {
+                return pair.heading_node_ref.trim();
+            }
+        }
+        for (const pair of detectedPairs) {
+            const pairTexts = [
+                normalizeText(pair?.question || '').toLowerCase(),
+                normalizeText(pair?.answer || '').toLowerCase()
+            ].filter(Boolean);
+            if (!pairTexts.length) {
+                continue;
+            }
+            for (const [candidateNodeRef, blockText] of nodeRefToText.entries()) {
+                if (!blockText) {
+                    continue;
+                }
+                if (pairTexts.some((text) => blockText.includes(text))) {
+                    return candidateNodeRef;
+                }
+            }
+        }
+        return '';
+    };
     const resolveRecommendationAction = (failureReason, context = {}) => {
         const normalizedReason = String(failureReason || '').toLowerCase();
+        const normalizedCheckId = String(context.check_id || '').trim();
         const checkName = String(context.check_name || context.check_id || 'this check').trim();
+        const byCheckId = {
+            readability_adaptivity: 'Shorten long sentences, reduce clause stacking, and replace jargon so the section scans cleanly on first read.',
+            temporal_claim_check: 'Add an explicit date, time window, or update marker wherever the copy implies recency or change over time.',
+            named_entities_detected: 'Name the relevant person, company, product, or place explicitly instead of relying on generic labels or pronouns.'
+        };
+        if (
+            Object.prototype.hasOwnProperty.call(byCheckId, normalizedCheckId)
+            && (
+                normalizedReason === 'no_highlight_candidates'
+                || normalizedReason === 'recommendation_only_policy'
+                || normalizedReason === 'missing_candidate'
+                || normalizedReason === 'missing_snippet'
+                || normalizedReason === 'anchor_failed'
+            )
+        ) {
+            return byCheckId[normalizedCheckId];
+        }
         if (normalizedReason.startsWith('metadata_')) {
             return 'Update title, meta description, canonical URL, and language metadata at the document level.';
         }
@@ -2086,10 +3237,10 @@ function buildHighlightedHtml(manifest, analysisResult) {
             return 'Strengthen this section with concrete evidence or citations for the claim being made.';
         }
         if (normalizedReason === 'faq_jsonld_generation_non_inline') {
-            return 'Generate and add FAQ JSON-LD for this section in your schema/SEO settings.';
+            return 'Rewrite the visible content into reusable Q&A pairs before adding FAQ JSON-LD.';
         }
         if (normalizedReason === 'intro_schema_non_inline') {
-            return 'Add FAQ/HowTo schema for the intro question using your schema/SEO settings.';
+            return 'Add the recommended schema type only if it matches the visible intro exactly, then validate it in your schema or SEO settings.';
         }
         if (normalizedReason === 'semantic_structure_non_inline') {
             return 'Add semantic HTML elements (article, section, nav, main) to improve structural clarity.';
@@ -2135,9 +3286,9 @@ function buildHighlightedHtml(manifest, analysisResult) {
             case 'deterministic_highlight_unavailable':
                 return 'Review this deterministic issue in Recommendations and apply a direct content-level fix.';
             case 'intro_wordcount_non_inline':
-                return 'Adjust the intro toward the target range (about 40-60 words): keep one direct topic sentence and one supporting fact.';
+                return 'Aim for 40-150 intro words; 20-39 or 151-200 can still work, below 20 is too short, and above 200 is too long. Keep one direct topic sentence and one supporting fact.';
             case 'intro_readability_non_inline':
-                return 'Simplify the intro by splitting long sentences, reducing passive voice, and keeping wording direct.';
+                return 'Shorten long intro sentences, reduce passive voice, and aim for sentences at or below 22 words so the opening is easier to scan.';
             case 'intro_composite_non_inline':
                 return 'Refocus the intro on one explicit topic sentence, add one concrete supporting fact, and remove filler.';
             case 'recommendation_only_policy':
@@ -2172,12 +3323,18 @@ function buildHighlightedHtml(manifest, analysisResult) {
         sourcePack
     }) => {
         const normalizedInstanceIndex = Number.isFinite(Number(instanceIndex)) ? Number(instanceIndex) : 0;
+        const originalMessage = String(message || '').trim();
+        const deterministicReviewLead = isDeterministicCheckData(check)
+            ? clampGuidanceText(getDeterministicReviewLead(checkId), 220)
+            : '';
+        const resolvedMessage = deterministicReviewLead || originalMessage;
         const resolution = resolveRecommendationRewriteContext(checkId, check, normalizedInstanceIndex);
         const rewriteTarget = resolution && resolution.rewrite_target && resolution.rewrite_target.actionable === true
             ? resolution.rewrite_target
             : null;
         const repairIntent = resolution && resolution.repair_intent ? resolution.repair_intent : null;
         const normalizedFailureReason = failureReason ? String(failureReason) : '';
+        const contextualNodeRef = resolveDocumentScopeContextNodeRef(check);
         const resolvedNodeRef = isSyntheticFallbackReason(normalizedFailureReason)
             ? ''
             : (
@@ -2185,6 +3342,7 @@ function buildHighlightedHtml(manifest, analysisResult) {
                 || (signature ? (signatureToNodeRef.get(signature) || '') : '')
                 || (rewriteTarget && rewriteTarget.primary_node_ref ? String(rewriteTarget.primary_node_ref) : '')
             );
+        const resolvedJumpNodeRef = resolvedNodeRef || contextualNodeRef || '';
         const definitionMeta = getCheckDefinitionMeta(checkId);
         const checkName = (check && (check.title || check.name))
             ? String(check.title || check.name)
@@ -2195,15 +3353,13 @@ function buildHighlightedHtml(manifest, analysisResult) {
         });
         const semanticWhyFallback = buildSemanticWhyItMatters({
             checkName: clampGuidanceText(checkName || checkId || 'this check', 120),
-            definitionDescription: clampGuidanceText(getCheckDefinitionMeta(checkId)?.description || '', 220),
             checkId,
-            runId,
-            instanceIndex: normalizedInstanceIndex
+            failureReason: normalizedFailureReason
         });
         const explanationPack = buildIssueExplanationPack({
             checkId,
             checkData: check || {},
-            message,
+            message: originalMessage || resolvedMessage,
             actionSuggestion,
             snippet,
             failureReason: normalizedFailureReason,
@@ -2213,13 +3369,15 @@ function buildHighlightedHtml(manifest, analysisResult) {
             instanceIndex: normalizedInstanceIndex
         });
         const enrichedExplanationPack = enrichRecommendationExplanationPack(explanationPack, {
+            checkId,
             checkName: checkName || checkId || 'this check',
             snippet,
             actionSuggestion,
             rewriteTarget,
             failureReason: normalizedFailureReason,
             whyFallback: semanticWhyFallback,
-            examplePattern: inferExamplePattern({ rewriteTarget, failureReason: normalizedFailureReason, checkId })
+            examplePattern: inferExamplePattern({ rewriteTarget, failureReason: normalizedFailureReason, checkId }),
+            isSemantic: !isDeterministicCheckData(check)
         });
         if (rewriteTarget) {
             recommendationTelemetry.actionable += 1;
@@ -2235,6 +3393,10 @@ function buildHighlightedHtml(manifest, analysisResult) {
             recommendationTelemetry.by_failure_reason[normalizedFailureReason] =
                 (recommendationTelemetry.by_failure_reason[normalizedFailureReason] || 0) + 1;
         }
+        const reviewSummary = composeReviewSummaryNarrative(enrichedExplanationPack, {
+            checkId,
+            failureReason: normalizedFailureReason
+        });
         const baseIssue = {
             run_id: runId || '',
             check_id: String(checkId || ''),
@@ -2242,15 +3404,16 @@ function buildHighlightedHtml(manifest, analysisResult) {
             instance_index: normalizedInstanceIndex,
             issue_key: `${String(checkId || '')}:${normalizedInstanceIndex}`,
             verdict: String(verdict),
-            message: String(message || '').slice(0, 300),
-            rationale: String(message || '').slice(0, 300),
+            message: resolvedMessage.slice(0, 300),
+            rationale: isDeterministicCheckData(check) ? resolvedMessage.slice(0, 300) : '',
             snippet: snippet ? String(snippet).slice(0, 600) : '',
             action_suggestion: actionSuggestion,
             explanation_pack: enrichedExplanationPack,
             issue_explanation: composeIssueExplanationNarrative(enrichedExplanationPack),
+            ...(reviewSummary ? { review_summary: reviewSummary } : {}),
             failure_reason: normalizedFailureReason,
             node_ref: resolvedNodeRef,
-            jump_node_ref: resolvedNodeRef,
+            jump_node_ref: resolvedJumpNodeRef,
             signature: signature || '',
             anchor_status: 'unhighlightable',
             analysis_ref: {
@@ -2286,6 +3449,13 @@ function buildHighlightedHtml(manifest, analysisResult) {
             const checkId = String(issue.check_id || '').trim();
             const nodeRef = String(issue.node_ref || '').trim();
             const reason = String(issue.failure_reason || '').trim();
+            if (isBlockOnlySerializerCheck(checkId)) {
+                const blockKey = [checkId, nodeRef].join('|');
+                if (seen.has(blockKey)) return;
+                seen.add(blockKey);
+                deduped.push(issue);
+                return;
+            }
             const snippet = String(issue.snippet || '')
                 .toLowerCase()
                 .replace(/\s+/g, ' ')
@@ -2299,6 +3469,7 @@ function buildHighlightedHtml(manifest, analysisResult) {
         return deduped;
     };
     Object.entries(checks).forEach(([checkId, check]) => {
+        if (shouldSuppressCheckRelease(checkId, checks)) return;
         if (!check) return;
         const verdict = check.ui_verdict || check.verdict;
         if (verdict !== 'fail' && verdict !== 'partial') return;
@@ -2325,32 +3496,56 @@ function buildHighlightedHtml(manifest, analysisResult) {
         const evidencePolicy = resolveEvidencePolicy(checkId, check);
         const highlightIntentPolicy = resolveHighlightIntentPolicy(checkId, evidencePolicy, check);
         if (highlightIntentPolicy.intent !== 'inline') {
-            const policyHighlight = (Array.isArray(check.highlights) && check.highlights.length > 0
-                ? check.highlights[0]
-                : ((Array.isArray(check.failed_candidates) && check.failed_candidates.length > 0
-                    ? check.failed_candidates[0]
-                    : ((Array.isArray(check.candidate_highlights) && check.candidate_highlights.length > 0)
-                        ? check.candidate_highlights[0]
-                        : null))));
-            const policyNodeRef = resolveNodeRef(policyHighlight || {});
-            const policyMessage = resolveInlineIssueMessage({
-                checkId,
-                checkData: check,
-                preferredMessage: policyHighlight?.message,
-                fallbackMessage: check.explanation || `${String(checkId || '')} requires manual review`
-            });
-            unhighlightableIssues.push(buildUnhighlightableIssue({
-                checkId,
-                check,
-                instanceIndex: 0,
-                verdict,
-                message: policyMessage,
-                snippet: policyHighlight?.snippet || policyHighlight?.text || '',
-                failureReason: highlightIntentPolicy.reason || 'non_inline_policy',
-                nodeRef: policyNodeRef,
-                signature: policyHighlight?.signature || '',
-                sourcePack: policyHighlight?.explanation_pack || check.ai_explanation_pack || null
-            }));
+            const policyHighlights = Array.isArray(check.highlights) ? check.highlights : [];
+            const policyFailed = Array.isArray(check.failed_candidates) ? check.failed_candidates : [];
+            const policyCandidates = Array.isArray(check.candidate_highlights) ? check.candidate_highlights : [];
+            const policyInstances = [...policyHighlights, ...policyFailed, ...policyCandidates];
+
+            if (policyInstances.length === 0) {
+                const policyMessage = resolveInlineIssueMessage({
+                    checkId,
+                    checkData: check,
+                    preferredMessage: '',
+                    fallbackMessage: check.explanation || `${String(checkId || '')} requires manual review`
+                });
+                unhighlightableIssues.push(buildUnhighlightableIssue({
+                    checkId,
+                    check,
+                    instanceIndex: 0,
+                    verdict,
+                    message: policyMessage,
+                    snippet: '',
+                    failureReason: highlightIntentPolicy.reason || 'non_inline_policy',
+                    nodeRef: '',
+                    signature: '',
+                    sourcePack: check.ai_explanation_pack || check.explanation_pack || null
+                }));
+            } else {
+                policyInstances.forEach((policyInstance, idx) => {
+                    const instanceIndex = typeof policyInstance?.instance_index === 'number'
+                        ? policyInstance.instance_index
+                        : idx;
+                    const policyNodeRef = resolveNodeRef(policyInstance || {});
+                    const policyMessage = resolveInlineIssueMessage({
+                        checkId,
+                        checkData: check,
+                        preferredMessage: policyInstance?.message,
+                        fallbackMessage: check.explanation || `${String(checkId || '')} requires manual review`
+                    });
+                    unhighlightableIssues.push(buildUnhighlightableIssue({
+                        checkId,
+                        check,
+                        instanceIndex,
+                        verdict,
+                        message: policyMessage,
+                        snippet: policyInstance?.snippet || policyInstance?.text || '',
+                        failureReason: policyInstance?.failure_reason || highlightIntentPolicy.reason || 'non_inline_policy',
+                        nodeRef: policyNodeRef,
+                        signature: policyInstance?.signature || '',
+                        sourcePack: policyInstance?.explanation_pack || check.ai_explanation_pack || check.explanation_pack || null
+                    }));
+                });
+            }
             return;
         }
         let hasRenderedInstance = false;
@@ -2379,7 +3574,10 @@ function buildHighlightedHtml(manifest, analysisResult) {
             const nodeRef = resolveNodeRef(candidate);
             const blockText = nodeRef ? (nodeRefToText.get(nodeRef) || '') : '';
             if (nodeRef && blockText) {
-                const candidateScope = normalizeScope(candidate.scope || 'block');
+                const candidateScope = resolveSerializerScope(checkId, candidate.scope || 'block');
+                const effectiveSnippet = candidateScope === 'block' && blockText
+                    ? blockText
+                    : snippet;
                 const candidateRange = {
                     start: 0,
                     end: blockText.length,
@@ -2392,7 +3590,7 @@ function buildHighlightedHtml(manifest, analysisResult) {
                     scope: candidateScope,
                     resolvedRange: candidateRange,
                     blockText,
-                    snippetValue: snippet,
+                    snippetValue: effectiveSnippet,
                     boundary: null,
                     anchorStatus: candidateRange.anchor_status,
                     anchorStrategy: candidateRange.anchor_strategy
@@ -2404,7 +3602,7 @@ function buildHighlightedHtml(manifest, analysisResult) {
                         instanceIndex,
                         verdict,
                         message,
-                        snippet,
+                        snippet: effectiveSnippet,
                         failureReason: candidatePrecision.reason,
                         nodeRef,
                         signature: candidate.signature || '',
@@ -2424,13 +3622,17 @@ function buildHighlightedHtml(manifest, analysisResult) {
                     checkId,
                     checkData: check,
                     message,
-                    actionSuggestion: inlineRepairIntent?.instruction || check?.explanation || '',
-                    snippet,
+                    actionSuggestion: inlineRepairIntent?.instruction || '',
+                    snippet: effectiveSnippet,
                     failureReason,
                     rewriteTarget: inlineRewriteTarget || null,
                     sourcePack: candidate.explanation_pack || check.ai_explanation_pack || null,
                     runId,
                     instanceIndex
+                });
+                const reviewSummary = composeReviewSummaryNarrative(inlineExplanationPack, {
+                    checkId,
+                    failureReason
                 });
                 const issueKey = `${String(checkId || '')}:${instanceIndex}`;
                 const blockOnlyItem = {
@@ -2452,6 +3654,7 @@ function buildHighlightedHtml(manifest, analysisResult) {
                     },
                     explanation_pack: inlineExplanationPack,
                     issue_explanation: composeIssueExplanationNarrative(inlineExplanationPack),
+                    ...(reviewSummary ? { review_summary: reviewSummary } : {}),
                     start: candidatePrecision.start,
                     end: candidatePrecision.end,
                     range_key: `${issueKey}:0`
@@ -2479,8 +3682,10 @@ function buildHighlightedHtml(manifest, analysisResult) {
                     signature: candidate.signature || '',
                     scope: candidateScope,
                     boundary: null,
-                    text_quote_selector: candidate.text_quote_selector || candidate.quote || null,
-                    snippet: snippet ? String(snippet).slice(0, 800) : '',
+                    text_quote_selector: candidateScope === 'block'
+                        ? null
+                        : (candidate.text_quote_selector || candidate.quote || null),
+                    snippet: effectiveSnippet ? String(effectiveSnippet).slice(0, 800) : '',
                     type: candidate.type,
                     anchor_status: candidateRange.anchor_status,
                     anchor_strategy: candidateRange.anchor_strategy,
@@ -2491,7 +3696,8 @@ function buildHighlightedHtml(manifest, analysisResult) {
                         instance_index: instanceIndex
                     },
                     explanation_pack: inlineExplanationPack,
-                    issue_explanation: composeIssueExplanationNarrative(inlineExplanationPack)
+                    issue_explanation: composeIssueExplanationNarrative(inlineExplanationPack),
+                    ...(reviewSummary ? { review_summary: reviewSummary } : {})
                 };
                 if (inlineRewriteTarget) {
                     blockOnlyFinding.rewrite_target = inlineRewriteTarget;
@@ -2518,91 +3724,137 @@ function buildHighlightedHtml(manifest, analysisResult) {
             hasRenderedInstance = true;
         });
         const highlights = Array.isArray(check.highlights) ? check.highlights : [];
-        highlights.forEach((h, idx) => {
-            if (!h) return;
-            const signature = typeof h.signature === 'string' ? h.signature : '';
-            const nodeRef = resolveNodeRef(h);
-            const highlightMessage = resolveInlineIssueMessage({
+        const highlightGroups = collapseReleaseHighlightGroups({
+            checkId,
+            checkData: check,
+            highlights,
+            blockMap
+        });
+        const rewriteReadyCheck = highlightGroups.length
+            ? {
+                ...check,
+                highlights: highlightGroups.map((group) => ({
+                    ...(group.primary_highlight || {}),
+                    instance_index: group.instance_index,
+                    issue_key: group.issue_key
+                }))
+            }
+            : check;
+        highlightGroups.forEach((group, groupIndex) => {
+            if (!group || !group.primary_highlight) return;
+            const instanceIndex = Number.isInteger(group.instance_index) ? group.instance_index : groupIndex;
+            const issueKey = group.issue_key || `${String(checkId || '')}:${instanceIndex}`;
+            const primaryHighlight = group.primary_highlight;
+            const groupHighlights = Array.isArray(group.highlights) && group.highlights.length
+                ? group.highlights
+                : [primaryHighlight];
+            const primaryMessage = resolveInlineIssueMessage({
                 checkId,
                 checkData: check,
-                preferredMessage: h.message,
-                fallbackMessage: check.explanation || ''
-            });
-            if (!nodeRef) {
-                unhighlightableIssues.push(buildUnhighlightableIssue({
-                    checkId,
-                    check,
-                    instanceIndex: idx,
-                    verdict,
-                    message: highlightMessage,
-                    snippet: h.snippet || h.text || '',
-                    failureReason: 'missing_anchor',
-                    nodeRef: '',
-                    signature: signature || '',
-                    sourcePack: h.explanation_pack || check.ai_explanation_pack || null
-                }));
-                hasRenderedInstance = true;
-                return;
-            }
-
-            const blockText = nodeRefToText.get(nodeRef) || '';
-            if (!blockText) {
-                unhighlightableIssues.push(buildUnhighlightableIssue({
-                    checkId,
-                    check,
-                    instanceIndex: idx,
-                    verdict,
-                    message: highlightMessage,
-                    snippet: h.snippet || h.text || '',
-                    failureReason: 'missing_block_text',
-                    nodeRef,
-                    signature: signature || '',
-                    sourcePack: h.explanation_pack || check.ai_explanation_pack || null
-                }));
-                hasRenderedInstance = true;
-                return;
-            }
-
-            const scope = normalizeScope(h.scope);
-            const message = resolveInlineIssueMessage({
-                checkId,
-                checkData: check,
-                preferredMessage: h.message,
+                preferredMessage: primaryHighlight.message,
                 fallbackMessage: check.explanation || ''
             }).toString().slice(0, 300);
-            const snippetValue = h.snippet || h.text || '';
-            const boundaryFallback = buildBoundaryFromText(snippetValue, scope);
-            const boundary = mergeBoundary(h.boundary, boundaryFallback);
-            const textQuoteSelector = h.text_quote_selector || h.quote || null;
-            const resolvedRange = resolveDeterministicRange(blockText, h, scope, boundary, snippetValue);
-            if (!resolvedRange) {
+            const renderedSegments = [];
+            let fallbackFailureReason = '';
+            let fallbackNodeRef = '';
+            let fallbackSignature = '';
+            let fallbackSnippet = primaryHighlight.snippet || primaryHighlight.text || '';
+            let fallbackSourcePack = primaryHighlight.explanation_pack || check.ai_explanation_pack || null;
+
+            groupHighlights.forEach((highlight) => {
+                if (!highlight) return;
+                const signature = typeof highlight.signature === 'string' ? highlight.signature : '';
+                const nodeRef = resolveNodeRef(highlight);
+                const snippetValue = highlight.snippet || highlight.text || '';
+                fallbackSnippet = fallbackSnippet || snippetValue;
+                fallbackSourcePack = fallbackSourcePack || highlight.explanation_pack || check.ai_explanation_pack || null;
+                if (!nodeRef) {
+                    if (!fallbackFailureReason) {
+                        fallbackFailureReason = 'missing_anchor';
+                        fallbackSignature = signature || '';
+                    }
+                    return;
+                }
+
+                const blockText = nodeRefToText.get(nodeRef) || '';
+                if (!blockText) {
+                    if (!fallbackFailureReason) {
+                        fallbackFailureReason = 'missing_block_text';
+                        fallbackNodeRef = nodeRef;
+                        fallbackSignature = signature || '';
+                    }
+                    return;
+                }
+
+                const scope = resolveSerializerScope(checkId, highlight.scope);
+                const effectiveSnippetValue = scope === 'block' && blockText
+                    ? blockText
+                    : snippetValue;
+                const boundaryFallback = buildBoundaryFromText(effectiveSnippetValue, scope);
+                const boundary = mergeBoundary(highlight.boundary, boundaryFallback);
+                const textQuoteSelector = scope === 'block' ? null : (highlight.text_quote_selector || highlight.quote || null);
+                const resolvedRange = resolveDeterministicRange(blockText, highlight, scope, boundary, effectiveSnippetValue);
+                if (!resolvedRange) {
+                    if (!fallbackFailureReason) {
+                        fallbackFailureReason = 'resolver_failed';
+                        fallbackNodeRef = nodeRef;
+                        fallbackSignature = signature || '';
+                    }
+                    return;
+                }
+                const resolvedPrecision = evaluateInlinePrecision({
+                    checkId,
+                    provenance: check.provenance || '',
+                    scope,
+                    resolvedRange,
+                    blockText,
+                    snippetValue: effectiveSnippetValue,
+                    boundary,
+                    anchorStatus: resolvedRange.anchor_status,
+                    anchorStrategy: resolvedRange.anchor_strategy
+                });
+                if (!resolvedPrecision.allowed) {
+                    if (!fallbackFailureReason) {
+                        fallbackFailureReason = resolvedPrecision.reason;
+                        fallbackNodeRef = nodeRef;
+                        fallbackSignature = signature || '';
+                    }
+                    return;
+                }
+
+                renderedSegments.push({
+                    highlight,
+                    nodeRef,
+                    signature,
+                    scope,
+                    boundary,
+                    textQuoteSelector,
+                    effectiveSnippetValue,
+                    resolvedRange,
+                    resolvedPrecision,
+                    isPrimary: highlight === primaryHighlight
+                });
+            });
+
+            if (!renderedSegments.length) {
                 unhighlightableIssues.push(buildUnhighlightableIssue({
                     checkId,
                     check,
-                    instanceIndex: idx,
+                    instanceIndex,
                     verdict,
-                    message,
-                    snippet: snippetValue || '',
-                    failureReason: 'resolver_failed',
-                    nodeRef,
-                    signature: signature || '',
-                    sourcePack: h.explanation_pack || check.ai_explanation_pack || null
+                    message: primaryMessage,
+                    snippet: fallbackSnippet || '',
+                    failureReason: fallbackFailureReason || 'missing_anchor',
+                    nodeRef: fallbackNodeRef || resolveNodeRef(primaryHighlight) || '',
+                    signature: fallbackSignature || (typeof primaryHighlight.signature === 'string' ? primaryHighlight.signature : ''),
+                    sourcePack: fallbackSourcePack
                 }));
                 hasRenderedInstance = true;
                 return;
             }
-            const resolvedPrecision = evaluateInlinePrecision({
-                checkId,
-                provenance: check.provenance || '',
-                scope,
-                resolvedRange,
-                blockText,
-                snippetValue,
-                boundary,
-                anchorStatus: resolvedRange.anchor_status,
-                anchorStrategy: resolvedRange.anchor_strategy
-            });
-            const inlineResolution = resolveRecommendationRewriteContext(checkId, check, idx);
+
+            const representative = renderedSegments.find((segment) => segment.isPrimary) || renderedSegments[0];
+            const inlineResolution = resolveRecommendationRewriteContext(checkId, rewriteReadyCheck, instanceIndex);
             const inlineRewriteTarget = inlineResolution && inlineResolution.rewrite_target
                 ? inlineResolution.rewrite_target
                 : null;
@@ -2612,54 +3864,51 @@ function buildHighlightedHtml(manifest, analysisResult) {
             const inlineExplanationPack = buildIssueExplanationPack({
                 checkId,
                 checkData: check,
-                message,
-                actionSuggestion: inlineRepairIntent?.instruction || check?.explanation || '',
-                snippet: snippetValue || '',
+                message: primaryMessage,
+                actionSuggestion: inlineRepairIntent?.instruction || '',
+                snippet: representative.effectiveSnippetValue || fallbackSnippet || '',
                 failureReason: '',
                 rewriteTarget: inlineRewriteTarget || null,
-                sourcePack: h.explanation_pack || check.ai_explanation_pack || null,
+                sourcePack: representative.highlight.explanation_pack || fallbackSourcePack,
                 runId,
-                instanceIndex: idx
+                instanceIndex
             });
-            if (!resolvedPrecision.allowed) {
-                unhighlightableIssues.push(buildUnhighlightableIssue({
-                    checkId,
-                    check,
-                    instanceIndex: idx,
-                    verdict,
-                    message,
-                    snippet: snippetValue || '',
-                    failureReason: resolvedPrecision.reason,
-                    nodeRef,
-                    signature: signature || '',
-                    sourcePack: h.explanation_pack || check.ai_explanation_pack || null
-                }));
-                hasRenderedInstance = true;
-                return;
-            }
+            const reviewSummary = composeReviewSummaryNarrative(inlineExplanationPack, {
+                checkId,
+                failureReason: ''
+            });
             const inlineFinding = {
                 run_id: runId || '',
                 check_id: String(checkId || ''),
-                instance_index: idx,
-                issue_key: `${String(checkId || '')}:${idx}`,
+                instance_index: instanceIndex,
+                issue_key: issueKey,
                 verdict: String(verdict),
-                message,
-                node_ref: nodeRef,
-                signature: signature || '',
-                scope,
-                boundary,
-                text_quote_selector: textQuoteSelector,
-                snippet: snippetValue ? String(snippetValue).slice(0, 800) : '',
-                type: h.type,
-                anchor_status: resolvedRange.anchor_status,
-                anchor_strategy: resolvedRange.anchor_strategy,
+                message: primaryMessage,
+                node_ref: representative.nodeRef,
+                signature: representative.signature || '',
+                scope: representative.scope,
+                boundary: representative.boundary,
+                text_quote_selector: representative.textQuoteSelector,
+                snippet: representative.effectiveSnippetValue ? String(representative.effectiveSnippetValue).slice(0, 800) : '',
+                type: representative.highlight.type,
+                anchor_status: representative.resolvedRange.anchor_status,
+                anchor_strategy: representative.resolvedRange.anchor_strategy,
                 analysis_ref: {
                     run_id: runId || '',
                     check_id: String(checkId || ''),
-                    instance_index: idx
+                    instance_index: instanceIndex
                 },
                 explanation_pack: inlineExplanationPack,
-                issue_explanation: composeIssueExplanationNarrative(inlineExplanationPack)
+                issue_explanation: composeIssueExplanationNarrative(inlineExplanationPack),
+                ...(reviewSummary ? { review_summary: reviewSummary } : {}),
+                ...(group.collapsed
+                    ? {
+                        collapsed_member_count: groupHighlights.length,
+                        collapsed_source_instance_indexes: Array.isArray(group.source_instance_indexes)
+                            ? group.source_instance_indexes.slice()
+                            : []
+                    }
+                    : {})
             };
             if (inlineRewriteTarget) {
                 inlineFinding.rewrite_target = inlineRewriteTarget;
@@ -2672,38 +3921,42 @@ function buildHighlightedHtml(manifest, analysisResult) {
                 recommendationTelemetry.explanation_pack_attached += 1;
             }
             v2Findings.push(inlineFinding);
-            const baseItem = {
-                run_id: runId || '',
-                check_id: String(checkId || ''),
-                instance_index: idx,
-                issue_key: `${String(checkId || '')}:${idx}`,
-                verdict: String(verdict),
-                message,
-                node_ref: nodeRef,
-                signature: signature || '',
-                provenance: check.provenance || '',
-                anchor_status: resolvedRange.anchor_status,
-                anchor_strategy: resolvedRange.anchor_strategy,
-                analysis_ref: {
+
+            renderedSegments.forEach((segment, segmentIndex) => {
+                const baseItem = {
                     run_id: runId || '',
                     check_id: String(checkId || ''),
-                    instance_index: idx
-                },
-                explanation_pack: inlineExplanationPack,
-                issue_explanation: composeIssueExplanationNarrative(inlineExplanationPack)
-            };
-            if (inlineRewriteTarget) {
-                baseItem.rewrite_target = inlineRewriteTarget;
-            }
-            if (inlineRepairIntent) {
-                baseItem.repair_intent = inlineRepairIntent;
-            }
-            if (!highlightsByNodeRef.has(nodeRef)) highlightsByNodeRef.set(nodeRef, []);
-            highlightsByNodeRef.get(nodeRef).push({
-                ...baseItem,
-                start: resolvedPrecision.start,
-                end: resolvedPrecision.end,
-                range_key: `${baseItem.issue_key}:0`
+                    instance_index: instanceIndex,
+                    issue_key: issueKey,
+                    verdict: String(verdict),
+                    message: primaryMessage,
+                    node_ref: segment.nodeRef,
+                    signature: segment.signature || '',
+                    provenance: check.provenance || '',
+                    anchor_status: segment.resolvedRange.anchor_status,
+                    anchor_strategy: segment.resolvedRange.anchor_strategy,
+                    analysis_ref: {
+                        run_id: runId || '',
+                        check_id: String(checkId || ''),
+                        instance_index: instanceIndex
+                    },
+                    explanation_pack: inlineExplanationPack,
+                    issue_explanation: composeIssueExplanationNarrative(inlineExplanationPack),
+                    ...(reviewSummary ? { review_summary: reviewSummary } : {})
+                };
+                if (inlineRewriteTarget) {
+                    baseItem.rewrite_target = inlineRewriteTarget;
+                }
+                if (inlineRepairIntent) {
+                    baseItem.repair_intent = inlineRepairIntent;
+                }
+                if (!highlightsByNodeRef.has(segment.nodeRef)) highlightsByNodeRef.set(segment.nodeRef, []);
+                highlightsByNodeRef.get(segment.nodeRef).push({
+                    ...baseItem,
+                    start: segment.resolvedPrecision.start,
+                    end: segment.resolvedPrecision.end,
+                    range_key: `${issueKey}:${segmentIndex}`
+                });
             });
             hasRenderedInstance = true;
         });
@@ -2725,7 +3978,19 @@ function buildHighlightedHtml(manifest, analysisResult) {
     });
 
     const panelStyle = 'display:none;flex-direction:column;gap:8px;margin-top:10px;padding:10px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;';
-    const dedupedUnhighlightableIssues = dedupeUnhighlightableIssues(unhighlightableIssues);
+    const isRailEligibleCheck = (checkId) => {
+        const normalizedCheckId = String(checkId || '').trim();
+        if (!normalizedCheckId) return false;
+        return Boolean(categoryLookup[normalizedCheckId]);
+    };
+    const dedupedUnhighlightableIssues = dedupeUnhighlightableIssues(unhighlightableIssues)
+        .filter((issue) => isRailEligibleCheck(issue && issue.check_id));
+    const railEligibleRecommendations = dedupedUnhighlightableIssues.filter((issue) =>
+        shouldExposeRecommendationInRail({
+            checkData: checks[String(issue && issue.check_id ? issue.check_id : '')] || null,
+            failureReason: issue && issue.failure_reason ? issue.failure_reason : ''
+        })
+    );
     if (stabilityReleaseMode) {
         recommendationTelemetry.fix_with_ai_suppressed_by_stability_mode =
             recommendationTelemetry.fix_with_ai_eligible_targets;
@@ -2761,6 +4026,7 @@ function buildHighlightedHtml(manifest, analysisResult) {
             return a.type === 'end' ? -1 : 1;
         });
 
+        const block = nodeRef ? (nodeRefToBlock.get(nodeRef) || b) : b;
         let bodyHtml = '';
         if (text && events.length) {
             let cursor = 0;
@@ -2820,7 +4086,8 @@ function buildHighlightedHtml(manifest, analysisResult) {
             bodyHtml = '';
         }
 
-        return `<div class="aivi-overlay-block" data-node-ref="${escapeAttr(nodeRef)}"><div class="aivi-overlay-block-body">${bodyHtml}</div><div class="aivi-overlay-inline-panel" style="${panelStyle}"></div></div>`;
+        const previewBodyHtml = renderPreviewBodyHtml(block, bodyHtml);
+        return `<div class="aivi-overlay-block" data-node-ref="${escapeAttr(nodeRef)}"><div class="aivi-overlay-block-body">${previewBodyHtml}</div><div class="aivi-overlay-inline-panel" style="${panelStyle}"></div></div>`;
     }).join('');
 
     const highlightItems = Array.from(highlightsByNodeRef.values()).flat();
@@ -2884,7 +4151,7 @@ function buildHighlightedHtml(manifest, analysisResult) {
             schema_assist_insertable_total: schemaAssistTelemetry.insertable_total,
             schema_assist_by_check: schemaAssistTelemetry.by_check
         },
-        recommendations: dedupedUnhighlightableIssues,
+        recommendations: railEligibleRecommendations,
         unhighlightable_issues: dedupedUnhighlightableIssues,
         v2_findings: v2Findings
     };

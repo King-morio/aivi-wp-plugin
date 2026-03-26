@@ -172,7 +172,7 @@ describe('Canonical Primary Category Mapping', () => {
             const mockAnalysis = {
                 checks: {
                     single_h1: { verdict: 'fail', highlights: [] },
-                    direct_answer_first_120: { verdict: 'partial', highlights: [] }
+                    immediate_answer_placement: { verdict: 'partial', highlights: [] }
                 }
             };
 
@@ -218,7 +218,7 @@ describe('Canonical Primary Category Mapping', () => {
             const mockAnalysis = {
                 checks: {
                     single_h1: { verdict: 'fail', highlights: [] },
-                    direct_answer_first_120: { verdict: 'fail', highlights: [] },
+                    immediate_answer_placement: { verdict: 'fail', highlights: [] },
                     author_identified: { verdict: 'fail', highlights: [] }
                 }
             };
@@ -237,7 +237,7 @@ describe('Canonical Primary Category Mapping', () => {
             const mockAnalysis = {
                 checks: {
                     single_h1: { verdict: 'fail', highlights: [] },
-                    direct_answer_first_120: { verdict: 'fail', highlights: [] }
+                    immediate_answer_placement: { verdict: 'fail', highlights: [] }
                 }
             };
 
@@ -282,7 +282,7 @@ describe('Canonical Primary Category Mapping', () => {
                 checks: {
                     single_h1: { verdict: 'fail', highlights: [] },
                     logical_heading_hierarchy: { verdict: 'pass', highlights: [] },
-                    orphan_headings: { verdict: 'partial', highlights: [] }
+                    heading_topic_fulfillment: { verdict: 'partial', highlights: [] }
                 }
             };
 
@@ -296,7 +296,7 @@ describe('Canonical Primary Category Mapping', () => {
             });
 
             expect(allCheckIds).toContain('single_h1');
-            expect(allCheckIds).toContain('orphan_headings');
+            expect(allCheckIds).toContain('heading_topic_fulfillment');
             expect(allCheckIds).not.toContain('logical_heading_hierarchy');
         });
 

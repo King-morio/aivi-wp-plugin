@@ -1,70 +1,149 @@
 {
-  "version": "1.0.0",
-  "description": "Instance-level deterministic overlay messaging templates",
+  "version": "2.0.0",
+  "description": "Deterministic instance messaging templates with review-rail leads sourced from approved canonical copy",
   "checks": {
-    "single_h1": {
-      "lead": "This heading is one of multiple H1 headings on the page.",
-      "variants": [
-        "Multiple top-level headings dilute document focus for LLM-based answer engines.",
-        "A single primary H1 improves section intent clarity for generative retrieval systems.",
-        "Consolidating H1 structure strengthens citation confidence for answer extraction."
-      ]
-    },
     "accessibility_basics": {
       "lead": "This image reference is missing alt text.",
+      "review_lead": "An image here is missing alt text",
       "variants": [
         "Missing alt text weakens semantic cues that retrieval models use for grounded interpretation.",
         "Descriptive alt text improves verifiable context for LLM-based answer engines.",
         "Adding alt text reduces ambiguity and improves content citability for multimodal retrieval."
       ]
     },
-    "content_updated_12_months": {
-      "lead": "This visible date indicates stale content ({{age_days}} days old).",
-      "variants": [
-        "Stale timestamps lower trust for freshness-sensitive answer retrieval.",
-        "Recent updates improve temporal reliability for LLM-based answer engines.",
-        "Refreshing dated claims helps maintain citation quality in generative search."
-      ]
-    },
-    "no_broken_internal_links": {
-      "lead": "This internal link points to a broken destination (status {{status_code}}).",
-      "variants": [
-        "Broken references reduce evidence continuity for LLM-based answer engines.",
-        "Fixing dead links improves verifiable claim trails for generative retrieval systems.",
-        "Stable internal sources improve extractability and citation reliability."
-      ]
-    },
-    "orphan_headings": {
-      "lead": "This heading has {{word_count}} supporting words (minimum {{min_words}}).",
-      "variants": [
-        "Thin section context can weaken extractability for LLM-based answer engines.",
-        "Short support text reduces claim grounding and citation confidence in generative retrieval.",
-        "Expanding this section with concrete evidence improves semantic clarity for answer extraction."
-      ]
-    },
-    "heading_fragmentation": {
-      "lead": "This heading sits in a fragmented section with only {{word_count}} supporting words.",
-      "variants": [
-        "Fragmented structure can dilute topical coherence for LLM-based answer engines.",
-        "Denser supporting context improves section-level retrievability and citation confidence.",
-        "Adding complete supporting detail helps answer engines form well-grounded summaries."
-      ]
+    "ai_crawler_accessibility": {
+      "lead": "Crawler access is restricted or unclear",
+      "review_lead": "Crawler access is restricted or unclear",
+      "variants": []
     },
     "appropriate_paragraph_length": {
       "lead": "This paragraph has {{word_count}} words (recommended {{max_words}} or fewer).",
+      "review_lead": "This paragraph is too long",
       "variants": [
         "Long blocks reduce scannability and can degrade extractability for LLM-based answer engines.",
         "Shorter claim units improve evidence isolation for generative retrieval systems.",
         "Splitting this paragraph can improve citation precision and answer alignment."
       ]
     },
+    "author_bio_present": {
+      "lead": "Add an author bio",
+      "review_lead": "Add an author bio",
+      "variants": []
+    },
+    "author_identified": {
+      "lead": "Identify the author clearly",
+      "review_lead": "Identify the author clearly",
+      "variants": []
+    },
+    "canonical_clarity": {
+      "lead": "Canonical signals need cleanup",
+      "review_lead": "Canonical signals need cleanup",
+      "variants": []
+    },
+    "content_updated_12_months": {
+      "lead": "This visible date indicates stale content ({{age_days}} days old).",
+      "review_lead": "This article needs a refresh",
+      "variants": [
+        "Stale timestamps lower trust for freshness-sensitive answer retrieval.",
+        "Recent updates improve temporal reliability for LLM-based answer engines.",
+        "Refreshing dated claims helps maintain citation quality in generative search."
+      ]
+    },
+    "faq_jsonld_generation_suggestion": {
+      "lead": "Generate FAQ JSON-LD for this FAQ-ready block",
+      "review_lead": "Generate FAQ JSON-LD for this FAQ-ready block",
+      "variants": []
+    },
+    "faq_jsonld_presence_and_completeness": {
+      "lead": "FAQ JSON-LD is missing or incomplete",
+      "review_lead": "FAQ JSON-LD is missing or incomplete",
+      "variants": []
+    },
+    "heading_fragmentation": {
+      "lead": "This heading hands off to another heading before the section is framed.",
+      "review_lead": "This section is over-fragmented",
+      "variants": [
+        "Too many top-level handoffs can make the outline feel over-split to answer engines.",
+        "Add a grounding paragraph before nested subheadings so the section lands before it branches.",
+        "Merge adjacent top-level headings when they really belong to one stronger section."
+      ]
+    },
+    "howto_jsonld_presence_and_completeness": {
+      "lead": "HowTo JSON-LD is missing or incomplete",
+      "review_lead": "HowTo JSON-LD is missing or incomplete",
+      "variants": []
+    },
+    "howto_schema_presence_and_completeness": {
+      "lead": "Generate complete HowTo schema for this step-by-step section",
+      "review_lead": "Generate complete HowTo schema for this step-by-step section",
+      "variants": []
+    },
     "logical_heading_hierarchy": {
       "lead": "This heading jumps from {{from_level}} to {{to_level}}, skipping a level.",
+      "review_lead": "This heading breaks hierarchy",
       "variants": [
         "Hierarchy gaps reduce structural cues used by LLM-based answer engines.",
         "Sequential heading levels improve topical flow for generative retrieval systems.",
         "Consistent heading depth strengthens section traceability and citation quality."
       ]
+    },
+    "metadata_checks": {
+      "lead": "Metadata needs cleanup",
+      "review_lead": "Metadata needs cleanup",
+      "variants": []
+    },
+    "no_broken_internal_links": {
+      "lead": "This internal link points to a broken destination (status {{status_code}}).",
+      "review_lead": "This internal link is broken",
+      "variants": [
+        "Broken references reduce evidence continuity for LLM-based answer engines.",
+        "Fixing dead links improves verifiable claim trails for generative retrieval systems.",
+        "Stable internal sources improve extractability and citation reliability."
+      ]
+    },
+    "schema_matches_content": {
+      "lead": "Schema doesn't match this content",
+      "review_lead": "Schema doesn't match this content",
+      "variants": []
+    },
+    "semantic_html_usage": {
+      "lead": "Semantic structure is too thin here",
+      "review_lead": "Semantic structure is too thin here",
+      "variants": []
+    },
+    "heading_like_text_uses_heading_markup": {
+      "lead": "Use a real heading here",
+      "review_lead": "Use a real heading here",
+      "variants": []
+    },
+    "single_h1": {
+      "lead": "This heading is one of multiple H1 headings on the page.",
+      "review_lead": "Use one clear H1",
+      "variants": [
+        "Multiple top-level headings dilute document focus for LLM-based answer engines.",
+        "A single primary H1 improves section intent clarity for generative retrieval systems.",
+        "Consolidating H1 structure strengthens citation confidence for answer extraction."
+      ]
+    },
+    "supported_schema_types_validation": {
+      "lead": "This schema type isn't supported",
+      "review_lead": "This schema type isn't supported",
+      "variants": []
+    },
+    "valid_jsonld_schema": {
+      "lead": "This JSON-LD is invalid",
+      "review_lead": "This JSON-LD is invalid",
+      "variants": []
+    },
+    "itemlist_jsonld_presence_and_completeness": {
+      "lead": "Add complete ItemList JSON-LD",
+      "review_lead": "Add complete ItemList JSON-LD",
+      "variants": []
+    },
+    "article_jsonld_presence_and_completeness": {
+      "lead": "Add complete Article JSON-LD",
+      "review_lead": "Add complete Article JSON-LD",
+      "variants": []
     }
   }
 }

@@ -1,11 +1,12 @@
 <?php
 /**
  * Plugin Name: AiVI - AI Visibility Inspector
- * Description: Analyze content in WordPress, review structured AiVI findings, and improve AI search readiness.
- * Version: 1.0.16
- * Author: AiVI Team
+ * Description: Analyze WordPress content for AI visibility, answer readiness, structure, schema, and trust before publishing.
+ * Version: 1.0.30
+ * Author: Felix O.
  * License: GPLv2 or later
  * Text Domain: ai-visibility-inspector
+ * Domain Path: /languages
  *
  * @package AiVI
  */
@@ -23,7 +24,7 @@ if (defined('AIVI_VERSION') || class_exists('\AiVI\Plugin', false) || function_e
 /**
  * Define plugin constants
  */
-define('AIVI_VERSION', '1.0.16');
+define('AIVI_VERSION', '1.0.30');
 define('AIVI_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AIVI_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('AIVI_PLUGIN_BASENAME', plugin_basename(__FILE__));

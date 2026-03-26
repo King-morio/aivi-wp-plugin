@@ -103,7 +103,7 @@ describe('Highlight Discipline', () => {
             // Given: details payload with node_ref matching block and offsets within bounds
             const detailsPayload = {
                 run_id: 'test-run-123',
-                check_id: 'direct_answer_first_120',
+                check_id: 'immediate_answer_placement',
                 instance_index: 0,
                 highlights: [{
                     node_ref: 'block-uuid-123',

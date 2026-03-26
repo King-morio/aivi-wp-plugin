@@ -1,7 +1,9 @@
 const {
     captureTopupOrder,
     createSubscriptionCheckoutSession,
+    createSubscriptionRevisionSession,
     createTopupCheckoutSession,
+    getSubscriptionDetails,
     getManageBillingRedirect,
     verifyWebhookSignature
 } = require('./paypal-client');
@@ -17,6 +19,7 @@ describe('paypal-client', () => {
         planIds: {
             starter: 'P-STARTER',
             growth: 'P-GROWTH',
+            growth_intro: 'P-GROWTH-INTRO',
             pro: 'P-PRO'
         }
     };
@@ -76,6 +79,58 @@ describe('paypal-client', () => {
         });
     });
 
+    test('creates a hosted introductory Growth checkout session against the dedicated intro plan', async () => {
+        global.fetch
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ access_token: 'access-token' })
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    id: 'I-SUB-INTRO-123',
+                    links: [
+                        { rel: 'approve', href: 'https://www.paypal.com/checkoutnow?token=SUBINTRO123' }
+                    ]
+                })
+            });
+
+        const session = await createSubscriptionCheckoutSession({
+            config,
+            planCode: 'growth',
+            providerPlanId: 'P-GROWTH-INTRO',
+            intentVariant: 'intro_offer',
+            introOfferApplied: true,
+            accountId: 'acct_123',
+            siteId: 'site_123',
+            requestId: 'req_sub_intro_123'
+        });
+
+        expect(session).toMatchObject({
+            requestId: 'req_sub_intro_123',
+            intentType: 'subscription',
+            intentVariant: 'intro_offer',
+            provider: 'paypal',
+            planCode: 'growth',
+            providerPlanId: 'P-GROWTH-INTRO',
+            priceUsd: 11,
+            approvalUrl: 'https://www.paypal.com/checkoutnow?token=SUBINTRO123'
+        });
+
+        const subscriptionCall = global.fetch.mock.calls[1];
+        expect(subscriptionCall[0]).toContain('/v1/billing/subscriptions');
+        const body = JSON.parse(subscriptionCall[1].body);
+        expect(body).toMatchObject({
+            plan_id: 'P-GROWTH-INTRO',
+            application_context: {
+                brand_name: 'AiVI',
+                user_action: 'SUBSCRIBE_NOW',
+                return_url: 'https://example.com/paypal/return',
+                cancel_url: 'https://example.com/paypal/cancel'
+            }
+        });
+    });
+
     test('creates a hosted top-up checkout session', async () => {
         global.fetch
             .mockResolvedValueOnce({
@@ -119,6 +174,141 @@ describe('paypal-client', () => {
                 currency_code: 'USD',
                 value: '7.00'
             }
+        });
+    });
+
+    test('creates a hosted subscription revision session for active upgrades', async () => {
+        global.fetch
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ access_token: 'access-token' })
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    id: 'I-STARTER1',
+                    links: [
+                        { rel: 'approve', href: 'https://www.paypal.com/checkoutnow?token=SUBUP123' }
+                    ]
+                })
+            });
+
+        const session = await createSubscriptionRevisionSession({
+            config,
+            providerSubscriptionId: 'I-STARTER1',
+            planCode: 'growth',
+            accountId: 'acct_123',
+            siteId: 'site_123',
+            requestId: 'req_sub_upgrade_123'
+        });
+
+        expect(session).toMatchObject({
+            requestId: 'req_sub_upgrade_123',
+            intentType: 'subscription',
+            intentVariant: 'revise',
+            provider: 'paypal',
+            planCode: 'growth',
+            providerSubscriptionId: 'I-STARTER1',
+            approvalUrl: 'https://www.paypal.com/checkoutnow?token=SUBUP123'
+        });
+
+        const reviseCall = global.fetch.mock.calls[1];
+        expect(reviseCall[0]).toContain('/v1/billing/subscriptions/I-STARTER1/revise');
+        const body = JSON.parse(reviseCall[1].body);
+        expect(body).toMatchObject({
+            plan_id: 'P-GROWTH',
+            application_context: {
+                brand_name: 'AiVI',
+                user_action: 'SUBSCRIBE_NOW',
+                return_url: 'https://example.com/paypal/return',
+                cancel_url: 'https://example.com/paypal/cancel'
+            }
+        });
+    });
+
+    test('reads the latest PayPal subscription status', async () => {
+        global.fetch
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ access_token: 'access-token' })
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    id: 'I-SUB123',
+                    status: 'CANCELLED',
+                    status_update_time: '2026-03-24T16:20:00Z'
+                })
+            });
+
+        const details = await getSubscriptionDetails({
+            config,
+            providerSubscriptionId: 'I-SUB123',
+            requestId: 'req_sub_status_123'
+        });
+
+        expect(details).toMatchObject({
+            providerSubscriptionId: 'I-SUB123',
+            status: 'CANCELLED',
+            statusUpdateTime: '2026-03-24T16:20:00Z'
+        });
+
+        const detailsCall = global.fetch.mock.calls[1];
+        expect(detailsCall[0]).toContain('/v1/billing/subscriptions/I-SUB123');
+        expect(detailsCall[1].method).toBe('GET');
+    });
+
+    test('maps missing PayPal subscriptions to a dedicated lookup error', async () => {
+        global.fetch
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ access_token: 'access-token' })
+            })
+            .mockResolvedValueOnce({
+                ok: false,
+                status: 404,
+                json: async () => ({
+                    name: 'RESOURCE_NOT_FOUND'
+                })
+            });
+
+        await expect(getSubscriptionDetails({
+            config,
+            providerSubscriptionId: 'I-MISSING',
+            requestId: 'req_sub_missing'
+        })).rejects.toMatchObject({
+            code: 'paypal_subscription_not_found',
+            details: expect.objectContaining({
+                status: 404,
+                provider_state: 'not_found'
+            })
+        });
+    });
+
+    test('maps invalid PayPal subscription lookups to a dedicated lookup error', async () => {
+        global.fetch
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ access_token: 'access-token' })
+            })
+            .mockResolvedValueOnce({
+                ok: false,
+                status: 422,
+                json: async () => ({
+                    name: 'UNPROCESSABLE_ENTITY'
+                })
+            });
+
+        await expect(getSubscriptionDetails({
+            config,
+            providerSubscriptionId: 'I-INVALID',
+            requestId: 'req_sub_invalid'
+        })).rejects.toMatchObject({
+            code: 'paypal_subscription_invalid',
+            details: expect.objectContaining({
+                status: 422,
+                provider_state: 'invalid'
+            })
         });
     });
 

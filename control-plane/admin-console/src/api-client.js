@@ -13,6 +13,24 @@
         if (!raw) return fallback || 'Unknown';
         return raw.replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
     };
+    const encodeCursor = (payload = {}) => btoa(JSON.stringify(payload))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
+    const decodeCursor = (cursor) => {
+        const normalized = sanitize(cursor);
+        if (!normalized) return { offset: 0 };
+        try {
+            const padded = normalized.replace(/-/g, '+').replace(/_/g, '/');
+            const padLength = (4 - (padded.length % 4)) % 4;
+            const parsed = JSON.parse(atob(`${padded}${'='.repeat(padLength)}`));
+            return {
+                offset: Math.max(0, normalizeInt(parsed && parsed.offset, 0))
+            };
+        } catch (error) {
+            return { offset: 0 };
+        }
+    };
     const isVerifiedWebhookStatus = (value) => ['verified', 'success'].includes(sanitize(value).toLowerCase());
     const buildTopupLookupKey = (providerOrderId) => {
         const normalized = sanitize(providerOrderId);
@@ -92,7 +110,8 @@
                 const haystack = [
                     item.account_label,
                     item.account_id,
-                    item.connected_domain
+                    item.connected_domain,
+                    item.contact_email
                 ].map((part) => sanitize(part).toLowerCase()).join(' ');
                 if (!haystack.includes(query)) return false;
             }
@@ -109,6 +128,7 @@
     const syncSummaryFromDetail = (detail) => ({
         account_id: detail.account_id,
         account_label: detail.account_label,
+        contact_email: detail.contact_email || '',
         plan_code: detail.plan?.plan_code || '',
         plan_name: detail.plan?.plan_name || '',
         subscription_status: detail.plan?.subscription_status || 'unknown',
@@ -339,7 +359,7 @@
                 balance_after: next.credits.total_remaining
             };
         } else if (action === 'extend_trial') {
-            const trialDays = Math.max(1, Math.min(90, normalizeInt(payload.trial_days, 14) || 14));
+            const trialDays = Math.max(1, Math.min(90, normalizeInt(payload.trial_days, 7) || 7));
             const expiresAt = new Date();
             expiresAt.setDate(expiresAt.getDate() + trialDays);
             next.plan.trial_status = 'active';
@@ -350,6 +370,10 @@
                 trial_expires_at: next.plan.trial_expires_at
             };
         } else if (action === 'end_trial') {
+            if (sanitize(next.plan.subscription_status).toLowerCase() === 'created'
+                && (sanitize(next.plan.trial_status).toLowerCase() === 'active' || sanitize(next.plan.plan_code).toLowerCase() === 'free_trial')) {
+                throw new Error('This account is waiting for subscription activation. Use Recheck activation or Clear activation hold instead of ending the trial.');
+            }
             next.plan.trial_status = 'ended';
             next.plan.trial_expires_at = toIso();
             effect = {
@@ -372,12 +396,49 @@
                 plan_code: target.code,
                 max_sites: target.max_sites
             };
-        } else if (action === 'subscription_resync') {
-            effect = { resync_requested: true };
-        } else if (action === 'site_unbind') {
-            next.sites = [];
+        } else if (action === 'issue_connection_token') {
+            const connectionDays = Math.max(1, Math.min(30, normalizeInt(payload.connection_days, 7) || 7));
+            const expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + connectionDays);
             effect = {
-                site_binding_status: 'unbound'
+                connection_token: `preview.token.${sanitize(detail.account_id || 'account')}.${Date.now()}`,
+                expires_at: expiresAt.toISOString(),
+                max_sites: normalizeInt(next.plan?.max_sites, 1) || 1
+            };
+        } else if (action === 'subscription_resync') {
+            if (sanitize(next.plan.subscription_status).toLowerCase() === 'created'
+                && (sanitize(next.plan.trial_status).toLowerCase() === 'active' || sanitize(next.plan.plan_code).toLowerCase() === 'free_trial')) {
+                next.plan.subscription_status = 'trial';
+                effect = {
+                    resync_requested: true,
+                    reconciled: true,
+                    subscription_status: 'trial'
+                };
+            } else {
+                effect = {
+                    resync_requested: true,
+                    reconciled: false
+                };
+            }
+        } else if (action === 'clear_activation_hold') {
+            if (sanitize(next.plan.subscription_status).toLowerCase() !== 'created') {
+                throw new Error('Only stale activation holds can be cleared manually.');
+            }
+            next.plan.subscription_status = sanitize(next.plan.trial_status).toLowerCase() === 'active' || sanitize(next.plan.plan_code).toLowerCase() === 'free_trial'
+                ? 'trial'
+                : next.plan.subscription_status;
+            effect = {
+                activation_hold_cleared: true,
+                subscription_status: next.plan.subscription_status
+            };
+        } else if (action === 'site_unbind') {
+            const targetSiteId = sanitize(payload.site_id);
+            next.sites = targetSiteId
+                ? (next.sites || []).filter((site) => sanitize(site.site_id) !== targetSiteId)
+                : [];
+            effect = {
+                site_binding_status: next.sites.length ? 'connected' : 'unbound',
+                remaining_site_count: (next.sites || []).length
             };
         } else if (action === 'account_pause') {
             next.plan.subscription_status = 'paused';
@@ -401,12 +462,19 @@
         async listAccounts(filters = {}) {
             await delay(120);
             const items = applyFilters(mockRoot.accounts || [], filters);
+            const limit = Math.max(1, normalizeInt(filters.limit, 25) || 25);
+            const offset = decodeCursor(filters.cursor).offset;
+            const pageItems = items.slice(offset, offset + limit);
+            const nextOffset = offset + pageItems.length;
             return {
-                items,
+                items: pageItems,
                 page: {
-                    count: items.length,
-                    limit: items.length,
-                    next_cursor: null
+                    count: pageItems.length,
+                    limit,
+                    total_count: items.length,
+                    page_start: pageItems.length > 0 ? offset + 1 : 0,
+                    page_end: offset + pageItems.length,
+                    next_cursor: nextOffset < items.length ? encodeCursor({ offset: nextOffset }) : null
                 }
             };
         },
@@ -419,6 +487,12 @@
                 throw error;
             }
             return { item };
+        },
+        async getFinancialOverview() {
+            await delay(120);
+            return {
+                item: mockRoot.financialOverview || null
+            };
         },
         async mutateAccount(accountId, payload = {}) {
             await delay(160);
@@ -458,20 +532,27 @@
         if (sanitize(filters.query)) params.set('q', sanitize(filters.query));
         if (sanitize(filters.planCode)) params.set('plan_code', sanitize(filters.planCode));
         if (sanitize(filters.subscriptionStatus)) params.set('subscription_status', sanitize(filters.subscriptionStatus));
+        if (sanitize(filters.cursor)) params.set('cursor', sanitize(filters.cursor));
+        if (normalizeInt(filters.limit, 0) > 0) params.set('limit', String(normalizeInt(filters.limit, 0)));
         if (sanitize(filters.checkoutLookupKey)) params.set('checkout_lookup_key', sanitize(filters.checkoutLookupKey));
         return params.toString();
     };
 
-    const createApiClient = ({ baseUrl, bootstrapToken }) => {
+    const createApiClient = ({ baseUrl, bootstrapToken, accessToken, idToken }) => {
         const normalizedBase = sanitize(baseUrl).replace(/\/$/, '');
-        const headers = {
-            'Content-Type': 'application/json'
-        };
-        if (sanitize(bootstrapToken)) {
-            headers['x-aivi-admin-token'] = sanitize(bootstrapToken);
+        const baseHeaders = {};
+        const bearerToken = sanitize(idToken) || sanitize(accessToken);
+        if (bearerToken) {
+            baseHeaders.Authorization = `Bearer ${bearerToken}`;
+        } else if (sanitize(bootstrapToken)) {
+            baseHeaders['x-aivi-admin-token'] = sanitize(bootstrapToken);
         }
 
         const request = async (method, path, body) => {
+            const headers = { ...baseHeaders };
+            if (body !== undefined) {
+                headers['Content-Type'] = 'application/json';
+            }
             const response = await fetch(`${normalizedBase}${path}`, {
                 method,
                 headers,
@@ -495,6 +576,9 @@
             },
             async getAccountDetail(accountId) {
                 return request('GET', `/aivi/v1/admin/accounts/${encodeURIComponent(accountId)}`);
+            },
+            async getFinancialOverview() {
+                return request('GET', '/aivi/v1/admin/financials/overview');
             },
             async mutateAccount(accountId, payload = {}) {
                 return request('POST', `/aivi/v1/admin/accounts/${encodeURIComponent(accountId)}/actions`, payload);

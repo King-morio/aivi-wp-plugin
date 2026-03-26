@@ -8,6 +8,47 @@ const {
 } = require('./billing-account-state');
 
 const sanitizeString = (value) => String(value || '').trim();
+const lower = (value) => sanitizeString(value).toLowerCase();
+
+const buildPreservedSubscriptionState = (state, subscriptionRecord, { nextSubscriptionStatus = '', clearSubscriptionLink = false } = {}) => {
+    const current = buildDefaultAccountBillingState({
+        accountId: sanitizeString(state?.account_id)
+    });
+    const base = state || current;
+    return {
+        ...base,
+        connected: true,
+        connection_status: 'connected',
+        subscription_status: sanitizeString(nextSubscriptionStatus || base.subscription_status).toLowerCase(),
+        subscription: {
+            ...(base.subscription || {}),
+            provider_subscription_id: clearSubscriptionLink
+                ? ''
+                : (sanitizeString(subscriptionRecord.provider_subscription_id) || sanitizeString(base.subscription?.provider_subscription_id)),
+            current_period_start: clearSubscriptionLink
+                ? null
+                : (subscriptionRecord.current_period_start || base.subscription?.current_period_start || null),
+            current_period_end: clearSubscriptionLink
+                ? null
+                : (subscriptionRecord.current_period_end || base.subscription?.current_period_end || null),
+            last_event_type: sanitizeString(subscriptionRecord.last_event_type),
+            cancel_at_period_end: clearSubscriptionLink ? false : subscriptionRecord.cancel_at_period_end === true,
+            credit_cycle_key: clearSubscriptionLink ? '' : sanitizeString(base.subscription?.credit_cycle_key)
+        },
+        updated_at: sanitizeString(subscriptionRecord.updated_at) || new Date().toISOString()
+    };
+};
+
+const isRetryReadyTerminalStatus = (status) => ['cancelled', 'canceled', 'expired', 'error', 'payment_failed', 'suspended'].includes(lower(status));
+
+const resolveRetryReadySubscriptionStatus = (state = {}) => {
+    const planCode = lower(state.plan_code);
+    const trialStatus = lower(state.trial_status);
+    if (trialStatus === 'active' || planCode === 'free_trial') {
+        return 'trial';
+    }
+    return '';
+};
 
 const processVerifiedPayPalWebhook = async ({
     webhookEvent,
@@ -29,7 +70,29 @@ const processVerifiedPayPalWebhook = async ({
                     accountId: reconciliation.subscriptionRecord.account_id
                 });
             const totalBefore = computeTotalRemaining(currentState);
-            const applied = applySubscriptionRecordToState(currentState, reconciliation.subscriptionRecord);
+            const intentVariant = lower(reconciliation.checkoutIntent?.intent_variant || reconciliation.subscriptionRecord.intent_variant);
+            const isRevision = intentVariant === 'revise';
+            const normalizedStatus = lower(reconciliation.subscriptionRecord.status);
+            const isInitialPendingState = !isRevision && (
+                !sanitizeString(currentState?.plan_code)
+                || lower(currentState?.plan_code) === 'free_trial'
+                || lower(currentState?.trial_status) === 'active'
+            );
+            const shouldPreserveCurrentEntitlements = normalizedStatus !== 'active' && (isRevision || isInitialPendingState);
+            const shouldResetToRetryReadyState = isInitialPendingState && isRetryReadyTerminalStatus(normalizedStatus);
+            const applied = shouldPreserveCurrentEntitlements
+                ? {
+                    state: buildPreservedSubscriptionState(currentState, reconciliation.subscriptionRecord, {
+                        nextSubscriptionStatus: shouldResetToRetryReadyState
+                            ? resolveRetryReadySubscriptionStatus(currentState)
+                            : (isRevision ? sanitizeString(currentState?.subscription_status) : normalizedStatus),
+                        clearSubscriptionLink: shouldResetToRetryReadyState
+                    }),
+                    granted_cycle_credits: 0,
+                    granted_upgrade_credits: 0,
+                    cycle_key: sanitizeString(currentState?.subscription?.credit_cycle_key)
+                }
+                : applySubscriptionRecordToState(currentState, reconciliation.subscriptionRecord);
             let nextState = applied.state;
 
             if (applied.granted_cycle_credits > 0) {
@@ -48,8 +111,42 @@ const processVerifiedPayPalWebhook = async ({
                 }));
                 nextState.updated_at = grantEvent.updated_at || nextState.updated_at;
             }
+            if (applied.granted_upgrade_credits > 0) {
+                const grantEvent = await persistLedgerEvent(createAdjustmentEvent({
+                    account_id: reconciliation.subscriptionRecord.account_id,
+                    site_id: sanitizeString(nextState.site?.site_id),
+                    run_id: null,
+                    reason_code: 'plan_upgrade_delta',
+                    external_ref: sanitizeString(reconciliation.subscriptionRecord.provider_subscription_id || applied.cycle_key),
+                    pricing_snapshot: {},
+                    amounts: {
+                        granted_credits: applied.granted_upgrade_credits,
+                        balance_before: totalBefore,
+                        balance_after: computeTotalRemaining(nextState)
+                    }
+                }));
+                nextState.updated_at = grantEvent.updated_at || nextState.updated_at;
+            }
 
             await accountStateStore.putAccountState(nextState);
+        }
+
+        if (typeof store.updateCheckoutIntent === 'function' && sanitizeString(reconciliation.subscriptionRecord.provider_subscription_id)) {
+            const intentVariant = lower(reconciliation.checkoutIntent?.intent_variant || reconciliation.subscriptionRecord.intent_variant);
+            const isRevision = intentVariant === 'revise';
+            const normalizedStatus = lower(reconciliation.subscriptionRecord.status);
+            await store.updateCheckoutIntent(`subscription#${sanitizeString(reconciliation.subscriptionRecord.provider_subscription_id)}`, {
+                status: isRevision
+                    ? (normalizedStatus === 'active' ? 'plan_change_completed' : 'plan_change_pending')
+                    : (normalizedStatus || 'created'),
+                updated_at: sanitizeString(reconciliation.subscriptionRecord.updated_at) || new Date().toISOString(),
+                last_event_type: sanitizeString(reconciliation.subscriptionRecord.last_event_type),
+                reconciliation_state: isRevision
+                    ? (normalizedStatus === 'active' ? 'plan_change_applied' : 'plan_change_pending')
+                    : (normalizedStatus === 'active' ? 'activated' : 'pending'),
+                plan_transition: sanitizeString(reconciliation.checkoutIntent?.plan_transition || reconciliation.subscriptionRecord.plan_transition),
+                source_plan_code: sanitizeString(reconciliation.checkoutIntent?.source_plan_code || reconciliation.subscriptionRecord.source_plan_code)
+            });
         }
     }
 

@@ -78,7 +78,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			)
 		);
 
-		// Phase 5: Polling endpoint for async analysis status
+		// Polling endpoint for async analysis status
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/proxy_run_status/(?P<run_id>[a-zA-Z0-9\-]+)',
@@ -118,6 +118,30 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 					'methods' => \WP_REST_Server::READABLE,
 					'callback' => array($this, 'proxy_account_summary'),
 					'permission_callback' => array($this, 'check_permissions'),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/account_bootstrap',
+			array(
+				array(
+					'methods' => \WP_REST_Server::CREATABLE,
+					'callback' => array($this, 'proxy_account_bootstrap'),
+					'permission_callback' => array($this, 'check_manage_options_permissions'),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/account_start_trial',
+			array(
+				array(
+					'methods' => \WP_REST_Server::CREATABLE,
+					'callback' => array($this, 'proxy_account_start_trial'),
+					'permission_callback' => array($this, 'check_manage_options_permissions'),
 				),
 			)
 		);
@@ -482,15 +506,17 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 
 		$site_identity = Admin_Settings::get_site_identity_payload();
 		$summary_url = trailingslashit($backend_url) . 'aivi/v1/account/summary';
-		$summary_url = add_query_arg(
-			array(
-				'account_id' => $local_state['account_id'],
-				'site_id' => $site_identity['site_id'],
-				'blog_id' => $site_identity['blog_id'],
-				'home_url' => $site_identity['home_url'],
-			),
-			$summary_url
+		$summary_query_args = array(
+			'account_id' => $local_state['account_id'],
+			'site_id' => $site_identity['site_id'],
+			'blog_id' => $site_identity['blog_id'],
+			'home_url' => $site_identity['home_url'],
 		);
+		$summary_contact_email = sanitize_email( (string) ( $site_identity['admin_email'] ?? '' ) );
+		if ( '' !== $summary_contact_email ) {
+			$summary_query_args['admin_email'] = $summary_contact_email;
+		}
+		$summary_url = add_query_arg( $summary_query_args, $summary_url );
 
 		$headers = Admin_Settings::get_api_headers();
 		$headers['X-AIVI-Account-Id'] = (string) $local_state['account_id'];
@@ -498,6 +524,9 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 		$headers['X-AIVI-Blog-Id'] = (string) $site_identity['blog_id'];
 		$headers['X-AIVI-Home-Url'] = (string) $site_identity['home_url'];
 		$headers['X-AIVI-Plugin-Version'] = (string) $site_identity['plugin_version'];
+		if ( '' !== $summary_contact_email ) {
+			$headers['X-AIVI-Admin-Email'] = $summary_contact_email;
+		}
 
 		$response = $this->wp_remote_get_with_retries(
 			$summary_url,
@@ -543,6 +572,38 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 		}
 
 		return rest_ensure_response($this->build_account_summary_response($local_state, false, 'local', 'invalid_remote_response', $local_dashboard));
+	}
+
+	/**
+	 * Bootstrap a self-serve AiVI account record for this site.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function proxy_account_bootstrap($request)
+	{
+		return $this->proxy_account_onboarding_request(
+			$request,
+			'account_bootstrap',
+			'aivi/v1/account/bootstrap',
+			__( 'AiVI could not prepare this site for onboarding.', 'ai-visibility-inspector' )
+		);
+	}
+
+	/**
+	 * Start the self-serve free trial for this site.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function proxy_account_start_trial($request)
+	{
+		return $this->proxy_account_onboarding_request(
+			$request,
+			'account_start_trial',
+			'aivi/v1/account/start-trial',
+			__( 'AiVI could not start the free trial for this site.', 'ai-visibility-inspector' )
+		);
 	}
 
 	/**
@@ -628,6 +689,110 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 		return new \WP_Error(
 			'backend_error',
 			__('AiVI account connection failed.', 'ai-visibility-inspector'),
+			array(
+				'status' => $status_code > 0 ? $status_code : 502,
+				'body' => is_string($body) ? substr($body, 0, 300) : '',
+			)
+		);
+	}
+
+	/**
+	 * Proxy self-serve account onboarding requests to backend and persist the returned state.
+	 *
+	 * @param string $context Backend URL resolution context.
+	 * @param string $path Backend path.
+	 * @param string $error_message Default error message.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	private function proxy_account_onboarding_request($request, $context, $path, $error_message)
+	{
+		$backend_url = Admin_Settings::get_backend_url( $context );
+		if (empty($backend_url)) {
+			return new \WP_Error(
+				'no_backend',
+				__('Backend URL not configured.', 'ai-visibility-inspector'),
+				array('status' => 503)
+			);
+		}
+
+		$onboarding_url = trailingslashit($backend_url) . ltrim($path, '/');
+		$site_identity = Admin_Settings::get_site_identity_payload();
+		$contact_email = '';
+		if ( $request instanceof \WP_REST_Request ) {
+			$params = $request->get_json_params();
+			if ( ! is_array( $params ) || empty( $params ) ) {
+				$params = $request->get_params();
+			}
+			$contact_email = sanitize_email( (string) ( $params['contact_email'] ?? '' ) );
+			if ( '' !== $contact_email && ! is_email( $contact_email ) ) {
+				return new \WP_Error(
+					'invalid_contact_email',
+					__( 'If you add a contact email, make sure it is valid.', 'ai-visibility-inspector' ),
+					array( 'status' => 400 )
+				);
+			}
+		}
+		if ( '' !== $contact_email ) {
+			$site_identity['admin_email'] = $contact_email;
+			Admin_Settings::update_preferred_contact_email( $contact_email );
+		}
+		$response = $this->wp_remote_post_with_retries(
+			$onboarding_url,
+			array(
+				'timeout' => 15,
+				'sslverify' => true,
+				'httpversion' => '1.1',
+				'headers' => Admin_Settings::get_api_headers(),
+				'body' => wp_json_encode(array(
+					'site' => $site_identity,
+				)),
+			),
+			2
+		);
+
+		if (is_wp_error($response)) {
+			return new \WP_Error(
+				'backend_error',
+				$error_message,
+				array(
+					'status' => 503,
+					'diagnostics' => $this->build_http_diagnostics(
+						$response->get_error_code(),
+						$response->get_error_message(),
+						$response->get_error_data()
+					),
+				)
+			);
+		}
+
+		$status_code = wp_remote_retrieve_response_code($response);
+		$body = wp_remote_retrieve_body($response);
+		$data = json_decode($body, true);
+		if ($status_code >= 200 && $status_code < 300 && is_array($data)) {
+			$remote_state = $this->extract_remote_account_state($data);
+			$remote_dashboard = $this->extract_remote_dashboard_summary($data);
+			if (is_array($remote_state)) {
+				Admin_Settings::sync_remote_account_snapshot($remote_state, is_array($remote_dashboard) ? $remote_dashboard : array());
+			}
+			return rest_ensure_response(array(
+				'ok' => true,
+				'account_state' => Admin_Settings::get_public_account_state(),
+				'dashboard_summary' => Admin_Settings::get_public_account_dashboard_state(),
+				'message' => isset($data['message']) && is_string($data['message'])
+					? $data['message']
+					: __( 'AiVI account onboarding updated successfully.', 'ai-visibility-inspector' ),
+			));
+		}
+
+		$remote_state = is_array($data ?? null) ? $this->extract_remote_account_state($data) : null;
+		$remote_dashboard = is_array($data ?? null) ? $this->extract_remote_dashboard_summary($data) : null;
+		if (is_array($remote_state)) {
+			Admin_Settings::sync_remote_account_snapshot($remote_state, is_array($remote_dashboard) ? $remote_dashboard : array());
+		}
+
+		return new \WP_Error(
+			'backend_error',
+			is_array($data) && ! empty($data['message']) ? $data['message'] : $error_message,
 			array(
 				'status' => $status_code > 0 ? $status_code : 502,
 				'body' => is_string($body) ? substr($body, 0, 300) : '',
@@ -820,7 +985,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 	}
 
 	/**
-	 * Proxy analyze request to backend (Phase 5: Async pattern)
+	 * Proxy analyze request to backend
 	 *
 	 * Calls POST /aivi/v1/analyze/run which returns 202 Accepted with run_id.
 	 * Frontend will poll GET /aivi/v1/analyze/run/{run_id} for results.
@@ -864,6 +1029,12 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 		if (isset($manifest['meta_description']) && is_string($manifest['meta_description'])) {
 			$manifest['meta_description'] = sanitize_textarea_field($manifest['meta_description']);
 		}
+		if (isset($manifest['canonical_url']) && is_string($manifest['canonical_url'])) {
+			$manifest['canonical_url'] = esc_url_raw($manifest['canonical_url']);
+		}
+		if (isset($manifest['lang']) && is_string($manifest['lang'])) {
+			$manifest['lang'] = sanitize_text_field($manifest['lang']);
+		}
 
 		if (empty($manifest['title'])) {
 			$manifest['title'] = $request->get_param('title');
@@ -886,6 +1057,12 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 		if (!array_key_exists('meta_description', $manifest)) {
 			$manifest['meta_description'] = $request->get_param('meta_description');
 		}
+		if (!array_key_exists('canonical_url', $manifest)) {
+			$manifest['canonical_url'] = $request->get_param('canonical_url');
+		}
+		if (!array_key_exists('lang', $manifest)) {
+			$manifest['lang'] = $request->get_param('lang');
+		}
 
 		$site_id = \AiVI\Plugin::get_instance()->get_site_id();
 		if (!is_string($site_id) || $site_id === '') {
@@ -902,7 +1079,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			);
 		}
 
-		// Phase 5 Fix: Client-Side ID Generation (Fire-and-Forget)
+		// Generate the run ID locally so the backend can accept the job immediately
 		$run_id = wp_generate_uuid4();
 
 		$body = array(
@@ -945,7 +1122,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			);
 		}
 
-		// Non-blocking request to avoid PHP timeout
+		// Blocking request with a short timeout to avoid PHP timeout
 		$headers = Admin_Settings::get_api_headers();
 		$headers['X-AIVI-Run-Id'] = $run_id;
 		$request_args = array(
@@ -964,7 +1141,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			2
 		);
 
-		// Even with blocking=false, wp_remote_post might return WP_Error if connection initiation fails
+		// wp_remote_post might return WP_Error if connection initiation fails
 		if (is_wp_error($response)) {
 			$error_code = $response->get_error_code();
 			$error_message = $response->get_error_message();
@@ -1037,7 +1214,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 	}
 
 	/**
-	 * Proxy run status request to backend (Phase 5: Polling)
+	 * Proxy run status request to backend
 	 *
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error
@@ -1138,7 +1315,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 				);
 			}
 
-			// Phase 5 Fix: Fetch S3 content server-side to bypass CORS
+			// Fetch presigned result content server-side to avoid browser CORS issues
 			if (isset($data['status']) && in_array($data['status'], array('success', 'success_partial'), true) && !empty($data['result_url'])) {
 				$s3_response = $this->wp_remote_get_with_retries(
 					$data['result_url'],
@@ -1309,7 +1486,11 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			));
 			return new \WP_Error(
 				'backend_error',
-				__('Failed to fetch analysis details: ' . $error_message, 'ai-visibility-inspector'),
+				sprintf(
+					/* translators: %s: backend error message returned while loading analysis details. */
+					__( 'Failed to fetch analysis details: %s', 'ai-visibility-inspector' ),
+					sanitize_text_field( $error_message )
+				),
 				array(
 					'status' => 503,
 					'diagnostics' => $diagnostics
@@ -1587,6 +1768,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 
 		// Fallback to error_log for critical errors only
 		if (strpos($event, 'error') !== false) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging is limited to error events for operational support.
 			error_log("AiVI Error [$event]: " . json_encode($context));
 		}
 	}
@@ -1697,7 +1879,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			}
 
 			if ($attempt < $max_attempts) {
-				$jitter_ms = 200 + (function_exists('random_int') ? random_int(0, 600) : mt_rand(0, 600));
+				$jitter_ms = 200 + (function_exists('random_int') ? random_int(0, 600) : wp_rand(0, 600));
 				usleep($jitter_ms * 1000);
 			}
 		}
@@ -1727,7 +1909,7 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 			}
 
 			if ($attempt < $max_attempts) {
-				$jitter_ms = 200 + (function_exists('random_int') ? random_int(0, 600) : mt_rand(0, 600));
+				$jitter_ms = 200 + (function_exists('random_int') ? random_int(0, 600) : wp_rand(0, 600));
 				usleep($jitter_ms * 1000);
 			}
 		}
@@ -1812,15 +1994,17 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 		$local_state = Admin_Settings::get_account_state();
 		$site_identity = Admin_Settings::get_site_identity_payload();
 		$summary_url = trailingslashit( $backend_url ) . 'aivi/v1/account/summary';
-		$summary_url = add_query_arg(
-			array(
-				'account_id' => $local_state['account_id'],
-				'site_id'    => $site_identity['site_id'],
-				'blog_id'    => $site_identity['blog_id'],
-				'home_url'   => $site_identity['home_url'],
-			),
-			$summary_url
+		$summary_query_args = array(
+			'account_id' => $local_state['account_id'],
+			'site_id'    => $site_identity['site_id'],
+			'blog_id'    => $site_identity['blog_id'],
+			'home_url'   => $site_identity['home_url'],
 		);
+		$summary_contact_email = sanitize_email( (string) ( $site_identity['admin_email'] ?? '' ) );
+		if ( '' !== $summary_contact_email ) {
+			$summary_query_args['admin_email'] = $summary_contact_email;
+		}
+		$summary_url = add_query_arg( $summary_query_args, $summary_url );
 
 		$headers = Admin_Settings::get_api_headers();
 		$headers['X-AIVI-Account-Id'] = (string) $local_state['account_id'];
@@ -1828,6 +2012,9 @@ class REST_Backend_Proxy extends \WP_REST_Controller
 		$headers['X-AIVI-Blog-Id'] = (string) $site_identity['blog_id'];
 		$headers['X-AIVI-Home-Url'] = (string) $site_identity['home_url'];
 		$headers['X-AIVI-Plugin-Version'] = (string) $site_identity['plugin_version'];
+		if ( '' !== $summary_contact_email ) {
+			$headers['X-AIVI-Admin-Email'] = $summary_contact_email;
+		}
 
 		$response = $this->wp_remote_get_with_retries(
 			$summary_url,

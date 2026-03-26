@@ -25,6 +25,9 @@ describe('Account dashboard contract', () => {
         expect(adminSettings).toContain('function triggerBillingReturnRefresh()');
         expect(adminSettings).toContain("params.get('aivi_billing_return')");
         expect(adminSettings).toContain('resolveAccountSummaryEndpoint()');
+        expect(adminSettings).toContain('operator-issued connection token');
+        expect(adminSettings).toContain('Add another site to this account');
+        expect(adminSettings).toContain('Disconnect this site');
     });
 
     test('admin menu now points the top-level AiVI page at the same dashboard renderer', () => {
@@ -42,5 +45,10 @@ describe('Account dashboard contract', () => {
         expect(proxy).toContain('private function extract_remote_dashboard_summary($data)');
         expect(proxy).toContain('Admin_Settings::sync_remote_account_snapshot($remote_state, is_array($remote_dashboard) ? $remote_dashboard : array());');
         expect(proxy).toContain("'dashboard_summary' => Admin_Settings::get_public_account_dashboard_state(),");
+        expect(proxy).toContain("contact_email = sanitize_email( (string) ( $params['contact_email'] ?? '' ) );");
+        expect(proxy).toContain("Admin_Settings::update_preferred_contact_email( $contact_email );");
+        expect(proxy).toContain('summary_contact_email');
+        expect(proxy).toContain("if ( '' !== $summary_contact_email ) {");
+        expect(proxy).toContain("$headers['X-AIVI-Admin-Email'] = $summary_contact_email;");
     });
 });

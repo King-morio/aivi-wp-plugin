@@ -1,8 +1,11 @@
 const SUPPORTED_SCHEMA_ASSIST_CHECKS = new Set([
+    'article_jsonld_presence_and_completeness',
     'faq_jsonld_presence_and_completeness',
+    'faq_jsonld_generation_suggestion',
     'howto_jsonld_presence_and_completeness',
     'howto_schema_presence_and_completeness',
     'intro_schema_suggestion',
+    'itemlist_jsonld_presence_and_completeness',
     'schema_matches_content',
     'semantic_html_usage',
     'valid_jsonld_schema'
@@ -14,6 +17,10 @@ const MAX_MARKUP_EXAMPLES = 4;
 const CONTENT_TYPE_EXPECTED_SCHEMA_TYPES = {
     article: ['Article', 'BlogPosting', 'NewsArticle', 'WebPage'],
     post: ['Article', 'BlogPosting', 'NewsArticle', 'WebPage'],
+    blog: ['BlogPosting', 'Article', 'NewsArticle', 'WebPage'],
+    blogposting: ['BlogPosting', 'Article', 'NewsArticle', 'WebPage'],
+    news: ['NewsArticle', 'Article', 'BlogPosting', 'WebPage'],
+    newsarticle: ['NewsArticle', 'Article', 'BlogPosting', 'WebPage'],
     howto: ['HowTo'],
     'how-to': ['HowTo'],
     product: ['Product'],
@@ -36,10 +43,24 @@ const cleanHtmlToText = (value) => {
     return normalizeText(source.replace(/<[^>]+>/g, ' '));
 };
 
+const normalizeMultilineText = (value, maxLen = 4000) => {
+    const source = typeof value === 'string' ? value : '';
+    if (!source) return '';
+    const lines = source
+        .split(/\n+/)
+        .map((line) => normalizeText(line, maxLen))
+        .filter(Boolean);
+    return lines.join('\n');
+};
+
 const getBlockText = (block) => {
     if (!block || typeof block !== 'object') return '';
-    if (typeof block.text === 'string' && block.text.trim()) return normalizeText(block.text);
-    if (typeof block.text_content === 'string' && block.text_content.trim()) return normalizeText(block.text_content);
+    if (typeof block.text === 'string' && block.text.trim()) {
+        return isListBlock(block) ? normalizeMultilineText(block.text) : normalizeText(block.text);
+    }
+    if (typeof block.text_content === 'string' && block.text_content.trim()) {
+        return isListBlock(block) ? normalizeMultilineText(block.text_content) : normalizeText(block.text_content);
+    }
     return '';
 };
 
@@ -128,6 +149,21 @@ const dedupeObjects = (list, keyFn) => {
         if (!key || seen.has(key)) return;
         seen.add(key);
         output.push(item);
+    });
+    return output;
+};
+
+const collectNamedValues = (list, keyResolver, limit) => {
+    const maxItems = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Number(limit) : 8;
+    const seen = new Set();
+    const output = [];
+    (Array.isArray(list) ? list : []).forEach((item) => {
+        if (output.length >= maxItems) return;
+        const value = normalizeText(String(keyResolver(item) || ''), 220);
+        const key = value.toLowerCase();
+        if (!value || seen.has(key)) return;
+        seen.add(key);
+        output.push(value);
     });
     return output;
 };
@@ -236,6 +272,96 @@ const normalizeJsonldObjectsFromManifest = (manifest) => {
         }
     });
     return output.filter((obj) => obj && typeof obj === 'object');
+};
+
+const normalizeJsonldObjects = (value) => {
+    if (!value || typeof value !== 'object') return [];
+    if (Array.isArray(value)) {
+        return value.flatMap((entry) => normalizeJsonldObjects(entry));
+    }
+    const graphEntries = Array.isArray(value['@graph'])
+        ? value['@graph'].flatMap((entry) => normalizeJsonldObjects(entry))
+        : [];
+    return graphEntries.length ? graphEntries : [value];
+};
+
+const extractJsonldSchemaTypes = (value) => {
+    const source = value && typeof value === 'object' ? value['@type'] : null;
+    const rawTypes = Array.isArray(source) ? source : [source];
+    return rawTypes
+        .map((item) => normalizeText(String(item || ''), 64))
+        .filter(Boolean);
+};
+
+const normalizeMainEntityUrl = (value) => {
+    if (!value) return '';
+    if (typeof value === 'string') return normalizeText(value, 500);
+    if (value && typeof value === 'object') {
+        return normalizeText(String(value['@id'] || value.url || value.id || ''), 500);
+    }
+    return '';
+};
+
+const buildSchemaAssistComparisonSignature = (jsonldObject) => {
+    const normalizedObjects = normalizeJsonldObjects(jsonldObject);
+    const primaryObject = normalizedObjects[0] || null;
+    const schemaTypes = primaryObject ? extractJsonldSchemaTypes(primaryObject) : [];
+    const nameOrHeadline = primaryObject
+        ? normalizeText(String(primaryObject.headline || primaryObject.name || primaryObject.alternateName || ''), 220)
+        : '';
+    const url = primaryObject ? normalizeText(String(primaryObject.url || ''), 500) : '';
+    const mainEntityOfPage = primaryObject ? normalizeMainEntityUrl(primaryObject.mainEntityOfPage || primaryObject.mainEntityofpage) : '';
+    const faqQuestionNames = primaryObject && Array.isArray(primaryObject.mainEntity)
+        ? collectNamedValues(primaryObject.mainEntity, (entry) => entry && entry.name, 8)
+        : [];
+    const howtoStepNames = primaryObject && Array.isArray(primaryObject.step)
+        ? collectNamedValues(primaryObject.step, (entry) => entry && (entry.name || entry.text), 12)
+        : [];
+    const itemlistItemNames = primaryObject && Array.isArray(primaryObject.itemListElement)
+        ? collectNamedValues(primaryObject.itemListElement, (entry) => entry && (entry.name || (entry.item && entry.item.name)), 12)
+        : [];
+    return {
+        schema_types: schemaTypes,
+        primary_schema_type: schemaTypes[0] || '',
+        name_or_headline: nameOrHeadline,
+        url,
+        main_entity_of_page: mainEntityOfPage,
+        faq_question_names: faqQuestionNames,
+        howto_step_names: howtoStepNames,
+        itemlist_item_names: itemlistItemNames
+    };
+};
+
+const buildSchemaAssistReadyState = (payload) => {
+    if (payload && payload.can_insert === true) return 'insertable';
+    if (payload && payload.can_copy === true) return 'copy_only';
+    return 'unavailable';
+};
+
+const buildSchemaAssistMetadata = (payload) => {
+    const signature = payload && payload.draft_jsonld && typeof payload.draft_jsonld === 'object'
+        ? buildSchemaAssistComparisonSignature(payload.draft_jsonld)
+        : null;
+    const targetUrl = signature
+        ? normalizeText(String(signature.url || signature.main_entity_of_page || ''), 500)
+        : '';
+    return {
+        primary_schema_type: signature ? String(signature.primary_schema_type || '') : '',
+        target_url: targetUrl,
+        comparison_signature: signature,
+        deterministic_fingerprints: {
+            faq_question_names: signature && Array.isArray(signature.faq_question_names)
+                ? signature.faq_question_names
+                : [],
+            howto_step_names: signature && Array.isArray(signature.howto_step_names)
+                ? signature.howto_step_names
+                : [],
+            itemlist_item_names: signature && Array.isArray(signature.itemlist_item_names)
+                ? signature.itemlist_item_names
+                : []
+        },
+        draft_ready_state: buildSchemaAssistReadyState(payload)
+    };
 };
 
 const inferExpectedTypes = ({ checkData, runMetadata }) => {
@@ -511,6 +637,34 @@ const buildHowToSeedDraft = ({ manifest, runMetadata }) => {
     };
 };
 
+const buildFaqSemanticBridgeDraft = ({ checkData, manifest, runMetadata, allChecks }) => {
+    const sibling = allChecks && typeof allChecks === 'object'
+        ? allChecks.faq_jsonld_presence_and_completeness
+        : null;
+    const primaryDraft = buildFaqSchemaDraft({
+        checkData: (sibling && typeof sibling === 'object') ? sibling : checkData,
+        manifest,
+        runMetadata
+    });
+    if (primaryDraft && primaryDraft.can_copy === true) {
+        return {
+            ...primaryDraft,
+            generation_mode: sibling ? 'semantic_bridge_deterministic_extract' : primaryDraft.generation_mode,
+            generation_notes: sibling
+                ? ['Generated FAQ draft via deterministic bridge from FAQ schema generation signals.']
+                : primaryDraft.generation_notes
+        };
+    }
+    return {
+        schema_kind: 'faq_jsonld',
+        draft_jsonld: null,
+        can_copy: false,
+        can_insert: false,
+        generation_mode: 'insufficient_input',
+        generation_notes: ['Could not extract at least 2 FAQ-ready question-answer pairs from current content.']
+    };
+};
+
 const buildHowToSemanticBridgeDraft = ({ checkData, manifest, runMetadata, allChecks }) => {
     const sibling = allChecks && typeof allChecks === 'object'
         ? allChecks.howto_jsonld_presence_and_completeness
@@ -530,6 +684,159 @@ const buildHowToSemanticBridgeDraft = ({ checkData, manifest, runMetadata, allCh
         };
     }
     return buildHowToSeedDraft({ manifest, runMetadata });
+};
+
+const buildItemListCandidatesFromDetails = (checkData) => {
+    const candidates = Array.isArray(checkData?.details?.detected_candidates)
+        ? checkData.details.detected_candidates
+        : [];
+    return candidates
+        .map((candidate) => {
+            const items = Array.isArray(candidate?.items)
+                ? candidate.items.map((item, index) => ({
+                    text: normalizeText(item?.text || item?.name || '', 180),
+                    position: Number.isFinite(Number(item?.position)) ? Number(item.position) : index + 1
+                })).filter((item) => item.text)
+                : [];
+            if (items.length < 3) return null;
+            return {
+                heading: normalizeText(candidate?.heading || '', 180),
+                ordered: candidate?.ordered === true,
+                items
+            };
+        })
+        .filter(Boolean);
+};
+
+const buildItemListCandidatesFromManifest = (manifest) => {
+    const sections = collectHeadingSections(Array.isArray(manifest?.block_map) ? manifest.block_map : []);
+    const candidates = [];
+    sections.forEach((section) => {
+        const supportBlocks = Array.isArray(section?.support_blocks) ? section.support_blocks : [];
+        supportBlocks.forEach((block) => {
+            if (!isListBlock(block)) return;
+            const rawText = getBlockText(block);
+            const items = parseListItems(rawText)
+                .map((text, index) => ({
+                    text: normalizeText(text, 180),
+                    position: index + 1
+                }))
+                .filter((item) => item.text);
+            if (items.length < 3) return;
+            candidates.push({
+                heading: normalizeText(section?.heading || '', 180),
+                ordered: /\/ol$/i.test(getBlockType(block)) || /^\s*\d+[.)]/m.test(String(rawText || '')),
+                items
+            });
+        });
+    });
+    return dedupeObjects(candidates, (candidate) =>
+        `${candidate.heading || ''}|${candidate.items.map((item) => item.text).join('|')}`
+    );
+};
+
+const buildItemListSchemaDraft = ({ checkData, manifest, runMetadata }) => {
+    const candidates = dedupeObjects(
+        [
+            ...buildItemListCandidatesFromDetails(checkData),
+            ...buildItemListCandidatesFromManifest(manifest)
+        ],
+        (candidate) => `${candidate.heading || ''}|${candidate.items.map((item) => item.text).join('|')}`
+    );
+    const candidate = candidates[0] || null;
+    if (!candidate) {
+        return {
+            schema_kind: 'itemlist_jsonld',
+            draft_jsonld: null,
+            can_copy: false,
+            can_insert: false,
+            generation_mode: 'insufficient_input',
+            generation_notes: [
+                'Could not extract a strong visible list candidate with at least 3 items.'
+            ]
+        };
+    }
+
+    const jsonld = {
+        '@context': 'https://schema.org',
+        '@type': 'ItemList',
+        itemListOrder: candidate.ordered
+            ? 'https://schema.org/ItemListOrderAscending'
+            : 'https://schema.org/ItemListUnordered',
+        itemListElement: candidate.items.map((item, index) => ({
+            '@type': 'ListItem',
+            position: Number.isFinite(Number(item.position)) ? Number(item.position) : index + 1,
+            name: item.text
+        }))
+    };
+
+    if (candidate.heading) {
+        jsonld.name = candidate.heading;
+    }
+    const url = inferCanonicalUrl(manifest, runMetadata);
+    if (url) jsonld.url = url;
+
+    return {
+        schema_kind: 'itemlist_jsonld',
+        draft_jsonld: jsonld,
+        can_copy: true,
+        can_insert: true,
+        generation_mode: 'deterministic_extract',
+        generation_notes: [
+            `Generated ItemList draft from ${candidate.items.length} visible list entries.`
+        ]
+    };
+};
+
+const inferArticleSchemaType = ({ checkData, runMetadata }) => {
+    const explicitType = normalizeText(checkData?.details?.preferred_article_type || '', 60);
+    if (explicitType) return explicitType;
+    const contentType = inferContentType(runMetadata);
+    if (contentType === 'news' || contentType === 'newsarticle') return 'NewsArticle';
+    if (contentType === 'post' || contentType === 'blog' || contentType === 'blogposting') return 'BlogPosting';
+    return 'Article';
+};
+
+const buildArticleSchemaDraft = ({ checkData, manifest, runMetadata }) => {
+    const schemaType = inferArticleSchemaType({ checkData, runMetadata });
+    const title = inferTitle(manifest, runMetadata);
+    const description = inferDescription(manifest, runMetadata);
+    const author = inferAuthor(runMetadata);
+    const published = inferDateValue(runMetadata);
+    const url = inferCanonicalUrl(manifest, runMetadata);
+
+    const jsonld = {
+        '@context': 'https://schema.org',
+        '@type': schemaType,
+        headline: title
+    };
+
+    if (description) jsonld.description = description;
+    if (author) {
+        jsonld.author = {
+            '@type': 'Person',
+            name: author
+        };
+    }
+    if (published) {
+        jsonld.datePublished = published;
+        jsonld.dateModified = published;
+    }
+    if (url) {
+        jsonld.url = url;
+        jsonld.mainEntityOfPage = url;
+    }
+
+    return {
+        schema_kind: 'article_jsonld',
+        draft_jsonld: jsonld,
+        can_copy: true,
+        can_insert: true,
+        generation_mode: 'deterministic_seed',
+        generation_notes: [
+            `Generated ${schemaType} draft from visible article metadata.`
+        ]
+    };
 };
 
 const buildSchemaMatchesContentDraft = ({ checkData, manifest, runMetadata }) => {
@@ -814,14 +1121,20 @@ const buildSchemaAssistDraft = ({
     if (verdict === 'pass') return null;
 
     let payload = null;
-    if (normalizedCheckId === 'faq_jsonld_presence_and_completeness') {
+    if (normalizedCheckId === 'article_jsonld_presence_and_completeness') {
+        payload = buildArticleSchemaDraft({ checkData, manifest, runMetadata });
+    } else if (normalizedCheckId === 'faq_jsonld_presence_and_completeness') {
         payload = buildFaqSchemaDraft({ checkData, manifest, runMetadata });
+    } else if (normalizedCheckId === 'faq_jsonld_generation_suggestion') {
+        payload = buildFaqSemanticBridgeDraft({ checkData, manifest, runMetadata, allChecks });
     } else if (normalizedCheckId === 'howto_jsonld_presence_and_completeness') {
         payload = buildHowToSchemaDraft({ checkData, manifest, runMetadata });
     } else if (normalizedCheckId === 'howto_schema_presence_and_completeness') {
         payload = buildHowToSemanticBridgeDraft({ checkData, manifest, runMetadata, allChecks });
     } else if (normalizedCheckId === 'intro_schema_suggestion') {
         payload = buildIntroSchemaSuggestionDraft({ checkData, manifest, runMetadata });
+    } else if (normalizedCheckId === 'itemlist_jsonld_presence_and_completeness') {
+        payload = buildItemListSchemaDraft({ checkData, manifest, runMetadata });
     } else if (normalizedCheckId === 'schema_matches_content') {
         payload = buildSchemaMatchesContentDraft({ checkData, manifest, runMetadata });
     } else if (normalizedCheckId === 'semantic_html_usage') {
@@ -831,13 +1144,19 @@ const buildSchemaAssistDraft = ({
     }
 
     if (!payload || typeof payload !== 'object') return null;
+    const metadata = buildSchemaAssistMetadata(payload);
     return {
         check_id: normalizedCheckId,
-        generator: 'deterministic_schema_builder_v1',
+        generator: 'deterministic_schema_builder_v2',
         schema_kind: String(payload.schema_kind || '').trim(),
         draft_jsonld: payload.draft_jsonld || null,
         can_copy: payload.can_copy === true,
         can_insert: payload.can_insert === true,
+        primary_schema_type: String(metadata.primary_schema_type || ''),
+        target_url: String(metadata.target_url || ''),
+        comparison_signature: metadata.comparison_signature || null,
+        deterministic_fingerprints: metadata.deterministic_fingerprints,
+        draft_ready_state: String(metadata.draft_ready_state || 'unavailable'),
         generation_mode: String(payload.generation_mode || 'unknown'),
         generation_notes: Array.isArray(payload.generation_notes)
             ? payload.generation_notes.map((note) => normalizeText(String(note || ''), 260)).filter(Boolean)
@@ -852,12 +1171,16 @@ module.exports = {
         normalizeText,
         cleanHtmlToText,
         collectHeadingSections,
+        buildSchemaAssistComparisonSignature,
         buildFaqPairsFromManifest,
         buildHowToStepsFromManifest,
         buildFaqSchemaDraft,
         buildHowToSchemaDraft,
+        buildFaqSemanticBridgeDraft,
         buildHowToSeedDraft,
         buildHowToSemanticBridgeDraft,
+        buildItemListSchemaDraft,
+        buildArticleSchemaDraft,
         buildSchemaMatchesContentDraft,
         buildSemanticHtmlUsageDraft,
         buildIntroSchemaSuggestionDraft,

@@ -30,12 +30,12 @@ try {
 const GOLD_DATASETS = {
     synthetic_v1: {
         expected_verdicts: {
-            direct_answer_first_120: 'fail',
-            orphan_headings: 'partial'
+            immediate_answer_placement: 'fail',
+            heading_topic_fulfillment: 'partial'
         },
         expected_anchors: [
-            { check_id: 'direct_answer_first_120', node_ref: 'block-0', signature: 'sig-1', snippet: 'direct answer missing' },
-            { check_id: 'orphan_headings', node_ref: 'block-2', signature: 'sig-2', snippet: 'heading with no body' }
+            { check_id: 'immediate_answer_placement', node_ref: 'block-0', signature: 'sig-1', snippet: 'direct answer missing' },
+            { check_id: 'heading_topic_fulfillment', node_ref: 'block-2', signature: 'sig-2', snippet: 'heading with no body' }
         ],
         thresholds: {
             min_anchor_precision: 0.5,
@@ -45,9 +45,9 @@ const GOLD_DATASETS = {
     },
     bad_article_500: {
         expected_verdicts: {
-            direct_answer_first_120: 'fail',
+            immediate_answer_placement: 'fail',
             answer_sentence_concise: 'fail',
-            orphan_headings: 'fail',
+            heading_topic_fulfillment: 'fail',
             appropriate_paragraph_length: 'fail',
             no_exaggerated_claims: 'fail',
             claim_provenance_and_evidence: 'fail',
@@ -92,14 +92,48 @@ function calculateCheckScore(checkResult, checkWeight) {
     };
 }
 
+function flattenCheckWeights() {
+    const allCheckWeights = {};
+    Object.values(scoringConfig.scoring.check_weights).forEach((category) => {
+        Object.assign(allCheckWeights, category);
+    });
+    return allCheckWeights;
+}
+
+function getConfiguredIntroCheckIds() {
+    const introGroup = scoringConfig?.scoring?.check_weights?.intro_focus_factuality;
+    if (!introGroup || typeof introGroup !== 'object') {
+        return new Set();
+    }
+    return new Set(Object.keys(introGroup));
+}
+
+function getApplicableCheckWeights(contentType) {
+    const allCheckWeights = flattenCheckWeights();
+    const applicableWeights = {};
+
+    Object.entries(allCheckWeights).forEach(([checkId, checkWeight]) => {
+        const contentTypes = Array.isArray(checkWeight?.applicable_content_types)
+            ? checkWeight.applicable_content_types
+            : [];
+        const isApplicable = contentTypes.includes('all') || contentTypes.includes(contentType);
+        if (isApplicable) {
+            applicableWeights[checkId] = checkWeight;
+        }
+    });
+
+    return applicableWeights;
+}
+
 function recomputeScores(analysisResult, contentType = 'article') {
     const checks = analysisResult.checks || {};
 
-    // Flatten check weights
-    const allCheckWeights = {};
-    Object.values(scoringConfig.scoring.check_weights).forEach(category => {
-        Object.assign(allCheckWeights, category);
-    });
+    const allCheckWeights = flattenCheckWeights();
+    const applicableCheckWeights = getApplicableCheckWeights(contentType);
+    const introWeight = typeof scoringConfig.scoring.intro_weight_in_aeo === 'number'
+        ? scoringConfig.scoring.intro_weight_in_aeo
+        : null;
+    const introCheckIds = getConfiguredIntroCheckIds();
 
     const categoryScores = {
         AEO: { score: 0, raw_max: 0, checks: {} },
@@ -108,16 +142,15 @@ function recomputeScores(analysisResult, contentType = 'article') {
 
     // Process each check
     Object.entries(checks).forEach(([checkId, checkResult]) => {
-        const checkWeight = allCheckWeights[checkId];
+        const knownCheckWeight = allCheckWeights[checkId];
+        const checkWeight = applicableCheckWeights[checkId];
+        if (!checkWeight && knownCheckWeight) {
+            return;
+        }
         if (!checkWeight) {
             console.warn(`  ⚠ Unknown check ID: ${checkId}`);
             return;
         }
-
-        // Check applicability
-        const isApplicable = checkWeight.applicable_content_types.includes('all') ||
-                             checkWeight.applicable_content_types.includes(contentType);
-        if (!isApplicable) return;
 
         const checkScore = calculateCheckScore(checkResult, checkWeight);
         const category = checkWeight.category;
@@ -133,11 +166,40 @@ function recomputeScores(analysisResult, contentType = 'article') {
     const maxAEO = scoringConfig.scoring.category_max_points.AEO;
     const maxGEO = scoringConfig.scoring.category_max_points.GEO;
 
-    const normalizedAEO = categoryScores.AEO.raw_max > 0
-        ? (categoryScores.AEO.score / categoryScores.AEO.raw_max) * maxAEO
-        : 0;
-    const normalizedGEO = categoryScores.GEO.raw_max > 0
-        ? (categoryScores.GEO.score / categoryScores.GEO.raw_max) * maxGEO
+    const expectedAeoChecks = Object.entries(applicableCheckWeights)
+        .filter(([, weight]) => weight.category === 'AEO' && Number(weight.max_points) > 0);
+    const expectedGeoChecks = Object.entries(applicableCheckWeights)
+        .filter(([, weight]) => weight.category === 'GEO' && Number(weight.max_points) > 0);
+    const expectedAeoMax = expectedAeoChecks.reduce((sum, [, weight]) => sum + Number(weight.max_points || 0), 0);
+    const expectedGeoMax = expectedGeoChecks.reduce((sum, [, weight]) => sum + Number(weight.max_points || 0), 0);
+
+    let normalizedAEO = 0;
+    if (introWeight !== null && introCheckIds.size > 0) {
+        const introObservedScore = Object.entries(categoryScores.AEO.checks)
+            .filter(([checkId]) => introCheckIds.has(checkId))
+            .reduce((sum, [, check]) => sum + Number(check.score || 0), 0);
+        const introExpectedMax = expectedAeoChecks
+            .filter(([checkId]) => introCheckIds.has(checkId))
+            .reduce((sum, [, weight]) => sum + Number(weight.max_points || 0), 0);
+        const introNormalized = introExpectedMax > 0
+            ? (introObservedScore / introExpectedMax) * maxAEO * introWeight
+            : 0;
+        const otherObservedScore = Object.entries(categoryScores.AEO.checks)
+            .filter(([checkId]) => !introCheckIds.has(checkId))
+            .reduce((sum, [, check]) => sum + Number(check.score || 0), 0);
+        const otherExpectedMax = expectedAeoChecks
+            .filter(([checkId]) => !introCheckIds.has(checkId))
+            .reduce((sum, [, weight]) => sum + Number(weight.max_points || 0), 0);
+        const otherNormalized = otherExpectedMax > 0
+            ? (otherObservedScore / otherExpectedMax) * maxAEO * (1 - introWeight)
+            : 0;
+        normalizedAEO = introNormalized + otherNormalized;
+    } else if (expectedAeoMax > 0) {
+        normalizedAEO = (categoryScores.AEO.score / expectedAeoMax) * maxAEO;
+    }
+
+    const normalizedGEO = expectedGeoMax > 0
+        ? (categoryScores.GEO.score / expectedGeoMax) * maxGEO
         : 0;
 
     return {

@@ -58,7 +58,8 @@ const mockPayloadWithForbidden = {
                         ui_verdict: 'fail',
                         instances: 1,
                         first_instance_node_ref: 'block-1',
-                        highlights: [{ node_ref: 'block-1', snippet: 'Example', message: 'Missing single H1', type: 'issue' }],
+                        review_summary: 'The page uses more than one H1, so the primary heading is not singular.',
+                        highlights: [{ node_ref: 'block-1', snippet: 'Example', message: 'Missing single H1', review_summary: 'The page uses more than one H1, so the primary heading is not singular.', type: 'issue' }],
                         // FORBIDDEN - should be stripped
                         explanation: 'Found 3 H1 tags instead of 1',
                         suggestions: [{ text: 'Remove extra H1' }],
@@ -210,11 +211,21 @@ describe('Sidebar-Payload Hard Separation', () => {
             expect(issue).toHaveProperty('ui_verdict');
             expect(issue).toHaveProperty('instances');
             expect(issue).toHaveProperty('first_instance_node_ref');
+            expect(issue).toHaveProperty('review_summary');
             expect(issue).toHaveProperty('highlights');
             issue.highlights.forEach(highlight => {
                 expect(highlight).toHaveProperty('snippet');
                 expect(highlight).toHaveProperty('message');
+                expect(highlight).toHaveProperty('review_summary');
             });
+        });
+
+        test('preserves sanitized review_summary on issues and highlights', () => {
+            const stripped = stripSidebarPayload(mockPayloadWithForbidden, 'test-run');
+            const issue = stripped.analysis_summary.categories[0].issues[0];
+
+            expect(issue.review_summary).toBe('The page uses more than one H1, so the primary heading is not singular.');
+            expect(issue.highlights[0].review_summary).toBe('The page uses more than one H1, so the primary heading is not singular.');
         });
 
         test('issue has exactly allowed fields only', () => {

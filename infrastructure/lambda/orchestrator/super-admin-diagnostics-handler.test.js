@@ -13,6 +13,7 @@ const mockMarkWebhookProcessed = jest.fn();
 const mockPutAuditEvent = jest.fn();
 const mockMarkAuditEventCompleted = jest.fn();
 const mockProcessVerifiedPayPalWebhook = jest.fn();
+const mockFindTrialAdmissionConflicts = jest.fn();
 
 jest.mock('./super-admin-auth', () => ({
     assertSuperAdminAccess: (...args) => mockAssertSuperAdminAccess(...args),
@@ -50,8 +51,10 @@ jest.mock('./paypal-webhook-processing', () => ({
     processVerifiedPayPalWebhook: (...args) => mockProcessVerifiedPayPalWebhook(...args)
 }));
 
-jest.mock('../shared/billing-account-state', () => ({
-    createAccountBillingStateStore: jest.fn(() => ({})),
+jest.mock('./billing-account-state', () => ({
+    createAccountBillingStateStore: jest.fn(() => ({
+        findTrialAdmissionConflicts: (...args) => mockFindTrialAdmissionConflicts(...args)
+    })),
     computeTotalRemaining: jest.fn((state) => state?.credits?.total_remaining || 0)
 }));
 
@@ -72,7 +75,16 @@ const baseState = {
     site: {
         site_id: 'site_123',
         connected_domain: 'example.com'
-    }
+    },
+    trial_admissions: [
+        {
+            source: 'self_serve',
+            site_id: 'site_123',
+            connected_domain: 'example.com',
+            home_url: 'https://example.com/',
+            admitted_at: '2026-03-06T10:00:00.000Z'
+        }
+    ]
 };
 
 const buildGetEvent = (queryStringParameters = {}) => ({
@@ -197,6 +209,19 @@ describe('superAdminDiagnosticsHandler', () => {
                 provider_subscription_id: 'I-SUB123'
             }
         });
+        mockFindTrialAdmissionConflicts.mockResolvedValue([
+            {
+                account_id: 'acct_789',
+                account_label: 'Prior Trial Account',
+                site_id: 'site_other',
+                connected_domain: 'example.com',
+                home_url: 'https://example.com/',
+                trial_status: 'ended',
+                subscription_status: 'trial',
+                admitted_at: '2026-02-28T10:00:00.000Z',
+                updated_at: '2026-03-01T10:00:00.000Z'
+            }
+        ]);
         console.log = jest.fn();
     });
 
@@ -221,6 +246,18 @@ describe('superAdminDiagnosticsHandler', () => {
                     expect.objectContaining({
                         run_id: 'run_123',
                         status: 'failed_schema'
+                    })
+                ]
+            },
+            trial_admission_history: {
+                current: [
+                    expect.objectContaining({
+                        connected_domain: 'example.com'
+                    })
+                ],
+                exact_domain_conflicts: [
+                    expect.objectContaining({
+                        account_id: 'acct_789'
                     })
                 ]
             },

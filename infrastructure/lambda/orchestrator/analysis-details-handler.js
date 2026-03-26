@@ -21,6 +21,7 @@ const {
 } = require('./analysis-serializer');
 const { resolveRewriteTarget } = require('./rewrite-target-resolver');
 const { emitDetailsRequestAborted, emitDetailsRequestStale } = require('./telemetry-emitter');
+const { buildArticlePointerRunId, getRunArticleKey, getSupersedingRunId } = require('./run-supersession');
 
 const ddbClient = new DynamoDBClient({});
 const s3Client = new S3Client({});
@@ -221,6 +222,23 @@ const getRunRecord = async (runId) => {
     return unmarshall(response.Item);
 };
 
+const getLatestArticlePointer = async (articleKey) => {
+    const pointerRunId = buildArticlePointerRunId(articleKey);
+    if (!pointerRunId) return null;
+
+    const command = new GetItemCommand({
+        TableName: getEnv('RUNS_TABLE', 'aivi-runs-dev'),
+        Key: { run_id: { S: pointerRunId } }
+    });
+
+    const response = await ddbClient.send(command);
+    if (!response.Item) {
+        return null;
+    }
+
+    return unmarshall(response.Item);
+};
+
 /**
  * Download full analysis from S3
  */
@@ -394,6 +412,25 @@ const analysisDetailsHandler = async (event) => {
             };
         }
 
+        const articleKey = getRunArticleKey(run);
+        if (articleKey) {
+            const latestPointer = await getLatestArticlePointer(articleKey);
+            const supersedingRunId = getSupersedingRunId(run, latestPointer);
+            if (supersedingRunId) {
+                emitDetailsRequestStale(runId, resolvedCheckId, instanceIndex);
+                return {
+                    statusCode: 410,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ...generateStaleDetailsResponse(runId),
+                        error: 'results_superseded',
+                        superseded_by_run_id: supersedingRunId,
+                        message: 'A newer analysis run for this article is active.'
+                    })
+                };
+            }
+        }
+
         // Check for aborted runs - return 503 Service Unavailable
         const abortedStatuses = ['failed', 'failed_schema', 'failed_too_long', 'aborted'];
         if (abortedStatuses.includes(run.status)) {
@@ -468,8 +505,10 @@ const analysisDetailsHandler = async (event) => {
             };
         }
 
+        const manifest = await loadRunManifest(run);
+
         // Extract check details
-        const checkDetails = extractCheckDetails(detailsSource.data, resolvedCheckId, instanceIndex);
+        const checkDetails = extractCheckDetails(detailsSource.data, resolvedCheckId, instanceIndex, manifest);
 
         if (!checkDetails) {
             return {
@@ -482,8 +521,6 @@ const analysisDetailsHandler = async (event) => {
                 })
             };
         }
-
-        const manifest = await loadRunManifest(run);
         let rewriteResolution = null;
         try {
             rewriteResolution = resolveRewriteTarget({

@@ -23,6 +23,8 @@ define( 'AIVI_API_NAMESPACE', 'aivi/v1' );
 define( 'AIVI_API_ENDPOINTS', array(
     'ping' => '/backend/proxy_ping',
     'account_summary' => '/backend/account_summary',
+    'account_bootstrap' => '/backend/account_bootstrap',
+    'account_start_trial' => '/backend/account_start_trial',
     'account_connect' => '/backend/account_connect',
     'account_disconnect' => '/backend/account_disconnect',
     'billing_subscribe' => '/backend/billing_subscribe',
@@ -69,11 +71,17 @@ define( 'AIVI_USAGE_ROLLUP_OPTION', 'aivi_usage_rollup_state' );
 if ( ! defined( 'AIVI_BILLING_PROVIDER' ) ) {
     define( 'AIVI_BILLING_PROVIDER', 'paypal' );
 }
-if ( ! defined( 'AIVI_BILLING_READY' ) ) {
-    define( 'AIVI_BILLING_READY', false );
+if ( ! defined( 'AIVI_DEFAULT_BACKEND_URL' ) ) {
+    define( 'AIVI_DEFAULT_BACKEND_URL', 'https://dnvo4w1sca.execute-api.eu-north-1.amazonaws.com' );
 }
-define( 'AIVI_TRIAL_CREDITS', 15000 );
-define( 'AIVI_TRIAL_DAYS', 14 );
+if ( ! defined( 'AIVI_BILLING_READY' ) ) {
+    define( 'AIVI_BILLING_READY', true );
+}
+if ( ! defined( 'AIVI_ALLOW_UNBOUND_ANALYSIS' ) ) {
+    define( 'AIVI_ALLOW_UNBOUND_ANALYSIS', false );
+}
+define( 'AIVI_TRIAL_CREDITS', 5000 );
+define( 'AIVI_TRIAL_DAYS', 7 );
 define( 'AIVI_PLAN_CODES', array( 'starter', 'growth', 'pro' ) );
 define( 'AIVI_TOPUP_PACK_CODES', array( 'topup_25k', 'topup_100k', 'topup_300k' ) );
 define( 'AIVI_PUBLIC_BILLING_CATALOG', array(
@@ -81,8 +89,8 @@ define( 'AIVI_PUBLIC_BILLING_CATALOG', array(
         'code' => 'free_trial',
         'label' => 'Free Trial',
         'billing_type' => 'trial',
-        'included_credits' => 15000,
-        'duration_days' => 14,
+        'included_credits' => 5000,
+        'duration_days' => 7,
         'site_limit' => 1,
     ),
     'plans' => array(
@@ -100,7 +108,7 @@ define( 'AIVI_PUBLIC_BILLING_CATALOG', array(
             'label' => 'Growth',
             'billing_type' => 'subscription',
             'price_usd' => 22,
-            'included_credits' => 150000,
+            'included_credits' => 100000,
             'site_limit' => 3,
             'history_days' => 90,
             'intro_offer' => array(
@@ -113,7 +121,7 @@ define( 'AIVI_PUBLIC_BILLING_CATALOG', array(
             'label' => 'Pro',
             'billing_type' => 'subscription',
             'price_usd' => 59,
-            'included_credits' => 450000,
+            'included_credits' => 250000,
             'site_limit' => 10,
             'history_days' => 365,
         ),
@@ -157,6 +165,7 @@ define( 'AIVI_PAYPAL_ENV_KEYS', array(
     'plan_ids' => array(
         'starter' => 'PAYPAL_PLAN_ID_STARTER',
         'growth' => 'PAYPAL_PLAN_ID_GROWTH',
+        'growth_intro' => 'PAYPAL_PLAN_ID_GROWTH_INTRO',
         'pro' => 'PAYPAL_PLAN_ID_PRO',
     ),
 ) );

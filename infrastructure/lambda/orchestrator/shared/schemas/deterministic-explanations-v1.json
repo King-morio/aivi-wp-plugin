@@ -172,6 +172,19 @@
         }
       ]
     },
+    "faq_jsonld_generation_suggestion": {
+      "variants": [
+        {
+          "what_failed": "FAQ-ready question-and-answer pairs are present, but FAQ schema support is missing or incomplete.",
+          "why_it_matters": "Explicit FAQ schema helps answer engines preserve reusable question-answer structure without guessing.",
+          "how_to_fix_steps": [
+            "Generate FAQPage JSON-LD from the visible FAQ-ready pairs.",
+            "Review the generated draft before copying or inserting it."
+          ],
+          "example_pattern": "Two or more short visible question headings paired with direct answers plus matching FAQPage schema."
+        }
+      ]
+    },
     "howto_jsonld_presence_and_completeness": {
       "variants": [
         {
@@ -196,47 +209,36 @@
         }
       ]
     },
-    "intro_first_sentence_topic": {
+    "howto_schema_presence_and_completeness": {
       "variants": [
         {
-          "what_failed": "The opening sentence does not clearly establish the article topic.",
-          "why_it_matters": "Weak opening-topic alignment reduces immediate extractability for answer engines.",
+          "what_failed": "Visible step-by-step content is present, but complete HowTo schema is missing or incomplete.",
+          "why_it_matters": "Machine-readable step markup helps answer engines preserve instructional flow instead of flattening the process into generic text.",
           "how_to_fix_steps": [
-            "Rewrite the first sentence to state the core topic directly.",
-            "Remove vague lead-ins and filler phrasing.",
-            "Re-run analysis to confirm intro topic alignment."
+            "Generate HowTo JSON-LD from the detected steps.",
+            "Review the generated draft before copying or inserting it."
           ],
-          "example_pattern": "Topic-first opening sentence with one clear claim."
-        },
-        {
-          "what_failed": "Intro lead sentence misses direct topical focus.",
-          "why_it_matters": "Answer systems prioritize clear early-topic cues when selecting citation-ready passages.",
-          "how_to_fix_steps": [
-            "Place the primary topic term in the first sentence.",
-            "Follow with one concise, supporting qualifier.",
-            "Validate intro focus in the next run."
-          ],
-          "example_pattern": "Define the topic immediately, then specify scope."
+          "example_pattern": "A visible step-by-step section paired with matching HowTo schema."
         }
       ]
     },
     "intro_wordcount": {
       "variants": [
         {
-          "what_failed": "The intro length is outside the recommended word-count range.",
+          "what_failed": "The intro length sits outside the preferred 40-60 word window.",
           "why_it_matters": "Overlong or too-thin intros can reduce early answer clarity and extraction precision.",
           "how_to_fix_steps": [
-            "Trim low-value filler or add missing context to hit the target range.",
+            "Adjust the intro toward 40-150 words; 20-39 or 151-200 can still work, below 20 is too thin, and above 200 is too long.",
             "Keep one direct claim and one supporting fact in the intro.",
             "Re-run analysis to verify intro length compliance."
           ],
           "example_pattern": "Compact intro with direct claim plus one proof point."
         },
         {
-          "what_failed": "Intro size does not meet the configured readability and focus window.",
+          "what_failed": "Intro size does not meet the preferred answer-ready range.",
           "why_it_matters": "Balanced intros improve comprehension and increase citation reliability for answer systems.",
           "how_to_fix_steps": [
-            "Adjust intro length toward the recommended range.",
+            "Aim for 40-150 words in the intro; 20-39 or 151-200 can still work, below 20 is too short, and above 200 is too long.",
             "Preserve only essential context and avoid repetitive setup lines.",
             "Retest intro checks after editing."
           ],
@@ -429,24 +431,24 @@
     "heading_fragmentation": {
       "variants": [
         {
-          "what_failed": "Section headings are fragmented by very thin supporting blocks.",
-          "why_it_matters": "Over-splitting reduces topical coherence and can weaken section-level retrieval confidence.",
+          "what_failed": "Too many H2 sections branch into another heading before the topic is framed.",
+          "why_it_matters": "An over-split top-level outline makes sections feel disconnected and harder for answer engines to interpret as complete topic units.",
           "how_to_fix_steps": [
-            "Merge adjacent thin sections where intent overlaps.",
-            "Expand each remaining heading with concrete support sentences.",
-            "Re-run analysis to confirm fragmentation is resolved."
+            "Add one grounding paragraph before nested subheadings where the section currently hands off immediately.",
+            "Merge adjacent H2 sections when they cover one continuous idea.",
+            "Retest after the outline reads as fewer, fuller top-level sections."
           ],
-          "example_pattern": "Heading followed by 2 to 3 cohesive support sentences."
+          "example_pattern": "H2, brief framing paragraph, then H3 subtopics."
         },
         {
-          "what_failed": "Heading structure is split into too many low-support segments.",
-          "why_it_matters": "Fragmented layout makes it harder for answer systems to build stable section summaries.",
+          "what_failed": "The outline uses more top-level headings than the article can frame cleanly.",
+          "why_it_matters": "When H2 sections branch too quickly, answer systems can read the page as a stack of disconnected outlines instead of cohesive sections.",
           "how_to_fix_steps": [
-            "Consolidate related headings into stronger thematic sections.",
-            "Increase supporting detail beneath each heading.",
-            "Retest after structural cleanup."
+            "Keep H2s for major topic shifts and move finer breakdowns into H3s under a framed parent section.",
+            "Introduce each H2 with context before drilling into subheadings.",
+            "Consolidate neighboring headings that belong under the same parent idea."
           ],
-          "example_pattern": "Fewer headings with fuller context under each."
+          "example_pattern": "One H2 introduces the section clearly, then H3s handle the internal breakdown."
         }
       ]
     },

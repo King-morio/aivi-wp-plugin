@@ -22,11 +22,17 @@ const {
     buildHighlightedHtml
 } = require('./analysis-serializer');
 
+const readJson = (filePath) => JSON.parse(String(fs.readFileSync(filePath, 'utf8')).replace(/^\uFEFF/, ''));
+const fixtureRoot = path.resolve(__dirname, '../../../fixtures/overlay');
+const march16AnswerExtractabilityFixture = readJson(path.join(fixtureRoot, 'live-run-0316-answer-extractability.json'));
+const march16AnswerExtractabilityFollowupFixture = readJson(path.join(fixtureRoot, 'live-run-0316-answer-extractability-followup.json'));
+const countWords = (value) => String(value || '').trim().split(/\s+/).filter(Boolean).length;
+
 // Mock full analysis result for testing
 const mockFullAnalysis = {
     scores: { AEO: 45, GEO: 38, GLOBAL: 83 },
     checks: {
-        direct_answer_first_120: {
+        immediate_answer_placement: {
             verdict: 'pass',
             confidence: 0.95,
             explanation: 'Direct answer found in first 50 words.',
@@ -86,13 +92,13 @@ describe('Result Contract Lock - Acceptance Tests', () => {
 
     // Test 1: checks_definitions header updated to 45
     describe('1. Canonical checks count', () => {
-        test('checks-definitions-v1.json states 51 checks', () => {
+        test('checks-definitions-v1.json states 54 checks', () => {
             const defPath = path.join(__dirname, '..', 'shared', 'schemas', 'checks-definitions-v1.json');
             const definitions = JSON.parse(fs.readFileSync(defPath, 'utf8'));
 
-            expect(definitions.version).toBe('1.4.3');
-            expect(definitions.total_checks).toBe(51);
-            expect(definitions.description).toContain('51');
+            expect(definitions.version).toBe('1.5.0');
+            expect(definitions.total_checks).toBe(54);
+            expect(definitions.description).toContain('54');
             expect(definitions.description).toContain('deterministic');
         });
     });
@@ -239,7 +245,6 @@ describe('Result Contract Lock - Acceptance Tests', () => {
                 expect(issue.explanation_pack).toHaveProperty('what_failed');
                 expect(issue.explanation_pack).toHaveProperty('why_it_matters');
                 expect(issue.explanation_pack).toHaveProperty('how_to_fix_steps');
-                expect(issue.explanation_pack).toHaveProperty('example_pattern');
                 if (Array.isArray(issue.highlights)) {
                     issue.highlights.forEach((highlight) => {
                         expect(highlight).toHaveProperty('analysis_ref');
@@ -249,10 +254,144 @@ describe('Result Contract Lock - Acceptance Tests', () => {
                         expect(highlight.explanation_pack).toHaveProperty('what_failed');
                         expect(highlight.explanation_pack).toHaveProperty('why_it_matters');
                         expect(highlight.explanation_pack).toHaveProperty('how_to_fix_steps');
-                        expect(highlight.explanation_pack).toHaveProperty('example_pattern');
                     });
                 }
             });
+        });
+
+        test('March 16 answer-extractability specimen keeps richer serializer narrative beside raw summary text', () => {
+            const { analysisResult } = march16AnswerExtractabilityFixture;
+            const { analysis_summary } = serializeForSidebar(analysisResult, analysisResult.run_id);
+            const issues = analysis_summary.categories.flatMap((category) => category.issues || []);
+            const expectations = {
+                immediate_answer_placement: {
+                    raw: 'Answer appears at 121-150 words after the question anchor.',
+                    normalized: /did not confirm a direct answer within the first 120 words/i,
+                    richer: /Answer engines are more reliable when the direct answer appears immediately/i
+                },
+                answer_sentence_concise: {
+                    raw: 'Answer sentence has 32 words, which is below the 40-60 word threshold.',
+                    richer: /easier to scan, quote, and reuse/i
+                },
+                clear_answer_formatting: {
+                    raw: 'Answer is not separated into clear steps or bullet points for better readability.',
+                    richer: /Dense answer formatting makes the main point harder to scan and extract quickly/i
+                }
+            };
+
+            Object.entries(expectations).forEach(([checkId, matcher]) => {
+                const issue = issues.find((item) => item.check_id === checkId);
+
+                expect(issue).toBeDefined();
+                if (matcher.normalized) {
+                    expect(issue.explanation_pack.what_failed).toMatch(matcher.normalized);
+                    expect(issue.issue_explanation).toMatch(matcher.normalized);
+                    expect(issue.issue_explanation).not.toContain(matcher.raw);
+                } else {
+                    expect(issue.explanation_pack.what_failed).toBe(matcher.raw);
+                    expect(issue.issue_explanation).toContain(matcher.raw);
+                }
+                expect(issue.highlights?.[0]?.message).toBe(matcher.raw);
+                expect(issue.issue_explanation).toMatch(matcher.richer);
+                expect(countWords(issue.issue_explanation)).toBeGreaterThan(countWords(issue.explanation_pack.what_failed));
+            });
+        });
+
+        test('follow-up answer-extractability specimen rewrites brittle direct-answer and concise-answer detail text for sidebar output', () => {
+            const { analysisResult } = march16AnswerExtractabilityFollowupFixture;
+            const { analysis_summary } = serializeForSidebar(analysisResult, analysisResult.run_id);
+            const issues = analysis_summary.categories.flatMap((category) => category.issues || []);
+            const directAnswerIssue = issues.find((item) => item.check_id === 'immediate_answer_placement');
+            const conciseIssue = issues.find((item) => item.check_id === 'answer_sentence_concise');
+
+            expect(directAnswerIssue.highlights?.[0]?.message).toBe('The direct answer starts at 125 words, missing the 120-word threshold.');
+            expect(directAnswerIssue.explanation_pack.what_failed).toMatch(/did not confirm a direct answer within the first 120 words/i);
+            expect(directAnswerIssue.issue_explanation).not.toMatch(/125 words/i);
+
+            expect(conciseIssue.highlights?.[0]?.message).toBe('The answer is 35 words, which is concise but lacks direct evidence for the claim.');
+            expect(conciseIssue.explanation_pack.what_failed).toBe('The opening answer is 35 words, which is near the target range but still below the ideal reusable answer band.');
+            expect(conciseIssue.issue_explanation).not.toMatch(/lacks direct evidence for the claim/i);
+            expect(conciseIssue.issue_explanation).toMatch(/Two or three short sentences are fine if they deliver one complete answer/i);
+        });
+
+        test('answer_sentence_concise drops implausible threshold math when it contradicts the anchored snippet', () => {
+            const analysisResult = {
+                run_id: 'answer-extractability-implausible-threshold-math',
+                checks: {
+                    answer_sentence_concise: {
+                        verdict: 'fail',
+                        explanation: 'The first sentence is 22 words over the ideal 60-word threshold for a concise snippet.',
+                        highlights: [
+                            {
+                                node_ref: 'block-1',
+                                signature: 'sig-1',
+                                start: 0,
+                                end: 128,
+                                snippet: 'To create a concert experience that stands out, use simple techniques that repeat across songs so lights feel tied to the music and not random.',
+                                message: 'The first sentence is 22 words over the ideal 60-word threshold for a concise snippet.'
+                            }
+                        ]
+                    }
+                }
+            };
+
+            const { analysis_summary } = serializeForSidebar(analysisResult, analysisResult.run_id);
+            const issue = analysis_summary.categories.flatMap((category) => category.issues || []).find((item) => item.check_id === 'answer_sentence_concise');
+
+            expect(issue).toBeDefined();
+            expect(issue.highlights?.[0]?.message).toBe('The first sentence is 22 words over the ideal 60-word threshold for a concise snippet.');
+            expect(issue.explanation_pack.what_failed).toBe('The opening answer does not yet read as a clean reusable snippet. Keep the first answer near 40-60 words and make sure it stands alone without extra setup or filler.');
+            expect(issue.issue_explanation).toContain('The opening answer does not yet read as a clean reusable snippet.');
+            expect(issue.issue_explanation).not.toMatch(/22 words over the ideal 60-word threshold/i);
+        });
+
+        test('March 16 answer-extractability specimen carries editorial review summaries in analysis_summary', () => {
+            const { analysisResult } = march16AnswerExtractabilityFixture;
+            const { analysis_summary } = serializeForSidebar(analysisResult, analysisResult.run_id);
+            const issues = analysis_summary.categories.flatMap((category) => category.issues || []);
+            const expectations = {
+                immediate_answer_placement: /reaches the answer only after setup instead of leading with it/i,
+                answer_sentence_concise: /does not stand alone as a clean reusable snippet/i,
+                clear_answer_formatting: /main point stays buried in dense prose/i
+            };
+
+            Object.entries(expectations).forEach(([checkId, matcher]) => {
+                const issue = issues.find((item) => item.check_id === checkId);
+
+                expect(issue).toBeDefined();
+                expect(issue.review_summary || '').toMatch(matcher);
+                expect(issue.review_summary || '').not.toBe(issue.explanation_pack.what_failed);
+                expect(issue.review_summary || '').not.toMatch(/121-150 words after the question anchor|40-60 word threshold|clear steps or bullet points/i);
+            });
+        });
+
+        test('answer-extractability details preserve richer raw AI explanation when available', () => {
+            const analysisResult = {
+                run_id: 'answer-extractability-raw-detail',
+                checks: {
+                    immediate_answer_placement: {
+                        verdict: 'fail',
+                        explanation: 'The section opens with setup and only arrives at the actual answer after too much framing, which weakens extractable answer confidence for AI systems.',
+                        highlights: [{
+                            node_ref: 'block-1',
+                            start: 0,
+                            end: 96,
+                            text: 'The answer arrives only after several setup sentences.',
+                            message: 'Answer appears at 121-150 words after the question anchor.'
+                        }]
+                    }
+                }
+            };
+
+            const { analysis_summary } = serializeForSidebar(analysisResult, analysisResult.run_id);
+            const issue = analysis_summary.categories.flatMap((category) => category.issues || []).find((item) => item.check_id === 'immediate_answer_placement');
+
+            expect(issue).toBeDefined();
+            expect(issue.review_summary || '').toMatch(/reaches the answer only after setup/i);
+            expect(issue.explanation_pack.what_failed).toBe('The check did not confirm a direct answer within the first 120 words after the selected question anchor.');
+            expect(issue.issue_explanation).toContain('only arrives at the actual answer after too much framing');
+            expect(issue.issue_explanation).toContain('extractable answer confidence');
+            expect(issue.issue_explanation).not.toBe(issue.explanation_pack.what_failed);
         });
 
         test('routes snippet-only inline summary projections to section when section-first flag is enabled', () => {
@@ -322,7 +461,7 @@ describe('Result Contract Lock - Acceptance Tests', () => {
         test('deterministic inline highlights do not inherit aggregate count explanations', () => {
             const deterministicAnalysis = {
                 checks: {
-                    orphan_headings: {
+                    heading_topic_fulfillment: {
                         verdict: 'fail',
                         provenance: 'deterministic',
                         explanation: '4 heading(s) have fewer than 20 words of supporting content',
@@ -342,13 +481,13 @@ describe('Result Contract Lock - Acceptance Tests', () => {
 
             const { analysis_summary } = serializeForSidebar(deterministicAnalysis, 'test-run-deterministic-inline');
             const issues = analysis_summary.categories.reduce((acc, cat) => acc.concat(cat.issues || []), []);
-            const orphanIssue = issues.find((issue) => issue.check_id === 'orphan_headings');
+            const orphanIssue = issues.find((issue) => issue.check_id === 'heading_topic_fulfillment');
 
             expect(orphanIssue).toBeDefined();
             expect(Array.isArray(orphanIssue.highlights)).toBe(true);
             expect(orphanIssue.highlights.length).toBeGreaterThan(0);
             expect(orphanIssue.highlights[0].message).not.toMatch(/heading\(s\)|contains \d+|other sections/i);
-            expect(orphanIssue.highlights[0].message).toMatch(/clarify|precision|trust|cite/i);
+            expect(orphanIssue.highlights[0].message).toMatch(/structure|readers|retrieval/i);
         });
 
         test('supports compact summary mode for deferred details', () => {
@@ -402,6 +541,98 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             expect(payload).not.toHaveProperty('result_url');
             expect(payload).not.toHaveProperty('checks');
         });
+
+        test('preserves the flat score contract without nested fallback structure', () => {
+            const payload = prepareSidebarPayload(mockFullAnalysis, {
+                runId: 'test-run-flat-scores',
+                scores: { AEO: 12, GEO: 8, GLOBAL: 20 }
+            });
+
+            expect(payload.scores).toEqual({ AEO: 12, GEO: 8, GLOBAL: 20 });
+            expect(payload.scores.global).toBeUndefined();
+            expect(payload.scores.categories).toBeUndefined();
+        });
+
+        test('counts repeated non-inline instances in analysis_summary', () => {
+            const multiInstanceAnalysis = {
+                checks: {
+                    claim_pattern_detection: {
+                        verdict: 'fail',
+                        explanation: 'Repeated unsupported claims detected.',
+                        failed_candidates: [
+                            { snippet: 'Claim one', message: 'Unsupported claim one', scope: 'span' },
+                            { snippet: 'Claim two', message: 'Unsupported claim two', scope: 'span' }
+                        ]
+                    }
+                }
+            };
+
+            const payload = prepareSidebarPayload(multiInstanceAnalysis, {
+                runId: 'test-run-multi-instance',
+                scores: { AEO: 10, GEO: 5, GLOBAL: 15 }
+            });
+            const issues = payload.analysis_summary.categories.flatMap((category) => category.issues || []);
+            const issue = issues.find((entry) => entry.check_id === 'claim_pattern_detection');
+
+            expect(issue).toBeDefined();
+            expect(issue.instances).toBe(2);
+            expect(issue.first_instance_snippet).toBe('Claim one');
+        });
+
+        test('suppresses score-neutral deterministic schema alignment diagnostics from the sidebar summary', () => {
+            const payload = prepareSidebarPayload({
+                checks: {
+                    schema_matches_content: {
+                        verdict: 'partial',
+                        ui_verdict: 'partial',
+                        explanation: 'Schema companion types are present, but content alignment is not required here.',
+                        provenance: 'deterministic',
+                        score_neutral: true,
+                        score_neutral_reason: 'schema_companion_only',
+                        details: {
+                            score_neutral: true,
+                            score_neutral_reason: 'schema_companion_only'
+                        },
+                        non_inline: true,
+                        non_inline_reason: 'schema_content_alignment_non_inline'
+                    }
+                }
+            }, {
+                runId: 'test-run-schema-neutral',
+                scores: { AEO: 20, GEO: 18, GLOBAL: 38 }
+            });
+
+            const issues = payload.analysis_summary.categories.flatMap((category) => category.issues || []);
+
+            expect(issues.map((issue) => issue.check_id)).not.toContain('schema_matches_content');
+        });
+
+        test('suppresses verification-unavailable internal-link diagnostics from the sidebar summary', () => {
+            const payload = prepareSidebarPayload({
+                checks: {
+                    no_broken_internal_links: {
+                        verdict: 'partial',
+                        ui_verdict: 'partial',
+                        explanation: 'Internal link status not available for deterministic verification',
+                        provenance: 'deterministic',
+                        highlights: [],
+                        non_inline: true,
+                        non_inline_reason: 'link_status_unavailable',
+                        details: {
+                            internal_link_count: 4,
+                            broken_links: []
+                        }
+                    }
+                }
+            }, {
+                runId: 'test-run-links-unavailable',
+                scores: { AEO: 22, GEO: 21, GLOBAL: 43 }
+            });
+
+            const issues = payload.analysis_summary.categories.flatMap((category) => category.issues || []);
+
+            expect(issues.map((issue) => issue.check_id)).not.toContain('no_broken_internal_links');
+        });
     });
 
     // Test 6: extractCheckDetails
@@ -452,6 +683,40 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             expect(details.focused_failed_candidate).toHaveProperty('text_quote_selector');
         });
 
+        test('resolves instance indexes across anchored and failed semantic instances', () => {
+            const analysisWithMixedInstances = {
+                checks: {
+                    mixed_instance_check: {
+                        verdict: 'fail',
+                        explanation: 'Mixed instances exist.',
+                        highlights: [
+                            {
+                                node_ref: 'block-1',
+                                snippet: 'Anchored instance',
+                                message: 'Anchored issue',
+                                scope: 'span'
+                            }
+                        ],
+                        failed_candidates: [
+                            {
+                                node_ref: 'block-2',
+                                snippet: 'Unanchored instance',
+                                message: 'Fallback issue',
+                                scope: 'span'
+                            }
+                        ]
+                    }
+                }
+            };
+
+            const details = extractCheckDetails(analysisWithMixedInstances, 'mixed_instance_check', 1);
+
+            expect(details.focused_highlight).toBeUndefined();
+            expect(details.cannot_anchor).toBe(true);
+            expect(details.focused_failed_candidate).toBeDefined();
+            expect(details.focused_failed_candidate.snippet).toBe('Unanchored instance');
+        });
+
         test('returns null for non-existent check', () => {
             const details = extractCheckDetails(mockFullAnalysis, 'non_existent_check');
             expect(details).toBeNull();
@@ -470,7 +735,7 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const analysisResult = {
                 run_id: 'test-run',
                 checks: {
-                    sample_check: {
+                    clear_answer_formatting: {
                         verdict: 'fail',
                         ui_verdict: 'fail',
                         highlights: [{
@@ -486,8 +751,8 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             };
             const overlay = buildHighlightedHtml(manifest, analysisResult);
             const html = overlay.highlighted_html || '';
-            expect(html).toContain('data-check-id="sample_check"');
-            expect(html).toContain('data-issue-key="sample_check:0"');
+            expect(html).toContain('data-check-id="clear_answer_formatting"');
+            expect(html).toContain('data-issue-key="clear_answer_formatting:0"');
             expect(html).toContain('data-instance-index="0"');
             expect(html).toContain('data-node-ref="block-0"');
             expect(html).toContain('data-start="6"');
@@ -507,7 +772,7 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const analysisResult = {
                 run_id: 'test-run',
                 checks: {
-                    sample_check: {
+                    clear_answer_formatting: {
                         verdict: 'fail',
                         ui_verdict: 'fail',
                         highlights: [
@@ -534,7 +799,7 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const analysisResult = {
                 run_id: 'test-run',
                 checks: {
-                    sample_check: {
+                    clear_answer_formatting: {
                         verdict: 'fail',
                         ui_verdict: 'fail',
                         highlights: [],
@@ -549,15 +814,15 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const overlay = buildHighlightedHtml(manifest, analysisResult);
             expect(Array.isArray(overlay.unhighlightable_issues)).toBe(true);
             expect(overlay.unhighlightable_issues.length).toBe(1);
-            expect(overlay.unhighlightable_issues[0].failure_reason).toBe('signature_mismatch');
             expect(Array.isArray(overlay.recommendations)).toBe(true);
+            expect(overlay.recommendations.length).toBe(1);
             expect(overlay.recommendations[0]).toHaveProperty('check_name');
             expect(overlay.recommendations[0]).toHaveProperty('action_suggestion');
             expect(overlay.recommendations[0]).toHaveProperty('explanation_pack');
             expect(overlay.recommendations[0].explanation_pack).toHaveProperty('what_failed');
             expect(overlay.recommendations[0].explanation_pack).toHaveProperty('why_it_matters');
             expect(overlay.recommendations[0].explanation_pack).toHaveProperty('how_to_fix_steps');
-            expect(overlay.recommendations[0].explanation_pack).toHaveProperty('example_pattern');
+            expect(overlay.recommendations[0].failure_reason).toBe('signature_mismatch');
         });
 
         test('emits recommendation when fail or partial check has no highlightable instances', () => {
@@ -571,7 +836,7 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const analysisResult = {
                 run_id: 'test-run',
                 checks: {
-                    sample_check: {
+                    clear_answer_formatting: {
                         verdict: 'partial',
                         ui_verdict: 'partial',
                         explanation: 'Analyzer output was incomplete for this check.',
@@ -586,7 +851,7 @@ describe('Result Contract Lock - Acceptance Tests', () => {
 
             expect(Array.isArray(overlay.recommendations)).toBe(true);
             expect(overlay.recommendations.length).toBe(1);
-            expect(overlay.recommendations[0].check_id).toBe('sample_check');
+            expect(overlay.recommendations[0].check_id).toBe('clear_answer_formatting');
             expect(overlay.recommendations[0].failure_reason).toBe('no_highlight_candidates');
             expect(overlay.recommendations[0].anchor_status).toBe('unhighlightable');
         });
@@ -617,6 +882,8 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             expect(overlay.recommendations.length).toBe(1);
             expect(overlay.recommendations[0].check_id).toBe('metadata_checks');
             expect(overlay.recommendations[0].failure_reason).toBe('metadata_document_scope');
+            expect(overlay.recommendations[0].message).toBe('Metadata needs cleanup');
+            expect(overlay.recommendations[0].issue_explanation).toContain('Critical metadata fields are missing or incomplete');
         });
 
         test('uses deterministic fallback reason instead of no_highlight_candidates for inline-capable checks', () => {
@@ -645,6 +912,92 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             expect(overlay.recommendations.length).toBe(1);
             expect(overlay.recommendations[0].check_id).toBe('no_broken_internal_links');
             expect(overlay.recommendations[0].failure_reason).toBe('broken_link_anchor_unavailable');
+        });
+
+        test('keeps deterministic instance wording in explanation packs for repeated paragraph failures', () => {
+            const manifest = {
+                block_map: [{
+                    node_ref: 'block-0',
+                    signature: 'sig-1',
+                    text: 'A very long paragraph that keeps running with too many words to remain readable.'
+                }]
+            };
+            const analysisResult = {
+                run_id: 'test-run-deterministic-instance-wording',
+                checks: {
+                    appropriate_paragraph_length: {
+                        verdict: 'fail',
+                        ui_verdict: 'fail',
+                        provenance: 'deterministic',
+                        explanation: '2 paragraph(s) exceed 150 words',
+                        highlights: [{
+                            node_ref: 'block-0',
+                            signature: 'sig-1',
+                            start: 0,
+                            end: 76,
+                            snippet: 'A very long paragraph that keeps running with too many words to remain readable.',
+                            message: 'This paragraph has 181 words (recommended 150 or fewer).',
+                            scope: 'block'
+                        }]
+                    }
+                }
+            };
+
+            const overlay = buildHighlightedHtml(manifest, analysisResult);
+            expect(overlay.recommendations.length).toBe(1);
+            const issue = overlay.recommendations.find((entry) => entry.check_id === 'appropriate_paragraph_length');
+            expect(issue).toBeDefined();
+            expect(issue.explanation_pack.what_failed).toBe('This paragraph has 181 words (recommended 150 or fewer).');
+            expect(issue.issue_explanation).toContain('This paragraph has 181 words');
+            expect(issue.issue_explanation).not.toContain('At least one paragraph');
+        });
+
+        test('emits one recommendation per deterministic document-scope instance when multiple instances exist', () => {
+            const manifest = {
+                block_map: [{
+                    node_ref: 'block-0',
+                    signature: 'sig-1',
+                    text: 'Schema block one. Schema block two.'
+                }]
+            };
+            const analysisResult = {
+                run_id: 'test-run-deterministic-docscope-multi',
+                checks: {
+                    valid_jsonld_schema: {
+                        verdict: 'fail',
+                        ui_verdict: 'fail',
+                        provenance: 'deterministic',
+                        explanation: 'Some JSON-LD schemas have syntax errors',
+                        highlights: [
+                            {
+                                node_ref: 'block-0',
+                                signature: 'sig-1',
+                                snippet: 'Schema block one',
+                                message: 'Invalid JSON-LD block near schema one.',
+                                scope: 'block'
+                            },
+                            {
+                                node_ref: 'block-0',
+                                signature: 'sig-1',
+                                snippet: 'Schema block two',
+                                message: 'Invalid JSON-LD block near schema two.',
+                                scope: 'block'
+                            }
+                        ]
+                    }
+                }
+            };
+
+            const overlay = buildHighlightedHtml(manifest, analysisResult);
+            const recommendations = overlay.recommendations.filter((entry) => entry.check_id === 'valid_jsonld_schema');
+
+            expect(recommendations).toHaveLength(2);
+            expect(recommendations[0].message).toBe('This JSON-LD is invalid');
+            expect(recommendations[1].message).toBe('This JSON-LD is invalid');
+            expect(recommendations[0].explanation_pack.what_failed).toContain('schema one');
+            expect(recommendations[1].explanation_pack.what_failed).toContain('schema two');
+            expect(recommendations[0].instance_index).toBe(0);
+            expect(recommendations[1].instance_index).toBe(1);
         });
 
         test('routes document-scope semantic checks to recommendations instead of inline spans', () => {
@@ -723,22 +1076,22 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             expect(overlay.recommendations[0].failure_reason).toBe('claim_evidence_section_scope');
         });
 
-        test('routes absence-sensitive checks with no explicit span to recommendations', () => {
+        test('routes deterministic attribution checks with no explicit span to recommendations', () => {
             const manifest = {
                 block_map: [{
                     node_ref: 'block-0',
                     signature: 'sig-1',
-                    text: 'Intro paragraph without factual entities or citations.'
+                    text: 'Article content without a visible author byline.'
                 }]
             };
             const analysisResult = {
                 run_id: 'test-run',
                 checks: {
-                    intro_factual_entities: {
-                        verdict: 'partial',
-                        ui_verdict: 'partial',
+                    author_identified: {
+                        verdict: 'fail',
+                        ui_verdict: 'fail',
                         provenance: 'deterministic',
-                        explanation: 'No factual entities detected in intro.',
+                        explanation: 'No author identification detected.',
                         highlights: [],
                         failed_candidates: [],
                         candidate_highlights: []
@@ -749,10 +1102,11 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const overlay = buildHighlightedHtml(manifest, analysisResult);
             const html = overlay.highlighted_html || '';
 
-            expect(html).not.toContain('data-check-id="intro_factual_entities"');
+            expect(html).not.toContain('data-check-id="author_identified"');
             expect(overlay.recommendations.length).toBe(1);
-            expect(overlay.recommendations[0].check_id).toBe('intro_factual_entities');
-            expect(overlay.recommendations[0].failure_reason).toBe('absence_non_inline');
+            expect(overlay.recommendations[0].check_id).toBe('author_identified');
+            expect(overlay.recommendations[0].failure_reason).toBe('missing_author_byline');
+            expect(overlay.recommendations[0].message).toBe('Identify the author clearly');
         });
 
         test('downgrades block-only failed candidates to recommendations when span is too broad', () => {
@@ -767,7 +1121,7 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const analysisResult = {
                 run_id: 'test-run',
                 checks: {
-                    sample_check: {
+                    clear_answer_formatting: {
                         verdict: 'fail',
                         ui_verdict: 'fail',
                         explanation: 'Candidate only fallback',
@@ -784,7 +1138,7 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const overlay = buildHighlightedHtml(manifest, analysisResult);
             const html = overlay.highlighted_html || '';
 
-            expect(html).not.toContain('data-check-id="sample_check"');
+            expect(html).not.toContain('data-check-id="clear_answer_formatting"');
             expect(overlay.recommendations.length).toBe(1);
             expect(overlay.recommendations[0].failure_reason).toBe('block_wide');
         });
@@ -801,7 +1155,7 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const analysisResult = {
                 run_id: 'test-run',
                 checks: {
-                    sample_check: {
+                    clear_answer_formatting: {
                         verdict: 'fail',
                         ui_verdict: 'fail',
                         highlights: [{
@@ -819,7 +1173,7 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const overlay = buildHighlightedHtml(manifest, analysisResult);
             const html = overlay.highlighted_html || '';
 
-            expect(html).not.toContain('data-check-id="sample_check"');
+            expect(html).not.toContain('data-check-id="clear_answer_formatting"');
             expect(overlay.recommendations.length).toBe(1);
             expect(overlay.recommendations[0].failure_reason).toBe('too_wide');
         });
@@ -836,7 +1190,7 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const analysisResult = {
                 run_id: 'test-run',
                 checks: {
-                    sample_check: {
+                    clear_answer_formatting: {
                         verdict: 'partial',
                         ui_verdict: 'partial',
                         highlights: [{
@@ -854,12 +1208,12 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const overlay = buildHighlightedHtml(manifest, analysisResult);
             const html = overlay.highlighted_html || '';
 
-            expect(html).not.toContain('data-check-id="sample_check"');
+            expect(html).not.toContain('data-check-id="clear_answer_formatting"');
             expect(overlay.recommendations.length).toBe(1);
             expect(overlay.recommendations[0].failure_reason).toBe('low_precision');
         });
 
-        test('emits synthetic diagnostic checks in overlay recommendations with synthetic reason', () => {
+        test('suppresses synthetic diagnostic checks from overlay recommendations', () => {
             const manifest = {
                 block_map: [{
                     node_ref: 'block-0',
@@ -894,16 +1248,10 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const overlay = buildHighlightedHtml(manifest, analysisResult);
 
             expect(Array.isArray(overlay.recommendations)).toBe(true);
-            expect(overlay.recommendations.length).toBe(2);
-            const syntheticRecommendation = overlay.recommendations.find((item) => item.check_id === 'synthetic_check');
-            const normalRecommendation = overlay.recommendations.find((item) => item.check_id === 'normal_check');
-            expect(syntheticRecommendation).toBeDefined();
-            expect(syntheticRecommendation.failure_reason).toBe('chunk_parse_failure');
-            expect(normalRecommendation).toBeDefined();
-            expect(normalRecommendation.failure_reason).toBe('no_highlight_candidates');
+            expect(overlay.recommendations.length).toBe(0);
         });
 
-        test('maps time_budget_exceeded synthetic reason to user-safe recommendation action', () => {
+        test('suppresses time_budget_exceeded synthetic checks from overlay recommendations', () => {
             const manifest = {
                 block_map: [{
                     node_ref: 'block-0',
@@ -930,10 +1278,7 @@ describe('Result Contract Lock - Acceptance Tests', () => {
 
             const overlay = buildHighlightedHtml(manifest, analysisResult);
             const recommendation = overlay.recommendations.find((item) => item.check_id === 'budget_check');
-
-            expect(recommendation).toBeDefined();
-            expect(recommendation.failure_reason).toBe('time_budget_exceeded');
-            expect(recommendation.action_suggestion).toContain('time budget');
+            expect(recommendation).toBeUndefined();
         });
 
         test('emits stability release telemetry counters for overlay payload', () => {
@@ -1133,16 +1478,334 @@ describe('Result Contract Lock - Acceptance Tests', () => {
 
             expect(semanticHtmlIssue?.schema_assist?.schema_kind).toBe('semantic_markup_plan');
             expect(semanticHtmlIssue?.schema_assist?.can_insert).toBe(false);
+            expect(semanticHtmlIssue?.schema_assist?.insert_capability).toBe('copy_only');
+            expect(semanticHtmlIssue?.schema_assist?.insert_policy_hints?.target_scope).toBe('markup_plan');
 
             expect(schemaMatchIssue?.schema_assist?.schema_kind).toBe('schema_alignment_jsonld');
             expect(schemaMatchIssue?.schema_assist?.can_insert).toBe(true);
+            expect(schemaMatchIssue?.schema_assist?.schema_assist_insert_mode).toBe('jsonld_conflict_aware_insert');
+            expect(schemaMatchIssue?.schema_assist?.insert_capability).toBe('conflict_aware_insert');
+            expect(schemaMatchIssue?.schema_assist?.insert_policy_hints?.identity_basis).toBe('url_or_primary_schema');
 
             expect(semanticHowtoIssue?.schema_assist?.schema_kind).toBe('howto_jsonld');
             expect(semanticHowtoIssue?.schema_assist?.can_copy).toBe(true);
+            expect(semanticHowtoIssue?.schema_assist?.schema_assist_source_check_id).toBe('howto_jsonld_presence_and_completeness');
+            expect(semanticHowtoIssue?.schema_assist?.insert_policy_hints?.identity_basis).toBe('howto_step_names');
 
             expect(overlay.telemetry.schema_assist_by_check).toHaveProperty('semantic_html_usage');
             expect(overlay.telemetry.schema_assist_by_check).toHaveProperty('schema_matches_content');
             expect(overlay.telemetry.schema_assist_by_check).toHaveProperty('howto_schema_presence_and_completeness');
+        });
+
+        test('emits insertable schema assist payloads for ItemList and Article schema checks', () => {
+            const manifest = {
+                title: 'Top AI Visibility Tools',
+                meta_description: 'Benchmarks for retrieval, citation, and entity coverage.',
+                block_map: [
+                    {
+                        node_ref: 'block-0',
+                        signature: 'sig-list-0',
+                        block_type: 'core/heading',
+                        text: 'Top AI Visibility Tools'
+                    },
+                    {
+                        node_ref: 'block-1',
+                        signature: 'sig-list-1',
+                        block_type: 'core/list',
+                        text: 'Perplexity tracking dashboards\nCitation monitoring workflows\nEntity coverage audits'
+                    }
+                ],
+                jsonld: []
+            };
+            const analysisResult = {
+                run_id: 'test-run-itemlist-article',
+                checks: {
+                    itemlist_jsonld_presence_and_completeness: {
+                        verdict: 'fail',
+                        ui_verdict: 'fail',
+                        explanation: 'Strong visible list sections are present, but ItemList schema is missing',
+                        provenance: 'deterministic',
+                        highlights: [],
+                        details: {
+                            candidate_count: 1,
+                            detected_candidates: [
+                                {
+                                    heading: 'Top AI Visibility Tools',
+                                    ordered: false,
+                                    items: [
+                                        { text: 'Perplexity tracking dashboards', position: 1 },
+                                        { text: 'Citation monitoring workflows', position: 2 },
+                                        { text: 'Entity coverage audits', position: 3 }
+                                    ]
+                                }
+                            ],
+                            context_node_ref: 'block-1',
+                            scope_triggered: true
+                        },
+                        non_inline: true,
+                        non_inline_reason: 'itemlist_schema_non_inline'
+                    },
+                    article_jsonld_presence_and_completeness: {
+                        verdict: 'fail',
+                        ui_verdict: 'fail',
+                        explanation: 'Article-like content detected but no primary article schema was found',
+                        provenance: 'deterministic',
+                        highlights: [],
+                        details: {
+                            content_type: 'post',
+                            preferred_article_type: 'BlogPosting',
+                            context_node_ref: 'block-0',
+                            scope_triggered: true
+                        },
+                        non_inline: true,
+                        non_inline_reason: 'article_schema_non_inline'
+                    }
+                }
+            };
+
+            const overlay = buildHighlightedHtml(manifest, analysisResult);
+            const surfacedIssues = overlay.recommendations.concat(overlay.unhighlightable_issues);
+            const itemListIssue = surfacedIssues.find((issue) => issue.check_id === 'itemlist_jsonld_presence_and_completeness');
+            const articleIssue = surfacedIssues.find((issue) => issue.check_id === 'article_jsonld_presence_and_completeness');
+
+            expect(itemListIssue?.schema_assist?.schema_kind).toBe('itemlist_jsonld');
+            expect(itemListIssue?.schema_assist?.can_insert).toBe(true);
+            expect(itemListIssue?.schema_assist?.primary_schema_type).toBe('ItemList');
+            expect(itemListIssue?.schema_assist?.comparison_signature?.itemlist_item_names).toEqual([
+                'Perplexity tracking dashboards',
+                'Citation monitoring workflows',
+                'Entity coverage audits'
+            ]);
+            expect(itemListIssue?.schema_assist?.insert_capability).toBe('conflict_aware_insert');
+            expect(articleIssue?.schema_assist?.schema_kind).toBe('article_jsonld');
+            expect(articleIssue?.schema_assist?.can_insert).toBe(true);
+            expect(articleIssue?.schema_assist?.primary_schema_type).toBe('BlogPosting');
+            expect(articleIssue?.schema_assist?.schema_assist_insert_mode).toBe('jsonld_conflict_aware_insert');
+            expect(overlay.telemetry.schema_assist_by_check.itemlist_jsonld_presence_and_completeness.insertable).toBeGreaterThan(0);
+            expect(overlay.telemetry.schema_assist_by_check.article_jsonld_presence_and_completeness.insertable).toBeGreaterThan(0);
+        });
+
+        test('suppresses internal HowTo bridge diagnostics while keeping the user-facing bridge issue', () => {
+            const manifest = {
+                blocks_html: '<p>Step 1: mark the trench line.</p><p>Step 2: begin digging in short passes.</p>',
+                block_map: [
+                    { node_ref: 'block-1', signature: 'sig-1', block_type: 'core/paragraph', text: 'Step 1: mark the trench line.' },
+                    { node_ref: 'block-2', signature: 'sig-2', block_type: 'core/paragraph', text: 'Step 2: begin digging in short passes.' }
+                ]
+            };
+            const analysisResult = {
+                run_id: 'howto-bridge-internal-suppression',
+                checks: {
+                    howto_jsonld_presence_and_completeness: {
+                        verdict: 'fail',
+                        ui_verdict: 'fail',
+                        explanation: 'HowTo-style content detected but no HowTo schema found',
+                        provenance: 'deterministic',
+                        diagnostic_only: true,
+                        score_neutral: true,
+                        score_neutral_reason: 'schema_bridge_internal',
+                        highlights: [],
+                        details: {
+                            detected_steps: [
+                                { text: 'Mark the trench line', source: 'step_heading' },
+                                { text: 'Begin digging in short passes', source: 'step_heading' }
+                            ],
+                            score_neutral: true,
+                            score_neutral_reason: 'schema_bridge_internal'
+                        },
+                        non_inline: true,
+                        non_inline_reason: 'howto_schema_non_inline'
+                    },
+                    howto_schema_presence_and_completeness: {
+                        verdict: 'fail',
+                        ui_verdict: 'fail',
+                        explanation: 'Visible step-by-step content is present, but HowTo schema is missing.',
+                        provenance: 'deterministic',
+                        highlights: [],
+                        details: {
+                            detected_steps: [
+                                { text: 'Mark the trench line', source: 'step_heading' },
+                                { text: 'Begin digging in short passes', source: 'step_heading' }
+                            ],
+                            bridge_source_check_id: 'howto_jsonld_presence_and_completeness'
+                        },
+                        non_inline: true,
+                        non_inline_reason: 'howto_schema_non_inline'
+                    }
+                }
+            };
+
+            const overlay = buildHighlightedHtml(manifest, analysisResult);
+            const surfacedIds = overlay.recommendations.concat(overlay.unhighlightable_issues).map((issue) => issue.check_id);
+
+            expect(surfacedIds).not.toContain('howto_jsonld_presence_and_completeness');
+            expect(surfacedIds).toContain('howto_schema_presence_and_completeness');
+        });
+
+        test('adds a context jump target for non-inline HowTo schema issues', () => {
+            const manifest = {
+                block_map: [
+                    {
+                        node_ref: 'block-1',
+                        signature: 'sig-1',
+                        block_type: 'core/list',
+                        text: '1. Mark the trench line\n2. Cut a shallow pilot pass\n3. Move spoil clear of the trench edge'
+                    }
+                ]
+            };
+            const analysisResult = {
+                run_id: 'howto-context-jump',
+                checks: {
+                    howto_schema_presence_and_completeness: {
+                        verdict: 'fail',
+                        ui_verdict: 'fail',
+                        explanation: 'Visible step-by-step content is present, but HowTo schema is missing.',
+                        provenance: 'deterministic',
+                        highlights: [],
+                        details: {
+                            context_node_ref: 'block-1',
+                            detected_steps: [
+                                { text: 'Mark the trench line', source: 'ordered_list', node_ref: 'block-1' },
+                                { text: 'Cut a shallow pilot pass', source: 'ordered_list', node_ref: 'block-1' }
+                            ]
+                        },
+                        non_inline: true,
+                        non_inline_reason: 'howto_schema_non_inline'
+                    }
+                }
+            };
+
+            const overlay = buildHighlightedHtml(manifest, analysisResult);
+            const issue = overlay.unhighlightable_issues.find((entry) => entry.check_id === 'howto_schema_presence_and_completeness');
+
+            expect(issue).toBeTruthy();
+            expect(issue.anchor_status).toBe('unhighlightable');
+            expect(issue.node_ref).toBe('');
+            expect(issue.jump_node_ref).toBe('block-1');
+        });
+
+        test('adds a context jump target for non-inline FAQ schema issues', () => {
+            const manifest = {
+                block_map: [
+                    {
+                        node_ref: 'block-faq-1',
+                        signature: 'sig-faq-1',
+                        block_type: 'core/heading',
+                        text: 'What is crawl budget?'
+                    },
+                    {
+                        node_ref: 'block-faq-2',
+                        signature: 'sig-faq-2',
+                        block_type: 'core/paragraph',
+                        text: 'Crawl budget is the number of pages a crawler is likely to fetch during a recrawl window.'
+                    }
+                ]
+            };
+            const analysisResult = {
+                run_id: 'faq-context-jump',
+                checks: {
+                    faq_jsonld_generation_suggestion: {
+                        verdict: 'fail',
+                        ui_verdict: 'fail',
+                        explanation: 'FAQ-ready question-answer pairs are present, but FAQ schema is missing.',
+                        provenance: 'deterministic',
+                        highlights: [],
+                        details: {
+                            detected_pairs: [
+                                {
+                                    question: 'What is crawl budget?',
+                                    answer: 'Crawl budget is the number of pages a crawler is likely to fetch during a recrawl window.',
+                                    heading_node_ref: 'block-faq-1'
+                                }
+                            ]
+                        },
+                        non_inline: true,
+                        non_inline_reason: 'faq_jsonld_generation_non_inline'
+                    }
+                }
+            };
+
+            const overlay = buildHighlightedHtml(manifest, analysisResult);
+            const issue = overlay.unhighlightable_issues.find((entry) => entry.check_id === 'faq_jsonld_generation_suggestion');
+
+            expect(issue).toBeTruthy();
+            expect(issue.anchor_status).toBe('unhighlightable');
+            expect(issue.node_ref).toBe('');
+            expect(issue.jump_node_ref).toBe('block-faq-1');
+        });
+
+        test('suppresses score-neutral deterministic schema alignment diagnostics from overlay release', () => {
+            const manifest = {
+                block_map: [
+                    {
+                        node_ref: 'block-1',
+                        signature: 'sig-1',
+                        block_type: 'core/paragraph',
+                        text: 'Schema companion types can exist without making the article mismatched.'
+                    }
+                ]
+            };
+            const analysisResult = {
+                run_id: 'schema-neutral-overlay-suppression',
+                checks: {
+                    schema_matches_content: {
+                        verdict: 'partial',
+                        ui_verdict: 'partial',
+                        explanation: 'Schema companion types are present, but content alignment is not required here.',
+                        provenance: 'deterministic',
+                        score_neutral: true,
+                        score_neutral_reason: 'schema_companion_only',
+                        highlights: [],
+                        details: {
+                            score_neutral: true,
+                            score_neutral_reason: 'schema_companion_only'
+                        },
+                        non_inline: true,
+                        non_inline_reason: 'schema_content_alignment_non_inline'
+                    }
+                }
+            };
+
+            const overlay = buildHighlightedHtml(manifest, analysisResult);
+            const surfacedIds = overlay.recommendations.concat(overlay.unhighlightable_issues).map((issue) => issue.check_id);
+
+            expect(surfacedIds).not.toContain('schema_matches_content');
+        });
+
+        test('suppresses verification-unavailable internal-link diagnostics from overlay release', () => {
+            const manifest = {
+                block_map: [
+                    {
+                        node_ref: 'block-1',
+                        signature: 'sig-1',
+                        block_type: 'core/paragraph',
+                        text: 'Read our pricing page and support page for related details.'
+                    }
+                ]
+            };
+            const analysisResult = {
+                run_id: 'internal-links-unavailable-overlay-suppression',
+                checks: {
+                    no_broken_internal_links: {
+                        verdict: 'partial',
+                        ui_verdict: 'partial',
+                        explanation: 'Internal link status not available for deterministic verification',
+                        provenance: 'deterministic',
+                        highlights: [],
+                        details: {
+                            internal_link_count: 2,
+                            broken_links: []
+                        },
+                        non_inline: true,
+                        non_inline_reason: 'link_status_unavailable'
+                    }
+                }
+            };
+
+            const overlay = buildHighlightedHtml(manifest, analysisResult);
+            const surfacedIds = overlay.recommendations.concat(overlay.unhighlightable_issues).map((issue) => issue.check_id);
+
+            expect(surfacedIds).not.toContain('no_broken_internal_links');
         });
 
         test('preserves rich AI recommendation packs without forcing scaffold steps', () => {
@@ -1186,12 +1849,12 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             expect(recommendation.explanation_pack).toBeDefined();
             expect(recommendation.explanation_pack.how_to_fix_steps).toEqual(
                 expect.arrayContaining([
-                    'State the relationship in one direct sentence.',
-                    'Add one concrete fact or qualifier that proves the relationship.'
+                    'State the relationship in one direct sentence.'
                 ])
             );
             expect(recommendation.explanation_pack.how_to_fix_steps.join(' ')).not.toContain('Start from the quoted passage');
-            expect(recommendation.issue_explanation).toContain('State the relationship in one direct sentence');
+            expect(recommendation.issue_explanation).toMatch(/rewrite|clearer wording|tighter terminology/i);
+            expect(countWords(recommendation.issue_explanation)).toBeLessThanOrEqual(60);
         });
 
         test('uses reason-specific deterministic variant for missing_required_h1', () => {
@@ -1226,22 +1889,22 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             expect(recommendation.explanation_pack.how_to_fix_steps[0]).toContain('Add one H1');
         });
 
-        test('uses reason-specific deterministic variant for intro factual absence', () => {
+        test('uses approved deterministic review-lead messaging for canonical cleanup recommendations', () => {
             const manifest = {
                 block_map: [{
                     node_ref: 'block-0',
                     signature: 'sig-1',
-                    text: 'Intro without concrete factual entities.'
+                    text: 'Article content with duplicate URL versions.'
                 }]
             };
             const analysisResult = {
-                run_id: 'test-run-intro-fact-variant',
+                run_id: 'test-run-canonical-review-lead',
                 checks: {
-                    intro_factual_entities: {
+                    canonical_clarity: {
                         verdict: 'fail',
                         ui_verdict: 'fail',
                         provenance: 'deterministic',
-                        explanation: 'No factual entities detected in intro.',
+                        explanation: 'No canonical URL was detected for this page.',
                         highlights: []
                     }
                 }
@@ -1249,9 +1912,143 @@ describe('Result Contract Lock - Acceptance Tests', () => {
 
             const overlay = buildHighlightedHtml(manifest, analysisResult);
             const recommendation = overlay.recommendations[0];
-            expect(recommendation.failure_reason).toBe('absence_non_inline');
-            expect(recommendation.explanation_pack.what_failed).toContain('does not include concrete factual entities');
-            expect(recommendation.explanation_pack.how_to_fix_steps[0]).toContain('Add one specific fact in the intro');
+            expect(recommendation.failure_reason).toBe('canonical_document_scope');
+            expect(recommendation.message).toBe('Canonical signals need cleanup');
+            expect(recommendation.issue_explanation).toContain('preferred canonical URL');
+        });
+
+        test('scrubs internal question-anchor diagnostics from user-facing recommendation explanations', () => {
+            const manifest = {
+                block_map: [{
+                    node_ref: 'block-0',
+                    signature: 'sig-1',
+                    text: 'Website performance affects rankings, conversions, and user satisfaction.'
+                }]
+            };
+            const analysisResult = {
+                run_id: 'test-run-guardrail-scrub',
+                checks: {
+                    immediate_answer_placement: {
+                        verdict: 'partial',
+                        ui_verdict: 'partial',
+                        guardrail_adjusted: true,
+                        guardrail_reason: 'no_strict_question_anchor',
+                        explanation: 'No strict question anchor was detected for this check in the analyzed content, so answer-extractability remains only partial.',
+                        highlights: [],
+                        failed_candidates: [{
+                            snippet: 'Website performance affects rankings, conversions, and user satisfaction.',
+                            message: 'No strict question anchor was detected for this check in the analyzed content, so answer-extractability remains only partial.',
+                            failure_reason: '',
+                            explanation_pack: {
+                                what_failed: 'No strict question anchor was detected for this check in the analyzed content, so answer-extractability remains only partial.',
+                                issue_explanation: 'No strict question anchor detected; answer extractability remains unproven for direct queries.'
+                            }
+                        }]
+                    }
+                }
+            };
+
+            const overlay = buildHighlightedHtml(manifest, analysisResult);
+            const recommendation = overlay.recommendations[0];
+            expect(recommendation).toBeDefined();
+            expect(recommendation.explanation_pack.what_failed).toContain('question-led setup');
+            expect(recommendation.explanation_pack.what_failed).not.toMatch(/strict question anchor/i);
+            expect(recommendation.issue_explanation).toMatch(/query-to-answer structure|direct answer/i);
+            expect(recommendation.issue_explanation).not.toMatch(/strict question anchor/i);
+            expect(recommendation.issue_explanation).not.toMatch(/cannot be evaluated/i);
+            expect(recommendation.issue_explanation).not.toMatch(/remains unproven/i);
+            expect(recommendation.issue_explanation).not.toMatch(/quoted passage/i);
+            expect(countWords(recommendation.issue_explanation)).toBeLessThanOrEqual(60);
+        });
+
+        test('scrubs internal question-anchor diagnostics from issue summary fallback paths', () => {
+            const analysisResult = {
+                run_id: 'test-run-guardrail-summary',
+                checks: {
+                    immediate_answer_placement: {
+                        verdict: 'partial',
+                        ui_verdict: 'partial',
+                        guardrail_adjusted: true,
+                        guardrail_reason: 'no_strict_question_anchor',
+                        explanation: 'No strict question anchor was detected for this check in the analyzed content, so answer-extractability remains only partial.',
+                        highlights: [],
+                        candidate_highlights: [{
+                            snippet: 'Website performance affects rankings, conversions, and user satisfaction.',
+                            node_ref: 'block-0',
+                            signature: 'sig-1',
+                            start: 0,
+                            end: 68,
+                            instance_index: 0,
+                            message: 'Broad opening context without a direct answer.'
+                        }]
+                    }
+                }
+            };
+
+            const { analysis_summary } = serializeForSidebar(analysisResult, 'test-run-guardrail-summary');
+            const issue = analysis_summary.categories.flatMap((category) => category.issues)[0];
+
+            expect(issue).toBeDefined();
+            expect(issue.explanation_pack.what_failed).toContain('question-led setup');
+            expect(issue.explanation_pack.what_failed).not.toMatch(/strict question anchor/i);
+            expect(issue.issue_explanation).toContain('question-led setup');
+            expect(issue.issue_explanation).not.toMatch(/strict question anchor/i);
+            expect(issue.issue_explanation).not.toMatch(/cannot be evaluated/i);
+            expect(issue.issue_explanation).not.toMatch(/remains unproven/i);
+        });
+
+        test('surfaces deterministic heading-markup issues with anchored guidance', () => {
+            const manifest = {
+                block_map: [
+                    {
+                        node_ref: 'block-heading-1',
+                        signature: 'sig-heading-1',
+                        block_type: 'core/paragraph',
+                        text: 'What are the Top Home Office Lighting Ideas?'
+                    },
+                    {
+                        node_ref: 'block-copy-1',
+                        signature: 'sig-copy-1',
+                        block_type: 'core/paragraph',
+                        text: 'Layered lighting improves focus, comfort, and screen readability across long work sessions.'
+                    }
+                ]
+            };
+            const analysisResult = {
+                run_id: 'test-run-heading-like-release',
+                checks: {
+                    heading_like_text_uses_heading_markup: {
+                        verdict: 'fail',
+                        ui_verdict: 'fail',
+                        explanation: 'One section label behaves like a heading but is still paragraph text.',
+                        provenance: 'deterministic',
+                        highlights: [
+                            {
+                                node_ref: 'block-heading-1',
+                                signature: 'sig-heading-1',
+                                start: 0,
+                                end: 41,
+                                snippet: 'What are the Top Home Office Lighting Ideas?',
+                                message: 'This section label looks like a heading but is still paragraph text.',
+                                type: 'issue'
+                            }
+                        ],
+                        details: {
+                            pseudo_heading_count: 1,
+                            structurally_impactful_count: 1
+                        }
+                    }
+                }
+            };
+
+            const overlay = buildHighlightedHtml(manifest, analysisResult);
+            const issue = overlay.recommendations.find((entry) => entry.check_id === 'heading_like_text_uses_heading_markup');
+
+            expect(issue).toBeDefined();
+            expect(issue.node_ref).toBe('block-heading-1');
+            expect(issue.jump_node_ref).toBe('block-heading-1');
+            expect(issue.message).toMatch(/heading/i);
+            expect(issue.issue_explanation).toMatch(/real heading|heading markup/i);
         });
     });
 

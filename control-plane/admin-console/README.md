@@ -50,6 +50,8 @@ Open `control-plane/admin-console/index.html` in a browser to inspect the scaffo
   - `control-plane/admin-console/runtime-config.example.js`
  - staging deployment template:
    - `control-plane/admin-console/runtime-config.staging.example.js`
+ - staging bootstrap-auth template:
+   - `control-plane/admin-console/runtime-config.staging.bootstrap.js`
  - production deployment template:
    - `control-plane/admin-console/runtime-config.production.example.js`
 
@@ -57,6 +59,23 @@ For production/staging, publish an environment-specific `runtime-config.js` with
 - `allowPreview: false`
 - `apiBaseUrl`
 - Cognito Hosted UI settings
+- `redirectUri`
+- `postLogoutRedirectUri`
+- `scopes`
+- `audience` (optional if API Gateway authorizer does not enforce a resource server audience)
+
+For the current staging rollout before Cognito is live, use:
+
+- `control-plane/admin-console/runtime-config.staging.bootstrap.js`
+
+This keeps preview disabled, points to the live admin API, and relies on the staging bootstrap token only until Cognito/JWT is wired.
+
+When Cognito is enabled, the bootstrap staging runtime should be replaced with a runtime config that includes:
+- Hosted UI domain
+- app client ID
+- redirect URI matching the console host
+- post-logout redirect URI matching the console host
+- OIDC scopes for the hosted UI flow
 
 ## Static bundle packaging
 

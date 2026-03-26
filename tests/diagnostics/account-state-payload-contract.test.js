@@ -31,10 +31,10 @@ describe('Account state payload contract', () => {
     test('sidebar surfaces the account status card and gates only on explicit analysis block', () => {
         const sidebar = read('assets/js/aivi-sidebar.js');
 
-        expect(sidebar).toContain('const accountStatusSummary = buildAccountStatusSummary();');
+        expect(sidebar).toContain('const accountStatusSummary = buildAccountStatusSummary(report && report.billing_summary, liveAccountState, {');
         expect(sidebar).toContain('const analysisBlocked = accountStatusSummary.shouldBlockAnalysis === true;');
         expect(sidebar).toContain("if (analysisBlocked) {");
-        expect(sidebar).toContain("state !== 'analyzing' && createElement(AccountStatusCard");
+        expect(sidebar).toContain("(state === 'idle' || state === 'error' || state === 'aborted') && createElement(AccountStatusCard");
     });
 
     test('auto-run path respects entitlement block as well', () => {

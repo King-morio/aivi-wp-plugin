@@ -26,6 +26,7 @@ $archiveTool = if ($sevenZip) { '7zip' } elseif ($tarExe) { 'tar' } else { 'dotn
 $orchestratorFunction = "aivi-orchestrator-run-dev"
 $workerFunction = "aivi-analyzer-worker-dev"
 $region = "eu-north-1"
+$httpApiId = "dnvo4w1sca"
 
 if ($archiveTool -eq 'tar') {
     Add-Type -AssemblyName System.IO.Compression
@@ -100,7 +101,9 @@ function Ensure-SharedRuntime {
     $runtimeFiles = @(
         "billing-account-state.js",
         "credit-ledger.js",
-        "credit-pricing.js"
+        "credit-pricing.js",
+        "score-contract.js",
+        "scoring-policy.js"
     )
 
     New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
@@ -279,6 +282,9 @@ function Update-LambdaModelEnv {
     $envVars['MISTRAL_MODEL'] = $PrimaryModel
     $envVars['MISTRAL_FALLBACK_MODEL'] = $FallbackModel
     $envVars['AI_COMPLETION_FIRST_ENABLED'] = 'true'
+    $envVars['AI_CHECK_CHUNK_SIZE'] = '5'
+    $envVars['AI_CHUNK_MAX_TOKENS'] = '1300'
+    $envVars['AI_CHUNK_RETRY_MAX_TOKENS'] = '1700'
     $envVars['AI_SOFT_ANALYSIS_TARGET_MS'] = '90000'
     $envVars['AI_MAX_ANALYSIS_LATENCY_MS'] = '420000'
     $envVars['AI_LAMBDA_RESERVE_MS'] = '20000'
@@ -316,6 +322,81 @@ function Update-LambdaModelEnv {
     }
 }
 
+function Ensure-HttpApiRoute {
+    param(
+        [Parameter(Mandatory = $true)][string]$ApiId,
+        [Parameter(Mandatory = $true)][string]$Region,
+        [Parameter(Mandatory = $true)][string]$RouteKey,
+        [Parameter(Mandatory = $false)][string]$AuthorizationType = "NONE",
+        [Parameter(Mandatory = $false)][string]$SeedRouteKey = "GET /ping"
+    )
+
+    $routesJson = aws --no-cli-pager apigatewayv2 get-routes `
+        --api-id $ApiId `
+        --region $Region `
+        --output json
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to fetch HTTP API routes for $ApiId"
+    }
+
+    $routes = ($routesJson | ConvertFrom-Json).Items
+    $seedRoute = $routes | Where-Object { $_.RouteKey -eq $SeedRouteKey } | Select-Object -First 1
+    if (-not $seedRoute -or -not $seedRoute.Target) {
+        throw "Missing seed route [$SeedRouteKey] on API [$ApiId]; cannot infer integration target."
+    }
+    if ($AuthorizationType -eq "JWT" -and -not $seedRoute.AuthorizerId) {
+        throw "Missing authorizer on seed route [$SeedRouteKey] for JWT route [$RouteKey] on API [$ApiId]."
+    }
+
+    $existingRoute = $routes | Where-Object { $_.RouteKey -eq $RouteKey } | Select-Object -First 1
+    if (-not $existingRoute) {
+        $createArgs = @(
+            "apigatewayv2", "create-route",
+            "--api-id", $ApiId,
+            "--region", $Region,
+            "--route-key", $RouteKey,
+            "--target", $seedRoute.Target,
+            "--authorization-type", $AuthorizationType,
+            "--output", "json"
+        )
+        if ($AuthorizationType -eq "JWT") {
+            $createArgs += @("--authorizer-id", $seedRoute.AuthorizerId)
+        }
+        aws --no-cli-pager @createArgs | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create HTTP API route [$RouteKey] on [$ApiId]."
+        }
+        Write-Host "   OK Created missing route: $RouteKey"
+        return
+    }
+
+    $requiresTargetUpdate = $existingRoute.Target -ne $seedRoute.Target
+    $requiresAuthUpdate = $existingRoute.AuthorizationType -ne $AuthorizationType
+    $requiresAuthorizerUpdate = $AuthorizationType -eq "JWT" -and $existingRoute.AuthorizerId -ne $seedRoute.AuthorizerId
+    if (-not $requiresTargetUpdate -and -not $requiresAuthUpdate -and -not $requiresAuthorizerUpdate) {
+        Write-Host "   OK Route present: $RouteKey"
+        return
+    }
+
+    $updateArgs = @(
+        "apigatewayv2", "update-route",
+        "--api-id", $ApiId,
+        "--route-id", $existingRoute.RouteId,
+        "--region", $Region,
+        "--authorization-type", $AuthorizationType,
+        "--target", $seedRoute.Target,
+        "--output", "json"
+    )
+    if ($AuthorizationType -eq "JWT") {
+        $updateArgs += @("--authorizer-id", $seedRoute.AuthorizerId)
+    }
+    aws --no-cli-pager @updateArgs | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to update HTTP API route [$RouteKey] on [$ApiId]."
+    }
+    Write-Host "   OK Reconciled route: $RouteKey"
+}
+
 # STEP 1: Package Orchestrator
 Write-Host ""
 Write-Host "[1/4] Packaging Orchestrator Lambda..."
@@ -326,6 +407,7 @@ Ensure-SharedRuntime -LambdaDir (Get-Location).Path
 
 $orchestratorFiles = @(
     "index.js",
+    "account-onboarding-handler.js",
     "account-connect-handler.js",
     "account-summary-handler.js",
     "analysis-serializer.js",
@@ -336,6 +418,7 @@ $orchestratorFiles = @(
     "credit-ledger.js",
     "credit-pricing.js",
     "connection-token.js",
+    "run-supersession.js",
     "run-status-handler.js",
     "paypal-client.js",
     "paypal-config.js",
@@ -368,6 +451,8 @@ $orchestratorFiles = @(
     "shared\billing-account-state.js",
     "shared\credit-ledger.js",
     "shared\credit-pricing.js",
+    "shared\score-contract.js",
+    "shared\scoring-policy.js",
     "shared\schemas\checks-definitions-v1.json",
     "shared\schemas\check-runtime-contract-v1.json",
     "shared\schemas\deterministic-explanations-v1.json",
@@ -381,16 +466,20 @@ Write-ZipArchive -ArchivePath "..\orchestrator-rcl.zip" -Paths $orchestratorFile
 
 Assert-ArchiveContains -ArchivePath "..\orchestrator-rcl.zip" -Label "orchestrator-rcl.zip" -RequiredEntries @(
     "index.js",
+    "account-onboarding-handler.js",
     "account-connect-handler.js",
     "analysis-serializer.js",
     "billing-account-state.js",
     "billing-checkout-handler.js",
     "connection-token.js",
+    "run-supersession.js",
     "super-admin-read-handler.js",
     "schema-draft-builder.js",
     "shared/billing-account-state.js",
     "shared/credit-ledger.js",
     "shared/credit-pricing.js",
+    "shared/score-contract.js",
+    "shared/scoring-policy.js",
     "shared/schemas/check-runtime-contract-v1.json",
     "shared/schemas/deterministic-explanations-v1.json",
     "shared/schemas/scoring-config-v1.json"
@@ -420,6 +509,8 @@ $workerFiles = @(
     "shared\billing-account-state.js",
     "shared\credit-ledger.js",
     "shared\credit-pricing.js",
+    "shared\score-contract.js",
+    "shared\scoring-policy.js",
     "shared\schemas\checks-definitions-v1.json",
     "shared\schemas\check-runtime-contract-v1.json",
     "shared\schemas\deterministic-explanations-v1.json",
@@ -438,6 +529,8 @@ Assert-ArchiveContains -ArchivePath "..\worker-rcl.zip" -Label "worker-rcl.zip" 
     "shared/billing-account-state.js",
     "shared/credit-ledger.js",
     "shared/credit-pricing.js",
+    "shared/score-contract.js",
+    "shared/scoring-policy.js",
     "shared/schemas/check-runtime-contract-v1.json",
     "shared/schemas/deterministic-explanations-v1.json",
     "shared/schemas/scoring-config-v1.json"
@@ -480,6 +573,12 @@ Write-Host "Pinning model environment on orchestrator + worker..."
 Update-LambdaModelEnv -FunctionName $orchestratorFunction -Region $region -PrimaryModel 'mistral-large-latest' -FallbackModel 'magistral-small-latest'
 Update-LambdaModelEnv -FunctionName $workerFunction -Region $region -PrimaryModel 'mistral-large-latest' -FallbackModel 'magistral-small-latest'
 Write-Host "   OK Model environment pinned"
+
+Write-Host ""
+Write-Host "Reconciling critical HTTP API routes..."
+Ensure-HttpApiRoute -ApiId $httpApiId -Region $region -RouteKey "GET /aivi/v1/worker/health"
+Ensure-HttpApiRoute -ApiId $httpApiId -Region $region -RouteKey "GET /aivi/v1/admin/financials/overview" -AuthorizationType "JWT" -SeedRouteKey "GET /aivi/v1/admin/accounts"
+Write-Host "   OK Critical HTTP API routes reconciled"
 
 # SUMMARY
 Write-Host ""

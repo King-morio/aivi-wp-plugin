@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AiVI Documentation Surface — Option A</title>
+  <style>
+    :root{
+      --bg:#f4f7fb;
+      --card:#ffffff;
+      --ink:#10233f;
+      --muted:#5f7087;
+      --line:#d7e1ec;
+      --line-strong:#c9d6e4;
+      --gold:#e2b347;
+      --gold-soft:#fff6de;
+      --blue:#2c6bed;
+      --blue-soft:#edf3ff;
+      --shadow:0 18px 38px rgba(16,35,63,.08);
+      --radius:22px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#f7f9fc 0%,var(--bg) 100%);color:var(--ink)}
+    .page{max-width:1320px;margin:28px auto;padding:0 20px}
+    .shell{border:1px solid var(--line);border-radius:30px;background:linear-gradient(180deg,#fff 0%,#fbfdff 100%);box-shadow:var(--shadow);overflow:hidden}
+    .top{padding:26px 28px 0}
+    .tabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px}
+    .tab{display:inline-flex;align-items:center;justify-content:center;padding:14px 18px;border-radius:14px 14px 0 0;border:1px solid var(--line);border-bottom:none;background:#fff;color:#4d617b;font-weight:700;text-decoration:none}
+    .tab.active{background:linear-gradient(180deg,#fffdf8 0%,#fff7e5 100%);border-color:#e7c468;color:#10233f;box-shadow:inset 0 2px 0 var(--gold)}
+    .hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:end;padding-bottom:24px}
+    .eyebrow{display:inline-flex;align-items:center;padding:7px 12px;border-radius:999px;border:1px solid #efd98c;background:var(--gold-soft);color:#8c6308;font-weight:800;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+    h1{margin:16px 0 10px;font-size:38px;line-height:1;letter-spacing:-.05em}
+    .hero p{margin:0;max-width:760px;font-size:17px;line-height:1.65;color:var(--muted)}
+    .hero-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+    .button{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:0 14px;border-radius:12px;border:1px solid var(--line-strong);background:#fff;color:#26476f;font-weight:700;text-decoration:none}
+    .button.primary{background:#2d68e7;color:#fff;border-color:#2d68e7}
+    .layout{display:grid;grid-template-columns:280px minmax(0,1fr) 280px;gap:20px;padding:0 28px 28px}
+    .panel{border:1px solid var(--line);border-radius:24px;background:#fff}
+    .nav{padding:18px}
+    .nav h2,.utility h2{margin:0 0 14px;font-size:18px;line-height:1.2}
+    .nav-group{display:grid;gap:8px;margin-bottom:18px}
+    .nav-label{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#6e8097}
+    .nav-item{display:grid;gap:4px;padding:12px 14px;border:1px solid var(--line);border-radius:16px;background:#fff;color:#10233f;text-decoration:none}
+    .nav-item.active{border-color:#e1b84f;background:linear-gradient(180deg,#fffdf8 0%,#fff7e5 100%)}
+    .nav-item strong{font-size:14px;line-height:1.3}
+    .nav-item span{font-size:13px;line-height:1.45;color:var(--muted)}
+    .content{padding:20px 22px}
+    .article-top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:18px}
+    .article-meta{display:flex;gap:10px;flex-wrap:wrap}
+    .chip{display:inline-flex;align-items:center;padding:7px 11px;border-radius:999px;background:var(--blue-soft);color:#264d9e;font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase}
+    .article{padding:24px;border:1px solid var(--line);border-radius:22px;background:linear-gradient(180deg,#fff 0%,#fcfdff 100%)}
+    .article h3{margin:0 0 12px;font-size:30px;line-height:1.05;letter-spacing:-.04em}
+    .article p{margin:0 0 14px;font-size:15px;line-height:1.8;color:#334a66}
+    .callout-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}
+    .callout{padding:14px;border:1px solid var(--line);border-radius:16px;background:#f8fbff}
+    .callout strong{display:block;margin-bottom:6px;font-size:13px}
+    .callout span{font-size:13px;line-height:1.5;color:var(--muted)}
+    .toc{margin-top:18px;padding:16px;border:1px solid var(--line);border-radius:18px;background:#fffdf7}
+    .toc strong{display:block;margin-bottom:10px;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:#6f5808}
+    .toc a{display:block;margin:8px 0;color:#234674;text-decoration:none;font-weight:600}
+    .utility{padding:18px}
+    .utility-card{padding:16px;border:1px solid var(--line);border-radius:18px;background:#fff;margin-bottom:12px}
+    .utility-card strong{display:block;margin-bottom:8px;font-size:15px}
+    .utility-card p{margin:0;color:var(--muted);font-size:13px;line-height:1.6}
+    .utility-card .button{margin-top:12px}
+    .status-list{display:grid;gap:10px}
+    .status{display:flex;justify-content:space-between;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:16px;background:#f9fbfe;font-size:13px}
+    .status b{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#6b7c92}
+    @media (max-width:1080px){.layout{grid-template-columns:1fr}.hero{grid-template-columns:1fr}.hero-actions{justify-content:flex-start}.callout-grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="shell">
+      <div class="top">
+        <nav class="tabs">
+          <a class="tab" href="#">Overview</a>
+          <a class="tab" href="#">Plans</a>
+          <a class="tab" href="#">Credits</a>
+          <a class="tab" href="#">Connection</a>
+          <a class="tab" href="#">Support</a>
+          <a class="tab active" href="#">Documentation</a>
+        </nav>
+        <section class="hero">
+          <div>
+            <span class="eyebrow">AiVI Knowledge Surface</span>
+            <h1>Open the right guide without leaving AiVI</h1>
+            <p>This direction gives the Support “Documentation” action a real in-product destination: a proper docs hub with clear lanes for users, editors, and contributors. It feels native to the settings page, but deeper and calmer than a normal help panel.</p>
+          </div>
+          <div class="hero-actions">
+            <a class="button primary" href="#">Start here</a>
+            <a class="button" href="#">Open support</a>
+          </div>
+        </section>
+      </div>
+
+      <div class="layout">
+        <aside class="panel nav">
+          <h2>Browse the docs</h2>
+
+          <div class="nav-group">
+            <div class="nav-label">Start Here</div>
+            <a class="nav-item active" href="#"><strong>User Guide</strong><span>Analyze, read findings, rerun, and use settings.</span></a>
+            <a class="nav-item" href="#"><strong>Check Reference</strong><span>Understand each check family and what pass/partial/fail means.</span></a>
+            <a class="nav-item" href="#"><strong>Troubleshooting</strong><span>Fix stale results, missing highlights, connection issues, and rerun confusion.</span></a>
+          </div>
+
+          <div class="nav-group">
+            <div class="nav-label">Trust & Policy</div>
+            <a class="nav-item" href="#"><strong>Privacy</strong><span>What the plugin captures, stores, and sends.</span></a>
+            <a class="nav-item" href="#"><strong>Terms of Service</strong><span>Current service boundaries and responsibilities.</span></a>
+            <a class="nav-item" href="#"><strong>Support</strong><span>What to include when asking for help.</span></a>
+          </div>
+
+          <div class="nav-group" style="margin-bottom:0">
+            <div class="nav-label">Build & Extend</div>
+            <a class="nav-item" href="#"><strong>Development</strong><span>Local workflow, tests, packaging, and public-safe contribution boundaries.</span></a>
+            <a class="nav-item" href="#"><strong>Architecture</strong><span>Plugin, preflight, backend proxy, sidebar, and overlay flow.</span></a>
+            <a class="nav-item" href="#"><strong>Operations</strong><span>Packaging, specimen verification, snapshot export, and release notes.</span></a>
+            <a class="nav-item" href="#"><strong>Decision Log</strong><span>Why the current runtime and repo policies look the way they do.</span></a>
+          </div>
+        </aside>
+
+        <main class="panel content">
+          <div class="article-top">
+            <div>
+              <div class="article-meta">
+                <span class="chip">Guide</span>
+                <span class="chip">Current</span>
+                <span class="chip">Editor Workflow</span>
+              </div>
+            </div>
+            <div class="article-meta">
+              <span class="chip">Last updated: current release</span>
+            </div>
+          </div>
+
+          <article class="article">
+            <h3>User Guide</h3>
+            <p>The cleanest documentation surface for AiVI should feel less like a support dump and more like a guided operating system for the plugin. The user guide becomes the default landing article because it answers the most practical first question: <strong>how do I use this well inside WordPress?</strong></p>
+            <p>From here, a reader can move naturally into the check reference, troubleshooting, privacy, or contributor docs without leaving the settings environment. That keeps the experience self-serve, premium, and trustworthy.</p>
+
+            <div class="callout-grid">
+              <div class="callout"><strong>Analyze content</strong><span>Start from Gutenberg or Classic Editor and understand what AiVI is scoring.</span></div>
+              <div class="callout"><strong>Read the rail</strong><span>Learn what surfaced findings mean, and what stays quiet unless needed.</span></div>
+              <div class="callout"><strong>Rerun safely</strong><span>Understand stale results, superseded runs, and overlay draft behavior.</span></div>
+            </div>
+
+            <p>This surface also makes the support-side “Documentation” button more useful. Instead of sending people to a generic external page, it can deep-link directly into the most relevant article:</p>
+            <p><strong>Billing & Plans</strong> → Pricing/help docs<br><strong>Connection & Setup</strong> → Connection section<br><strong>Analysis & Results</strong> → Troubleshooting or Check Reference<br><strong>General Support</strong> → User Guide / Support guide</p>
+
+            <div class="toc">
+              <strong>In This Guide</strong>
+              <a href="#">1. Where AiVI appears in WordPress</a>
+              <a href="#">2. Running an analysis</a>
+              <a href="#">3. Reading results and details</a>
+              <a href="#">4. Overlay review and edit flow</a>
+              <a href="#">5. Settings tabs and account surfaces</a>
+            </div>
+          </article>
+        </main>
+
+        <aside class="panel utility">
+          <h2>Related tools</h2>
+          <div class="utility-card">
+            <strong>Need the exact meaning of a check?</strong>
+            <p>Jump from this guide into the full Check Reference without leaving the documentation surface.</p>
+            <a class="button" href="#">Open Check Reference</a>
+          </div>
+          <div class="utility-card">
+            <strong>Still blocked after reading?</strong>
+            <p>Open Support with your current site context already attached.</p>
+            <a class="button" href="#">Open Support</a>
+          </div>
+          <div class="utility-card">
+            <strong>Release status</strong>
+            <div class="status-list">
+              <div class="status"><span>Docs baseline</span><b>Current</b></div>
+              <div class="status"><span>Plugin package</span><b>Ready</b></div>
+              <div class="status"><span>Public repo sync</span><b>Aligned</b></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

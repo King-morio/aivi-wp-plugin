@@ -91,4 +91,39 @@ describe('paypal-reconciliation', () => {
             capture_status: 'completed'
         });
     });
+
+    test('maps Growth intro plan ids back to the canonical growth plan code when no checkout lookup exists', async () => {
+        const store = {
+            getCheckoutIntent: jest.fn().mockResolvedValue(null)
+        };
+
+        const result = await reconcilePayPalWebhookEvent({
+            webhookEvent: {
+                id: 'WH-EVENT-INTRO',
+                event_type: 'BILLING.SUBSCRIPTION.ACTIVATED',
+                create_time: '2026-03-06T11:00:00Z',
+                resource: {
+                    id: 'I-SUB-INTRO-123',
+                    plan_id: 'P-GROWTH-INTRO',
+                    status: 'ACTIVE',
+                    billing_info: {
+                        next_billing_time: '2026-04-06T11:00:00Z'
+                    }
+                }
+            },
+            store,
+            config: {
+                planIds: {
+                    growth: 'P-GROWTH',
+                    growth_intro: 'P-GROWTH-INTRO'
+                }
+            }
+        });
+
+        expect(result.subscriptionRecord).toMatchObject({
+            provider_subscription_id: 'I-SUB-INTRO-123',
+            plan_code: 'growth',
+            status: 'active'
+        });
+    });
 });

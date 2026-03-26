@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AiVI Sidebar Edge Glow Preview</title>
+  <style>
+    :root {
+      --page-bg: #eef3f9;
+      --ink: #152139;
+      --muted: #66748a;
+      --frame-line: rgba(18, 32, 51, 0.1);
+      --shell-top: #1b2a4d;
+      --shell-bottom: #16233c;
+      --shell-text: #f7fbff;
+      --shell-soft: #cad7ec;
+      --card-bg: rgba(255, 255, 255, 0.055);
+      --card-line: rgba(148, 177, 225, 0.16);
+      --pill-bg: rgba(255, 255, 255, 0.08);
+      --pill-line: rgba(203, 218, 246, 0.16);
+      --pill-text: #d4dff2;
+      --cyan: #63d9ff;
+      --teal: #68ddc4;
+      --indigo: #87a7ff;
+      --violet: #82a3ff;
+      --live-bg: rgba(84, 214, 255, 0.1);
+      --live-line: rgba(84, 214, 255, 0.24);
+      --warn: #f0ce7c;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 28px;
+      background: linear-gradient(180deg, #f8fbfe, var(--page-bg));
+      color: var(--ink);
+      font: 14px/1.45 "Manrope", "Segoe UI", system-ui, sans-serif;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 24px;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+    }
+
+    .lead {
+      margin: 0 0 22px;
+      max-width: 920px;
+      color: #5f6d83;
+    }
+
+    .gallery {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+
+    .option {
+      width: 280px;
+    }
+
+    .option h2 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .option p {
+      margin: 0 0 12px;
+      min-height: 34px;
+      color: #66748a;
+      font-size: 12px;
+    }
+
+    .frame {
+      width: 280px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--frame-line);
+      background: #fff;
+      box-shadow: 0 14px 34px rgba(20, 32, 51, 0.08);
+    }
+
+    .shell {
+      min-height: 470px;
+      border-radius: 18px;
+      padding: 14px;
+      color: var(--shell-text);
+      background:
+        radial-gradient(circle at top right, rgba(99, 217, 255, 0.08), transparent 32%),
+        linear-gradient(180deg, var(--shell-top), var(--shell-bottom));
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow: hidden;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--cyan);
+      box-shadow: 0 0 0 4px rgba(99, 217, 255, 0.12);
+      flex: 0 0 auto;
+    }
+
+    .card {
+      position: relative;
+      border-radius: 16px;
+      padding: 14px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-line);
+      overflow: hidden;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      align-self: flex-start;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--pill-bg);
+      border: 1px solid var(--pill-line);
+      color: #d9e5f9;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .banner-title {
+      margin: 12px 0 0;
+      font-size: 15px;
+      line-height: 1.34;
+      font-weight: 800;
+    }
+
+    .console {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .row {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 58px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--card-line);
+      background: var(--card-bg);
+      overflow: hidden;
+    }
+
+    .row.live {
+      background: var(--live-bg);
+      border-color: var(--live-line);
+    }
+
+    .copy {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .state {
+      flex: 0 0 auto;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: var(--pill-bg);
+      color: var(--pill-text);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .row.live .state {
+      color: var(--cyan);
+      background: rgba(99, 217, 255, 0.11);
+    }
+
+    .footer {
+      margin-top: auto;
+      padding-top: 12px;
+      border-top: 1px solid rgba(146, 179, 227, 0.14);
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-size: 11px;
+      color: #9cb0cd;
+    }
+
+    .footer strong {
+      color: #d9e4f5;
+      font-weight: 800;
+    }
+
+    .edge-static::before,
+    .edge-static::after {
+      content: "";
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      height: 2px;
+      border-radius: 999px;
+      opacity: 0.95;
+      background: linear-gradient(90deg, rgba(99, 217, 255, 0), rgba(99, 217, 255, 0.95), rgba(104, 221, 196, 0.95), rgba(99, 217, 255, 0));
+      filter: blur(0.3px);
+      pointer-events: none;
+    }
+
+    .edge-static::before { top: 0; }
+    .edge-static::after { bottom: 0; }
+
+    .edge-aurora::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(115deg, rgba(99, 217, 255, 0.1), rgba(104, 221, 196, 0.7), rgba(135, 167, 255, 0.28), rgba(99, 217, 255, 0.1));
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      animation: auroraSweep 6s linear infinite;
+      pointer-events: none;
+    }
+
+    .edge-aurora::after {
+      content: "";
+      position: absolute;
+      inset: auto 18px 0 18px;
+      height: 20px;
+      background: radial-gradient(circle at center, rgba(99, 217, 255, 0.22), transparent 70%);
+      pointer-events: none;
+    }
+
+    .edge-live::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(90deg, rgba(99, 217, 255, 0), rgba(99, 217, 255, 0.95), rgba(104, 221, 196, 0.95), rgba(99, 217, 255, 0));
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      animation: liveSweep 2.4s linear infinite;
+      pointer-events: none;
+    }
+
+    .edge-live::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      box-shadow: inset 0 0 18px rgba(99, 217, 255, 0.08);
+      pointer-events: none;
+    }
+
+    .quiet .edge-live::before,
+    .quiet .edge-aurora::before {
+      animation-duration: 8s;
+      opacity: 0.7;
+    }
+
+    @keyframes auroraSweep {
+      0% { transform: translateX(-18%) scaleX(0.96); opacity: 0.55; }
+      50% { transform: translateX(10%) scaleX(1.03); opacity: 0.95; }
+      100% { transform: translateX(-18%) scaleX(0.96); opacity: 0.55; }
+    }
+
+    @keyframes liveSweep {
+      0% { transform: translateX(-34%); opacity: 0.25; }
+      18% { opacity: 0.95; }
+      52% { opacity: 0.95; }
+      100% { transform: translateX(34%); opacity: 0.25; }
+    }
+  </style>
+</head>
+<body>
+  <h1>AiVI Sidebar Edge Glow Preview</h1>
+  <p class="lead">
+    This is a design-only probe for the sidebar analysis shell. My recommendation is to keep any glow constrained to the card edges,
+    with the strongest treatment reserved for the active <code>LIVE</code> row. That keeps the panel premium without making it feel noisy or game-like.
+  </p>
+
+  <div class="gallery">
+    <section class="option">
+      <h2>Option A · Static Edge Glow</h2>
+      <p>Subtle cyan-teal edge accents on the banner and rows. Lowest risk and the best fit if you want a calmer premium feel.</p>
+      <div class="frame">
+        <div class="shell">
+          <div class="status"><span class="dot"></span>Analysis in progress.</div>
+          <div class="card edge-static">
+            <span class="tag">Live Category</span>
+            <h3 class="banner-title">Schema &amp; Structured Data</h3>
+          </div>
+          <div class="console">
+            <div class="row edge-static">
+              <div class="copy">Verifying schema eligibility</div>
+              <div class="state">Stable</div>
+            </div>
+            <div class="row edge-static">
+              <div class="copy">Completing FAQ schema map</div>
+              <div class="state">Stable</div>
+            </div>
+            <div class="row edge-static">
+              <div class="copy">Completing HowTo schema map</div>
+              <div class="state">Stable</div>
+            </div>
+            <div class="row live edge-static">
+              <div class="copy">Detecting FAQ opportunities</div>
+              <div class="state">Live</div>
+            </div>
+          </div>
+          <div class="footer">
+            <strong>102s elapsed</strong>
+            <span>Most analyses finish in about 4-5 minutes.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="option">
+      <h2>Option B · Aurora Border</h2>
+      <p>Very slow moving edge light, closer to a luxury shimmer than a neon runner. More expressive, but still acceptable if kept slow.</p>
+      <div class="frame">
+        <div class="shell quiet">
+          <div class="status"><span class="dot"></span>Analysis in progress.</div>
+          <div class="card edge-aurora">
+            <span class="tag">Live Category</span>
+            <h3 class="banner-title">Schema &amp; Structured Data</h3>
+          </div>
+          <div class="console">
+            <div class="row edge-aurora">
+              <div class="copy">Verifying schema eligibility</div>
+              <div class="state">Stable</div>
+            </div>
+            <div class="row edge-aurora">
+              <div class="copy">Completing FAQ schema map</div>
+              <div class="state">Stable</div>
+            </div>
+            <div class="row edge-aurora">
+              <div class="copy">Completing HowTo schema map</div>
+              <div class="state">Stable</div>
+            </div>
+            <div class="row live edge-aurora">
+              <div class="copy">Detecting FAQ opportunities</div>
+              <div class="state">Live</div>
+            </div>
+          </div>
+          <div class="footer">
+            <strong>102s elapsed</strong>
+            <span>Most analyses finish in about 4-5 minutes.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="option">
+      <h2>Option C · Live-Only Runner</h2>
+      <p>Keep most rows calm and reserve the animated edge sweep for the current live item. Strongest personality, but also the easiest to overdo.</p>
+      <div class="frame">
+        <div class="shell">
+          <div class="status"><span class="dot"></span>Analysis in progress.</div>
+          <div class="card edge-static">
+            <span class="tag">Live Category</span>
+            <h3 class="banner-title">Schema &amp; Structured Data</h3>
+          </div>
+          <div class="console">
+            <div class="row edge-static">
+              <div class="copy">Verifying schema eligibility</div>
+              <div class="state">Stable</div>
+            </div>
+            <div class="row edge-static">
+              <div class="copy">Completing FAQ schema map</div>
+              <div class="state">Stable</div>
+            </div>
+            <div class="row edge-static">
+              <div class="copy">Completing HowTo schema map</div>
+              <div class="state">Stable</div>
+            </div>
+            <div class="row live edge-live">
+              <div class="copy">Detecting FAQ opportunities</div>
+              <div class="state">Live</div>
+            </div>
+          </div>
+          <div class="footer">
+            <strong>102s elapsed</strong>
+            <span>Most analyses finish in about 4-5 minutes.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

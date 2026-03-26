@@ -25,7 +25,7 @@ describe('Inline highlight UI wiring', () => {
             {
                 message: 'Missing direct answer.',
                 verdict: 'fail',
-                checkId: 'direct_answer_first_120',
+                checkId: 'immediate_answer_placement',
                 runId: 'run-123',
                 instanceIndex: 0,
                 nodeRef: 'block-0',
@@ -42,7 +42,7 @@ describe('Inline highlight UI wiring', () => {
         const span = spans[0];
         expect(span.classList.contains('aivi-inline-highlight')).toBe(true);
         expect(span.dataset.aiviMessage).toBe('Missing direct answer.');
-        expect(span.dataset.aiviCheckId).toBe('direct_answer_first_120');
+        expect(span.dataset.aiviCheckId).toBe('immediate_answer_placement');
         expect(span.dataset.aiviRunId).toBe('run-123');
         expect(span.dataset.aiviInstanceIndex).toBe('0');
         expect(span.dataset.aiviNodeRef).toBe('block-0');

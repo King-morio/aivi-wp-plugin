@@ -62,7 +62,9 @@ Finish the remaining rollout polish after Phase 5 commerce validation without re
 ### Tasks
 
 - confirm production env keeps:
-  - `AIVI_BILLING_READY=false` until explicit go-live
+  - the built-in production backend default enabled
+  - hosted billing enabled by default for customer installs
+  - staging/local overrides available only through constants/filters
   - `AIVI_ADMIN_ALLOW_BOOTSTRAP_TOKEN=false`
 - confirm release package still excludes:
   - `control-plane/`

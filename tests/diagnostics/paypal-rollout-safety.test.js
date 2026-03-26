@@ -4,9 +4,10 @@ const path = require('path');
 const read = (relativePath) => fs.readFileSync(path.join(__dirname, '..', '..', relativePath), 'utf8');
 
 describe('paypal rollout safety', () => {
-    test('keeps hosted billing disabled by default in WordPress until rollout is approved', () => {
+    test('ships hosted billing enabled by default while keeping provider secrets and identifiers out of the browser', () => {
         const config = read('includes/config.php');
-        expect(config).toContain("define( 'AIVI_BILLING_READY', false );");
+        expect(config).toContain("define( 'AIVI_BILLING_READY', true );");
+        expect(config).toContain("define( 'AIVI_DEFAULT_BACKEND_URL', 'https://dnvo4w1sca.execute-api.eu-north-1.amazonaws.com' );");
         expect(config).toContain("define( 'AIVI_BILLING_PROVIDER', 'paypal' );");
         expect(config).toContain("define( 'AIVI_PUBLIC_BILLING_CATALOG'");
     });

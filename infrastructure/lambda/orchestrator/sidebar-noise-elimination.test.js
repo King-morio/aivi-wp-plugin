@@ -37,6 +37,7 @@ const EXPECTED_ISSUE_FIELDS = [
     'repair_intent',
     'explanation_pack',
     'issue_explanation',
+    'review_summary',
     'highlights'
 ];
 
@@ -96,6 +97,29 @@ describe('Sidebar Noise Elimination', () => {
                 });
             });
         });
+
+        test('analysis_summary issues expose review_summary when present', () => {
+            const mockAnalysis = {
+                checks: {
+                    immediate_answer_placement: {
+                        verdict: 'partial',
+                        explanation: 'Answer appears at 121-150 words after the question anchor.',
+                        ai_explanation_pack: {
+                            what_failed: 'Answer appears at 121-150 words after the question anchor.',
+                            why_it_matters: 'The answer arrives after setup, so extraction is weaker.',
+                            how_to_fix_steps: ['Lead with the direct answer before supporting context.']
+                        },
+                        highlights: [{ node_ref: 'block-1', snippet: 'Example answer block' }]
+                    }
+                }
+            };
+
+            const { analysis_summary } = serializeForSidebar(mockAnalysis, 'test-run');
+            const issue = analysis_summary.categories[0].issues[0];
+
+            expect(issue.review_summary).toBeTruthy();
+            expect(issue.review_summary).not.toMatch(/121-150 words after the question anchor/i);
+        });
     });
 
     // ============================================
@@ -108,7 +132,7 @@ describe('Sidebar Noise Elimination', () => {
                 checks: {
                     single_h1: { verdict: 'fail', highlights: [] },
                     logical_heading_hierarchy: { verdict: 'pass', highlights: [] },
-                    orphan_headings: { verdict: 'partial', highlights: [] },
+                    heading_topic_fulfillment: { verdict: 'partial', highlights: [] },
                     heading_fragmentation: { verdict: 'pass', highlights: [] }
                 }
             };
@@ -260,7 +284,7 @@ describe('Sidebar Noise Elimination', () => {
                     // Multiple checks in same category with different verdicts
                     single_h1: { verdict: 'fail', highlights: [] },
                     logical_heading_hierarchy: { verdict: 'partial', highlights: [] },
-                    orphan_headings: { verdict: 'fail', highlights: [] }
+                    heading_topic_fulfillment: { verdict: 'fail', highlights: [] }
                 }
             };
 
@@ -285,7 +309,7 @@ describe('Sidebar Noise Elimination', () => {
         test('issues are alphabetically sorted within verdict groups', () => {
             const mockAnalysis = {
                 checks: {
-                    orphan_headings: { verdict: 'fail', highlights: [] },
+                    heading_topic_fulfillment: { verdict: 'fail', highlights: [] },
                     single_h1: { verdict: 'fail', highlights: [] },
                     appropriate_paragraph_length: { verdict: 'fail', highlights: [] }
                 }
@@ -360,7 +384,7 @@ describe('Sidebar Noise Elimination', () => {
 
             const issue = analysis_summary.categories[0].issues[0];
             expect(issue.first_instance_node_ref).toBeNull();
-            expect(issue.instances).toBe(0);
+            expect(issue.instances).toBe(1);
         });
 
         test('instances count matches highlights length', () => {
@@ -478,7 +502,7 @@ describe('Sidebar Noise Elimination', () => {
                 checks: {
                     single_h1: { verdict: 'fail', highlights: [{ node_ref: 'block-1' }] },
                     logical_heading_hierarchy: { verdict: 'partial', highlights: [] },
-                    orphan_headings: { verdict: 'pass', highlights: [] }
+                    heading_topic_fulfillment: { verdict: 'pass', highlights: [] }
                 }
             };
 

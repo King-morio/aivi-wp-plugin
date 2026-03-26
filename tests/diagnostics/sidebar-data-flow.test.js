@@ -38,6 +38,9 @@ describe('Sidebar Data Flow - Result Contract Lock', () => {
                         ui_verdict: issue.ui_verdict || 'fail',
                         instances: issue.instances || 1,
                         first_instance_node_ref: issue.first_instance_node_ref || null,
+                        message: issue.review_summary || '',
+                        review_summary: issue.review_summary || '',
+                        issue_explanation: issue.issue_explanation || '',
                         highlights: []
                     };
                     groups[categoryName].push(mappedIssue);
@@ -99,8 +102,8 @@ describe('Sidebar Data Flow - Result Contract Lock', () => {
                         issue_count: 2,
                         issues: [
                             {
-                                check_id: 'direct_answer_first_120',
-                                name: 'Direct Answer in First 120 Words',
+                                check_id: 'immediate_answer_placement',
+                                name: 'Immediate Answer Placement',
                                 ui_verdict: 'fail',
                                 instances: 1
                             },
@@ -118,8 +121,8 @@ describe('Sidebar Data Flow - Result Contract Lock', () => {
                         issue_count: 1,
                         issues: [
                             {
-                                check_id: 'orphan_headings',
-                                name: 'Orphan Headings',
+                                check_id: 'heading_topic_fulfillment',
+                                name: 'Heading Topic Fulfillment',
                                 ui_verdict: 'fail',
                                 instances: 3
                             }
@@ -139,9 +142,73 @@ describe('Sidebar Data Flow - Result Contract Lock', () => {
 
         // Verify specific issues are present
         const checkIds = result.allIssues.map(i => i.check_id);
-        expect(checkIds).toContain('direct_answer_first_120');
+        expect(checkIds).toContain('immediate_answer_placement');
         expect(checkIds).toContain('answer_sentence_concise');
-        expect(checkIds).toContain('orphan_headings');
+        expect(checkIds).toContain('heading_topic_fulfillment');
+    });
+
+    test('preserves serializer-owned review summaries from analysis_summary issues', () => {
+        const report = {
+            analysis_summary: {
+                categories: [
+                    {
+                        id: 'answer_extractability',
+                        name: 'Answer Extractability',
+                        issues: [
+                            {
+                                check_id: 'immediate_answer_placement',
+                                name: 'Immediate Answer Placement',
+                                ui_verdict: 'partial',
+                                instances: 1,
+                                review_summary: 'The section reaches the answer only after setup instead of leading with it.',
+                                issue_explanation: 'Longer narrative stays available for details.'
+                            }
+                        ]
+                    }
+                ]
+            }
+        };
+
+        const result = getGroupedIssues(report);
+        const issue = result.allIssues[0];
+
+        expect(issue.review_summary).toBe('The section reaches the answer only after setup instead of leading with it.');
+        expect(issue.message).toBe(issue.review_summary);
+        expect(issue.issue_explanation).toBe('Longer narrative stays available for details.');
+    });
+
+    test('keeps deterministic structural issues readable when analysis_summary carries new heading markup checks', () => {
+        const report = {
+            analysis_summary: {
+                categories: [
+                    {
+                        id: 'structure_readability',
+                        name: 'Structure & Readability',
+                        issues: [
+                            {
+                                check_id: 'heading_like_text_uses_heading_markup',
+                                name: 'Heading-Like Text Uses Heading Markup',
+                                ui_verdict: 'fail',
+                                instances: 1,
+                                first_instance_node_ref: 'block-heading-1',
+                                review_summary: 'Use a real heading here',
+                                issue_explanation: 'This section label behaves like a heading, but machine parsing is stronger when it uses real heading markup.'
+                            }
+                        ]
+                    }
+                ]
+            }
+        };
+
+        const result = getGroupedIssues(report);
+        const issue = result.allIssues[0];
+
+        expect(result.issueCount).toBe(1);
+        expect(issue.category).toBe('Structure & Readability');
+        expect(issue.check_id).toBe('heading_like_text_uses_heading_markup');
+        expect(issue.first_instance_node_ref).toBe('block-heading-1');
+        expect(issue.message).toBe('Use a real heading here');
+        expect(issue.issue_explanation).toMatch(/real heading markup/i);
     });
 
     test('REGRESSION: Should NOT return 0 issues when analysis_summary has categories', () => {
@@ -248,9 +315,9 @@ describe('Sidebar Data Flow - Result Contract Lock', () => {
 describe('Bad Article Fixture Expected Failures', () => {
     // These are the checks that MUST fail/partial for fixtures/bad_article_500.html
     const EXPECTED_FAILURES = [
-        'direct_answer_first_120',
+        'immediate_answer_placement',
         'answer_sentence_concise',
-        'orphan_headings',
+        'heading_topic_fulfillment',
         'no_exaggerated_claims',
         'claim_provenance_and_evidence',
         'author_identified',

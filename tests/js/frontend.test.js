@@ -121,7 +121,7 @@ describe('AiVI Frontend', () => {
         expect(global.wp.plugins.registerPlugin).toHaveBeenCalled();
     });
 
-    test('uses backend proxy endpoints', async () => {
+    test('does not auto-run backend proxy endpoints on load', async () => {
         // Mock successful ping response
         mockFetch.mockImplementation((url) => {
             if (url.includes('/backend/proxy_ping')) {
@@ -174,19 +174,10 @@ describe('AiVI Frontend', () => {
         await flushPromises();
         await flushPromises();
 
-        // Verify ping was called
-        expect(mockFetch).toHaveBeenCalledWith(
-            expect.stringContaining('/backend/proxy_ping'),
-            expect.objectContaining({
-                headers: expect.objectContaining({
-                    'Content-Type': 'application/json',
-                    'X-WP-Nonce': 'test-nonce'
-                })
-            })
-        );
+        expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    test('handles preflight too long response', async () => {
+    test('does not auto-run preflight on load', async () => {
         // Mock successful ping
         mockFetch.mockResolvedValueOnce({
             ok: true,
@@ -219,15 +210,10 @@ describe('AiVI Frontend', () => {
         await flushPromises();
         await flushPromises();
 
-        // Verify both endpoints were called
-        expect(mockFetch).toHaveBeenCalledTimes(2);
-        expect(mockFetch).toHaveBeenCalledWith(
-            expect.stringContaining('/backend/proxy_ping'),
-            expect.any(Object)
-        );
+        expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    test('handles analyze failure gracefully', async () => {
+    test('does not auto-run analyze on load', async () => {
         // Mock successful ping and preflight
         mockFetch.mockResolvedValueOnce({
             ok: true,
@@ -269,10 +255,6 @@ describe('AiVI Frontend', () => {
         await flushPromises();
         await flushPromises();
 
-        // Verify error handling
-        expect(mockFetch).toHaveBeenCalledWith(
-            expect.stringContaining('/backend/proxy_analyze'),
-            expect.any(Object)
-        );
+        expect(mockFetch).not.toHaveBeenCalled();
     });
 });

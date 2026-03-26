@@ -9,7 +9,8 @@
  * - run_id, version, status, ok, completed_at, scores, details_token
  * - categories[]: id, name, issue_count
  * - issues[]: check_id, detail_ref, name, ui_verdict, instances, first_instance_node_ref,
- *             first_instance_snippet, first_instance_signature, first_instance_start, first_instance_end, highlights[]
+ *             first_instance_snippet, first_instance_signature, first_instance_start, first_instance_end,
+ *             review_summary, highlights[]
  *
  * FORBIDDEN fields (MUST NEVER be in sidebar payload):
  * - explanation, suggestions, snippets, offsets
@@ -73,6 +74,7 @@ const ALLOWED_ISSUE_FIELDS = [
     'repair_intent',
     'explanation_pack',
     'issue_explanation',
+    'review_summary',
     'highlights'
 ];
 
@@ -93,7 +95,8 @@ const ALLOWED_HIGHLIGHT_FIELDS = [
     'rewrite_target',
     'repair_intent',
     'explanation_pack',
-    'issue_explanation'
+    'issue_explanation',
+    'review_summary'
 ];
 
 const ALLOWED_CATEGORY_FIELDS = [
@@ -117,7 +120,8 @@ const ALLOWED_ROOT_FIELDS = [
     'details_token',
     'prompt_provenance',
     'error',
-    'message'
+    'message',
+    'superseded_by_run_id'
 ];
 
 const stripPartial = (partial) => {
@@ -129,6 +133,7 @@ const stripPartial = (partial) => {
         'expected_ai_checks',
         'returned_ai_checks',
         'missing_ai_checks',
+        'missing_ai_check_ids',
         'filtered_invalid_checks',
         'completed_checks'
     ];
@@ -283,6 +288,9 @@ const stripIssue = (issue) => {
     stripped.issue_explanation = typeof issue.issue_explanation === 'string'
         ? issue.issue_explanation.replace(/\s+/g, ' ').trim().slice(0, 1000)
         : null;
+    stripped.review_summary = typeof issue.review_summary === 'string'
+        ? issue.review_summary.replace(/\s+/g, ' ').trim().slice(0, 280)
+        : null;
     if (Array.isArray(issue.highlights)) {
         stripped.highlights = issue.highlights.map(highlight => {
             if (!highlight || typeof highlight !== 'object') return null;
@@ -298,6 +306,9 @@ const stripIssue = (issue) => {
             compact.explanation_pack = stripExplanationPack(highlight.explanation_pack);
             compact.issue_explanation = typeof highlight.issue_explanation === 'string'
                 ? highlight.issue_explanation.replace(/\s+/g, ' ').trim().slice(0, 1000)
+                : null;
+            compact.review_summary = typeof highlight.review_summary === 'string'
+                ? highlight.review_summary.replace(/\s+/g, ' ').trim().slice(0, 280)
                 : null;
             return compact;
         }).filter(highlight => highlight !== null);

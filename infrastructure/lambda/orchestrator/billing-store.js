@@ -146,7 +146,10 @@ const createBillingStore = ({ ddbDoc = defaultDdbDoc, env = process.env } = {}) 
                 Key: {
                     event_id: sanitizeString(eventId)
                 },
-                UpdateExpression: 'SET processed = :processed, processed_at = :processedAt, verification_status = :verificationStatus, reconciliation_summary = :reconciliationSummary, error_summary = :errorSummary',
+                UpdateExpression: 'SET #processed = :processed, processed_at = :processedAt, verification_status = :verificationStatus, reconciliation_summary = :reconciliationSummary, error_summary = :errorSummary',
+                ExpressionAttributeNames: {
+                    '#processed': 'processed'
+                },
                 ExpressionAttributeValues: {
                     ':processed': true,
                     ':processedAt': processedAt,
@@ -164,7 +167,10 @@ const createBillingStore = ({ ddbDoc = defaultDdbDoc, env = process.env } = {}) 
                 Key: {
                     event_id: sanitizeString(eventId)
                 },
-                UpdateExpression: 'SET processed = :processed, processed_at = :processedAt, verification_status = :verificationStatus, reconciliation_summary = :reconciliationSummary, error_summary = :errorSummary',
+                UpdateExpression: 'SET #processed = :processed, processed_at = :processedAt, verification_status = :verificationStatus, reconciliation_summary = :reconciliationSummary, error_summary = :errorSummary',
+                ExpressionAttributeNames: {
+                    '#processed': 'processed'
+                },
                 ExpressionAttributeValues: {
                     ':processed': false,
                     ':processedAt': sanitizeString(update.processed_at) || toIso(),

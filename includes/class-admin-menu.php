@@ -43,39 +43,41 @@ class Admin_Menu {
     }
 
     /**
-     * Add admin menu page and settings submenu
+     * Add the single top-level AiVI menu while keeping the original slug stable.
      */
     public function add_menu_page() {
         add_menu_page(
-            'AiVI — AI Visibility Inspector',
-            'AiVI Inspector',
+            'AiVI - AI Visibility Inspector',
+            'AiVI',
             'manage_options',
-            'aivi-inspector',
-            array( $this, 'render_admin_page' ),
+            'aivi-settings',
+            array( $this, 'render_settings_page' ),
             'dashicons-visibility',
             56
         );
 
-        // Add Settings submenu under AiVI Inspector
+        // Preserve the older page slug without rendering a duplicate submenu item.
         add_submenu_page(
-            'aivi-inspector',
-            __( 'AiVI Settings', 'ai-visibility-inspector' ),
-            __( 'Settings', 'ai-visibility-inspector' ),
+            null,
+			__( 'AiVI Settings', 'ai-visibility-inspector' ),
+			__( 'AiVI Settings', 'ai-visibility-inspector' ),
             'manage_options',
-            'aivi-settings',
+            'aivi-inspector',
             array( $this, 'render_settings_page' )
         );
     }
 
     /**
-     * Render settings page (delegates to Admin_Settings)
+     * Render settings page (delegates to Admin_Settings).
      */
     public function render_settings_page() {
         Admin_Settings::render_settings_page_static();
     }
 
     /**
-     * Render admin page
+     * Render admin page.
+     *
+     * Kept for backward compatibility with any callers still invoking the old callback.
      */
     public function render_admin_page() {
         Admin_Settings::render_settings_page_static();

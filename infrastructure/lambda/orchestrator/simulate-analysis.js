@@ -20,7 +20,7 @@ const simulatedWorkerOutput = {
         confidence: 0.92
     },
     checks: {
-        direct_answer_first_120: {
+        immediate_answer_placement: {
             verdict: 'pass',
             confidence: 0.95,
             explanation: 'Direct answer found within first 80 words.',
@@ -63,7 +63,7 @@ const simulatedWorkerOutput = {
                 { text: 'Add an H3 heading before the H4 in section 3.' }
             ]
         },
-        orphan_headings: {
+        heading_topic_fulfillment: {
             verdict: 'pass',
             confidence: 0.90,
             explanation: 'All headings have adequate content.',

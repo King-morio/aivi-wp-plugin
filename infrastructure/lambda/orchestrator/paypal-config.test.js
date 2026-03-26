@@ -6,6 +6,7 @@ const {
     getPayPalConfig,
     getPublicBillingCatalog,
     resolvePlanCatalogEntry,
+    resolvePlanCodeByProviderPlanId,
     resolveTopupPackEntry
 } = require('./paypal-config');
 
@@ -20,8 +21,9 @@ describe('paypal-config', () => {
         expect(PLAN_CATALOG.growth).toMatchObject({
             code: 'growth',
             price_usd: 22,
-            included_credits: 150000,
+            included_credits: 100000,
             site_limit: 3,
+            paypal_intro_plan_env_key: 'PAYPAL_PLAN_ID_GROWTH_INTRO',
             intro_offer: {
                 type: 'percent_off_first_cycle',
                 percent_off: 50
@@ -30,13 +32,13 @@ describe('paypal-config', () => {
         expect(PLAN_CATALOG.pro).toMatchObject({
             code: 'pro',
             price_usd: 59,
-            included_credits: 450000,
+            included_credits: 250000,
             site_limit: 10
         });
         expect(TRIAL_CATALOG).toMatchObject({
             code: 'free_trial',
-            included_credits: 15000,
-            duration_days: 14
+            included_credits: 5000,
+            duration_days: 7
         });
     });
 
@@ -64,6 +66,7 @@ describe('paypal-config', () => {
             PAYPAL_CANCEL_URL: 'https://example.com/cancel',
             PAYPAL_PLAN_ID_STARTER: 'P-STARTER',
             PAYPAL_PLAN_ID_GROWTH: 'P-GROWTH',
+            PAYPAL_PLAN_ID_GROWTH_INTRO: 'P-GROWTH-INTRO',
             PAYPAL_PLAN_ID_PRO: 'P-PRO'
         });
 
@@ -79,6 +82,7 @@ describe('paypal-config', () => {
             planIds: {
                 starter: 'P-STARTER',
                 growth: 'P-GROWTH',
+                growth_intro: 'P-GROWTH-INTRO',
                 pro: 'P-PRO'
             }
         });
@@ -99,5 +103,14 @@ describe('paypal-config', () => {
         expect(resolvePlanCatalogEntry('GROWTH')).toEqual(PLAN_CATALOG.growth);
         expect(resolveTopupPackEntry('topup_100k')).toEqual(TOPUP_PACK_CATALOG.topup_100k);
         expect(resolveTopupPackEntry('missing')).toBeNull();
+    });
+
+    test('maps growth intro provider plans back to the canonical growth plan code', () => {
+        expect(resolvePlanCodeByProviderPlanId({
+            planIds: {
+                growth: 'P-GROWTH',
+                growth_intro: 'P-GROWTH-INTRO'
+            }
+        }, 'P-GROWTH-INTRO')).toBe('growth');
     });
 });

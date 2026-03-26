@@ -1,160 +1,162 @@
 # Contributing to AiVI
 
-Thank you for your interest in contributing to AiVI — AI Visibility Inspector!
+Thanks for your interest in contributing to **AiVI — AI Visibility Inspector**.
 
-## Development Philosophy
+This public repository is the WordPress plugin surface for AiVI. It includes the plugin runtime, editor assets, contributor-safe tests, and packaging helpers. Private operator systems, backend infrastructure, billing internals, and control-plane code are intentionally excluded.
 
-AiVI follows the Papa Fuego development philosophy with strict adherence to:
-- **AI-Gated Analysis**: All semantic checks must be performed by AI backend
-- **Abort on Failure**: Never show partial results; display clear abort banner if AI unavailable
-- **UI Consistency**: Maintain identical look and feel between Classic and Gutenberg editors
-- **Defensive Coding**: Assume failures at every layer and handle gracefully
+## Before You Start
 
-## Getting Started
+Please keep contributions aligned with the public plugin scope:
 
-### Prerequisites
+- WordPress plugin runtime
+- editor UX and admin settings UI
+- plugin-safe tests
+- packaging and contributor tooling
+- documentation for public contributors and users
 
-- WordPress 5.0+ installation
-- PHP 7.4+ 
-- Node.js 14+ (for asset building)
+Do not add private infrastructure, deploy secrets, internal runbooks, or operator-only systems to this repo.
+
+## Local Requirements
+
+- WordPress `5.8+`
+- PHP `7.4+`
+- Node.js and npm
+- Composer
 - Git
 
-### Local Development Setup
+## Local Setup
 
-1. Clone the repository:
+1. Clone the repository.
+2. Install JavaScript dependencies:
+
    ```bash
-   git clone https://github.com/[organization]/ai-visibility-inspector.git
-   cd ai-visibility-inspector
+   npm install
    ```
 
-2. Create a development branch:
+3. Install PHP development dependencies:
+
    ```bash
-   git checkout -b feature/your-feature-name
+   composer install
    ```
 
-3. Install WordPress locally (using WP Local, Local by Flywheel, or similar)
+4. Add the plugin to a local WordPress install.
+   - You can copy it into `wp-content/plugins/`
+   - or symlink it during development
 
-4. Symlink plugin to WordPress:
-   ```bash
-   # On Windows
-   mklink /D "path/to/wp-content/plugins/ai-visibility-inspector" "path/to/your/clone"
-   ```
+5. Activate **AiVI - AI Visibility Inspector** in WordPress admin.
 
-5. Activate plugin in WordPress admin
+## Project Shape
 
-## Code Standards
+The public repo is centered around these areas:
+
+- `ai-visibility-inspector.php` — plugin bootstrap
+- `includes/` — runtime PHP classes and REST controllers
+- `assets/` — editor JS/CSS
+- `tests/js/` — frontend and sidebar/overlay regressions
+- `tests/unit/` — PHPUnit coverage for public plugin logic
+- `tools/package-plugin-release.ps1` — WordPress release packaging helper
+
+## Contribution Guidelines
+
+### Keep changes public-safe
+
+This repository is public. Please avoid adding:
+
+- private API credentials or tokens
+- internal environment details that are not needed by contributors
+- control-plane, Cognito, PayPal, super-admin, or deploy-only code paths
+- debugging dumps, replay artifacts, or local scratch files
+
+### Prefer focused changes
+
+- keep pull requests small and reviewable
+- fix root causes where possible
+- avoid unrelated refactors in the same change
+- update docs when behavior or setup changes
+
+### Respect the current plugin behavior
+
+The plugin currently relies on a managed AiVI backend for deeper analysis. Public-repo changes should improve the plugin surface without assuming private backend code is present in this repository.
+
+That means:
+
+- UI and REST changes should fail clearly when backend functionality is unavailable
+- tests in this repo should stay runnable without private infrastructure
+- public documentation should describe the plugin honestly and avoid internal-only implementation details
+
+## Coding Expectations
 
 ### PHP
 
-- Follow WordPress Coding Standards
-- Use strict typing where possible
-- Always sanitize inputs and escape outputs
-- Include PHPDoc blocks for all classes and methods
-- Use namespaces consistently (`AiVI\`)
+- follow WordPress coding patterns
+- sanitize inputs and escape outputs
+- keep REST permissions explicit
+- prefer small, readable methods over large multi-purpose ones
 
 ### JavaScript
 
-- Use ES6+ features supported by WordPress
-- Follow WordPress JavaScript Coding Standards
-- Use defensive programming patterns
-- Maintain compatibility with both Classic and Gutenberg
+- keep Gutenberg and Classic Editor behavior consistent where the plugin supports both
+- write UI changes defensively
+- preserve clear user feedback for loading, failure, and success states
 
 ### CSS
 
-- Use BEM methodology for class names
-- Ensure styles work in both editor environments
-- Use CSS variables for consistent theming
-- Mobile-first responsive design
-
-## Architecture Guidelines
-
-### Class Structure
-
-- Each major feature should have its own class in `includes/`
-- Use singleton pattern for main classes
-- Register hooks in constructors
-- Keep methods focused and testable
-
-### REST API
-
-- All endpoints must use `aivi/v1` namespace
-- Always include permission callbacks
-- Validate and sanitize all inputs
-- Return structured JSON responses
-- Handle errors gracefully with proper HTTP status codes
-
-### UI Components
-
-- Maintain identical DOM structure for Classic and Gutenberg
-- Use shared CSS classes
-- Test in both editor environments
-- Preserve visual hierarchy and behavior
+- keep styles readable and restrained
+- optimize for clarity inside narrow WordPress sidebars and admin layouts
+- avoid visual changes that only work in one editor context
 
 ## Testing
 
-### Unit Tests
+Run frontend tests:
 
 ```bash
-# Run PHP unit tests
-./vendor/bin/phpunit
-
-# Run JavaScript tests
 npm test
 ```
 
-### Integration Tests
+Run PHPUnit:
 
-- Test REST endpoints directly
-- Verify UI consistency across editors
-- Test with various content types
-- Verify error handling
+```bash
+vendor/bin/phpunit
+```
 
-## Pull Request Process
+If you need the WordPress PHPUnit scaffold helper:
 
-1. Update documentation for any changes
-2. Ensure all tests pass
-3. Update README.md if needed
-4. Create PR from feature branch to `dev`
-5. Request review from at least one team member
-6. Address feedback promptly
+```bash
+bin/install-wp-tests.sh
+```
 
-### PR Requirements
+Before opening a PR, at minimum:
 
-- Clear description of changes
-- Link to relevant issues
-- Screenshots for UI changes
-- Testing instructions
-- Updated documentation
+- run the tests relevant to your change
+- verify the plugin still loads in WordPress
+- sanity-check any editor UI changes in the real interface when possible
 
-## Release Process
+## Packaging
 
-1. Merge to `dev` branch
-2. Ensure CI is green
-3. Create release PR from `dev` to `main`
-4. Update version numbers
-5. Create GitHub release
-6. Deploy to WordPress.org (if applicable)
+To build a WordPress-ready plugin ZIP:
 
-## Security Considerations
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\package-plugin-release.ps1
+```
 
-- Never commit API keys or secrets
-- Use nonces for all AJAX requests
-- Validate all user inputs
-- Escape all outputs
-- Follow WordPress security best practices
-- Run security scans before releases
+## Pull Requests
 
-## Getting Help
+Please include:
 
-- Check existing issues and documentation
-- Ask questions in GitHub Discussions
-- Review code comments and PHPDoc
-- Reference WordPress developer resources
+- a clear summary of what changed
+- why the change was needed
+- what you tested
+- screenshots for UI changes when relevant
 
-## Code of Conduct
+If your change updates public-facing setup, behavior, or contributor workflow, please update `readme.md` or other public docs in the same PR.
 
-Be respectful, constructive, and inclusive. We're here to build great software together.
+## Security
+
+- never commit secrets
+- never commit private infrastructure details that do not belong in a public plugin repo
+- use capability checks and nonce protection where appropriate
+- keep failure modes explicit rather than silent
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under GPLv2 or later.
+By contributing, you agree that your contributions will be licensed under the same GPLv2-or-later terms used by this project.

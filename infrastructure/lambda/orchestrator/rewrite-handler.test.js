@@ -24,18 +24,18 @@ describe('rewrite-handler contract compatibility', () => {
 
     test('normalizeRewriteRequestPayload supports new contract fields', () => {
         const normalized = normalizeRewriteRequestPayload({
-            analysis_ref: { run_id: 'run-1', check_id: 'orphan_headings', instance_index: 0 },
+            analysis_ref: { run_id: 'run-1', check_id: 'heading_topic_fulfillment', instance_index: 0 },
             rewrite_target: {
                 mode: 'heading_support_range',
                 primary_node_ref: 'block-3',
                 target_text: 'Thin support text.'
             },
             repair_intent: {
-                check_id: 'orphan_headings',
+                check_id: 'heading_topic_fulfillment',
                 instruction: 'Improve support content'
             },
             issue_context: {
-                check_id: 'orphan_headings',
+                check_id: 'heading_topic_fulfillment',
                 message: 'Heading lacks support',
                 heading_chain: ['Caching Strategies'],
                 surrounding_nodes: [{ ref: 'block-3', text: 'Thin support text.' }]
@@ -80,7 +80,7 @@ describe('rewrite-handler contract compatibility', () => {
             body: JSON.stringify({
                 analysis_ref: {
                     run_id: 'run-123',
-                    check_id: 'orphan_headings',
+                    check_id: 'heading_topic_fulfillment',
                     instance_index: 0
                 },
                 rewrite_target: {
@@ -90,7 +90,7 @@ describe('rewrite-handler contract compatibility', () => {
                     target_text: 'Support paragraph text.'
                 },
                 repair_intent: {
-                    check_id: 'orphan_headings',
+                    check_id: 'heading_topic_fulfillment',
                     instruction: 'Improve supporting content below heading'
                 },
                 manifest: {
@@ -131,12 +131,12 @@ describe('rewrite-handler contract compatibility', () => {
                     node_refs: ['block-2', 'block-3']
                 },
                 repairIntent: {
-                    check_id: 'orphan_headings',
+                    check_id: 'heading_topic_fulfillment',
                     check_name: 'Orphan Headings',
                     rule_hint: 'Improve supporting content below heading.'
                 },
                 issueContext: {
-                    check_id: 'orphan_headings',
+                    check_id: 'heading_topic_fulfillment',
                     message: 'Heading has weak support',
                     heading_chain: ['Caching Strategies'],
                     surrounding_nodes: [{ ref: 'block-2', text: 'Support paragraph text.' }]
@@ -144,7 +144,7 @@ describe('rewrite-handler contract compatibility', () => {
             }
         );
 
-        expect(prompt).toContain('check_id: "orphan_headings"');
+        expect(prompt).toContain('check_id: "heading_topic_fulfillment"');
         expect(prompt).toContain('check_name: "Orphan Headings"');
         expect(prompt).toContain('operation: "heading_support_range"');
         expect(prompt).toContain('Do NOT rewrite the heading text itself.');

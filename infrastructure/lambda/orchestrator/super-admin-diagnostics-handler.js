@@ -178,6 +178,26 @@ const sanitizeSiteConflict = (record = {}) => ({
     updated_at: sanitizeString(record.updated_at)
 });
 
+const sanitizeTrialAdmission = (record = {}) => ({
+    source: sanitizeString(record.source),
+    site_id: sanitizeString(record.site_id),
+    connected_domain: sanitizeString(record.connected_domain),
+    home_url: sanitizeString(record.home_url),
+    admitted_at: sanitizeString(record.admitted_at)
+});
+
+const sanitizeTrialAdmissionConflict = (record = {}) => ({
+    account_id: sanitizeString(record.account_id),
+    account_label: sanitizeString(record.account_label || record.account_id),
+    site_id: sanitizeString(record.site_id),
+    connected_domain: sanitizeString(record.connected_domain),
+    home_url: sanitizeString(record.home_url),
+    trial_status: sanitizeString(record.trial_status),
+    subscription_status: sanitizeString(record.subscription_status),
+    admitted_at: sanitizeString(record.admitted_at),
+    updated_at: sanitizeString(record.updated_at)
+});
+
 const buildBlockedAdmissionState = (state = {}) => {
     const blockers = [];
     if (state.entitlements?.analysis_allowed === false) blockers.push('analysis_not_allowed');
@@ -224,13 +244,14 @@ const assertRecoveryAllowed = (actorRole, action) => {
 
 const buildDiagnosticsSummary = async ({ accountId, query = {}, actor }) => {
     const store = createSuperAdminStore();
+    const accountStateStore = createAccountBillingStateStore();
     const billingStore = createBillingStore();
     const state = await store.getAccountState(accountId);
     if (!state) {
         throw createHttpError(404, 'account_not_found', 'No billing account state was found for this account.');
     }
 
-    const [subscriptions, topups, checkoutIntents, webhookEvents, runIssues, conflicts] = await Promise.all([
+    const [subscriptions, topups, checkoutIntents, webhookEvents, runIssues, conflicts, trialAdmissionConflicts] = await Promise.all([
         store.listSubscriptionRecordsByAccount(accountId, 10),
         store.listTopupOrdersByAccount(accountId, 10),
         store.listCheckoutIntentsByAccount(accountId, 10),
@@ -241,7 +262,14 @@ const buildDiagnosticsSummary = async ({ accountId, query = {}, actor }) => {
             siteId: sanitizeString(state.site?.site_id),
             connectedDomain: sanitizeString(state.site?.connected_domain),
             limit: 10
-        })
+        }),
+        typeof accountStateStore.findTrialAdmissionConflicts === 'function'
+            ? accountStateStore.findTrialAdmissionConflicts({
+                accountId,
+                connectedDomain: sanitizeString(state.site?.connected_domain),
+                limit: 10
+            })
+            : Promise.resolve([])
     ]);
 
     const checkoutLookupKey = buildCheckoutLookupKey(query);
@@ -277,7 +305,11 @@ const buildDiagnosticsSummary = async ({ accountId, query = {}, actor }) => {
             run_issues: runIssues.map(sanitizeRunIssue),
             blocked_admission: buildBlockedAdmissionState(state)
         },
-        site_binding_conflicts: conflicts.map(sanitizeSiteConflict)
+        site_binding_conflicts: conflicts.map(sanitizeSiteConflict),
+        trial_admission_history: {
+            current: Array.isArray(state.trial_admissions) ? state.trial_admissions.map(sanitizeTrialAdmission) : [],
+            exact_domain_conflicts: trialAdmissionConflicts.map(sanitizeTrialAdmissionConflict)
+        }
     };
 };
 

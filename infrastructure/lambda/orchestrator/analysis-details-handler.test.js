@@ -19,4 +19,13 @@ describe('analysis-details-handler rewrite contract regression guard', () => {
 
         expect(source).toContain('rewrite_target_actionable: rewriteResolution?.rewrite_target?.actionable === true');
     });
+
+    test('details handler rejects superseded article runs before loading check details', () => {
+        const handlerPath = path.resolve(__dirname, './analysis-details-handler.js');
+        const source = fs.readFileSync(handlerPath, 'utf8');
+
+        expect(source).toContain("error: 'results_superseded'");
+        expect(source).toContain("superseded_by_run_id: supersedingRunId");
+        expect(source).toContain("message: 'A newer analysis run for this article is active.'");
+    });
 });

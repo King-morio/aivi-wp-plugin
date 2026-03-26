@@ -29,6 +29,7 @@ describe('overlay rewrite apply-mode regression guard', () => {
 
         expect(source).toContain('function convertTextToListMarkup(text) {');
         expect(source).toContain('if (isListLikeMode(applyMode)) {');
-        expect(source).toContain('const listMarkup = convertTextToListMarkup(appliedText) || String(appliedText || \'\');');
+        expect(source).toContain('const listMarkup = convertTextToListMarkup(appliedText);');
+        expect(source).toContain("if (!listMarkup) return 'list_format_required';");
     });
 });

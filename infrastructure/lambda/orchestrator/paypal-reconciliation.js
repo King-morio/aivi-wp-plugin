@@ -58,12 +58,18 @@ const reconcilePayPalWebhookEvent = async ({ webhookEvent, store, config = getPa
         const providerSubscriptionId = sanitizeString(resource?.id);
         const lookup = providerSubscriptionId ? await store.getCheckoutIntent(buildSubscriptionLookupKey(providerSubscriptionId)) : null;
         const planCode = sanitizeString(lookup?.plan_code) || resolvePlanCodeByProviderPlanId(config, resource?.plan_id) || '';
+        const intentVariant = sanitizeString(lookup?.intent_variant);
+        const sourcePlanCode = sanitizeString(lookup?.source_plan_code);
+        const planTransition = sanitizeString(lookup?.plan_transition);
         const record = {
             subscription_id: sanitizeString(lookup?.intent_id) || providerSubscriptionId || providerEventId,
             account_id: sanitizeString(lookup?.account_id),
             provider: 'paypal',
             provider_subscription_id: providerSubscriptionId,
             plan_code: planCode,
+            intent_variant: intentVariant,
+            source_plan_code: sourcePlanCode,
+            plan_transition: planTransition,
             status: normalizeSubscriptionStatus(eventType, resource?.status),
             current_period_start: sanitizeString(resource?.billing_info?.last_payment?.time || ''),
             current_period_end: sanitizeString(resource?.billing_info?.next_billing_time || ''),
@@ -76,11 +82,15 @@ const reconcilePayPalWebhookEvent = async ({ webhookEvent, store, config = getPa
 
         return {
             resourceType,
+            checkoutIntent: lookup || null,
             subscriptionRecord: record,
             reconciliationSummary: {
                 ...baseSummary,
                 plan_code: planCode,
-                provider_subscription_id: providerSubscriptionId
+                provider_subscription_id: providerSubscriptionId,
+                intent_variant: intentVariant,
+                source_plan_code: sourcePlanCode,
+                plan_transition: planTransition
             }
         };
     }

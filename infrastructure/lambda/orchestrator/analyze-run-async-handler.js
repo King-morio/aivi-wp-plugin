@@ -14,6 +14,11 @@ const { v4: uuidv4 } = require("uuid");
 const { buildReservationPreview } = require("./credit-pricing");
 const { createReservationEvent, persistLedgerEvent } = require("./credit-ledger");
 const { createAccountBillingStateStore, applyLedgerEventToState } = require("./billing-account-state");
+const {
+    normalizePostId,
+    buildArticleKey,
+    buildArticlePointerItem
+} = require('./run-supersession');
 
 // Initialize AWS clients
 const ddbClient = new DynamoDBClient({});
@@ -118,9 +123,21 @@ const attemptSilentReservation = async ({ runId, runMetadata, manifest, tokenEst
     const incomingAccountState = normalizeIncomingAccountState(runMetadata.account_state || {});
     let accountState = incomingAccountState;
     const isConnected = accountState.connected && accountState.connection_status === 'connected';
+    const allowUnboundAnalysis = parseBooleanFlag(getEnv('ALLOW_UNBOUND_ANALYSIS', 'false'));
 
     if (!isConnected || !accountState.account_id) {
-        return { mode: 'skipped', reason: 'local_or_unbound_site', metadata: null };
+        if (allowUnboundAnalysis) {
+            return { mode: 'skipped', reason: 'local_or_unbound_site', metadata: null };
+        }
+
+        return {
+            mode: 'blocked',
+            response: buildBlockedReservationResponse(
+                403,
+                'account_connection_required',
+                'Connect this site to an AiVI account and start a trial or plan before running analysis.'
+            )
+        };
     }
 
     try {
@@ -222,11 +239,18 @@ const createQueuedRun = async (runId, metadata, manifestS3Key, options = {}) => 
     const now = new Date().toISOString();
     const featureFlags = normalizeFeatureFlags(options.featureFlags);
     const enableWebLookups = parseBooleanFlag(options.enableWebLookups);
+    const normalizedPostId = normalizePostId(metadata.post_id);
+    const articleKey = buildArticleKey({
+        siteId: metadata.site_id,
+        postId: normalizedPostId
+    });
 
     const item = {
         run_id: runId,
         status: 'queued',
         site_id: metadata.site_id || 'unknown',
+        post_id: normalizedPostId || null,
+        article_key: articleKey || null,
         user_id: metadata.user_id || 'unknown',
         content_type: metadata.content_type || 'article',
         source: metadata.source || 'editor-sidebar',
@@ -246,9 +270,27 @@ const createQueuedRun = async (runId, metadata, manifestS3Key, options = {}) => 
         ConditionExpression: 'attribute_not_exists(run_id)' // Prevent overwrites
     }));
 
+    const pointerItem = buildArticlePointerItem({
+        articleKey,
+        siteId: metadata.site_id,
+        postId: normalizedPostId,
+        runId,
+        status: 'queued',
+        now,
+        ttl: item.ttl
+    });
+    if (pointerItem) {
+        await ddbDoc.send(new PutCommand({
+            TableName: getEnv('RUNS_TABLE', 'aivi-runs-dev'),
+            Item: pointerItem
+        }));
+    }
+
     log('INFO', 'Created queued run record', {
         run_id: runId,
         status: 'queued',
+        post_id: normalizedPostId || null,
+        article_key: articleKey || null,
         enable_web_lookups: enableWebLookups,
         feature_flags: featureFlags
     });
@@ -288,6 +330,11 @@ const enqueueJob = async (runId, manifestS3Key, metadata, options = {}) => {
         user_id: metadata.user_id || 'unknown',
         prompt_version: metadata.prompt_version || 'v1',
         content_type: metadata.content_type || 'article',
+        post_id: normalizePostId(metadata.post_id) || null,
+        article_key: buildArticleKey({
+            siteId: metadata.site_id,
+            postId: metadata.post_id
+        }) || null,
         enable_web_lookups: enableWebLookups,
         feature_flags: featureFlags,
         credit_reservation: options.creditReservation || null,
@@ -433,6 +480,7 @@ async function analyzeRunAsyncHandler(event) {
         const runMetadata = body.run_metadata || {
             site_id: body.site_id,
             user_id: body.user_id,
+            post_id: body.post_id,
             content_type: body.content_type,
             source: body.source || 'editor-sidebar',
             prompt_version: body.prompt_version || 'v1'

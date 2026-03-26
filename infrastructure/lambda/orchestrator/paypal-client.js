@@ -46,6 +46,20 @@ const formatUsd = (value) => {
     return numeric.toFixed(2);
 };
 
+const resolveIntroOfferPriceUsd = (plan, introOfferApplied) => {
+    if (introOfferApplied !== true) {
+        return null;
+    }
+
+    const percentOff = Number(plan?.intro_offer?.percent_off);
+    const priceUsd = Number(plan?.price_usd);
+    if (!Number.isFinite(percentOff) || percentOff <= 0 || percentOff >= 100 || !Number.isFinite(priceUsd) || priceUsd <= 0) {
+        return null;
+    }
+
+    return Math.round((priceUsd * ((100 - percentOff) / 100)) * 100) / 100;
+};
+
 const buildCustomId = ({ kind, accountId, siteId, refCode }) => {
     const digest = createHash('sha256')
         .update([sanitizeString(kind), sanitizeString(accountId), sanitizeString(siteId), sanitizeString(refCode)].join('|'))
@@ -83,7 +97,17 @@ const ensureBaseConfig = (config) => {
     };
 };
 
-const paypalJsonRequest = async ({ config, path, method, body, requestId, fetchImpl = global.fetch }) => {
+const paypalJsonRequest = async ({
+    config,
+    path,
+    method,
+    body,
+    requestId,
+    fetchImpl = global.fetch,
+    errorCode = 'paypal_checkout_failed',
+    errorMessage = 'PayPal checkout creation failed.',
+    errorMapper = null
+}) => {
     const runtime = ensureBaseConfig(config);
     const fetcher = ensureFetch(fetchImpl);
 
@@ -118,10 +142,24 @@ const paypalJsonRequest = async ({ config, path, method, body, requestId, fetchI
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-        throw createHttpError(502, 'paypal_checkout_failed', 'PayPal checkout creation failed.', {
-            status: response.status,
-            body: payload
-        });
+        const mappedError = typeof errorMapper === 'function'
+            ? errorMapper({
+                status: response.status,
+                payload,
+                path,
+                method
+            })
+            : null;
+        throw createHttpError(
+            mappedError?.statusCode || 502,
+            sanitizeString(mappedError?.code) || errorCode,
+            sanitizeString(mappedError?.message) || errorMessage,
+            {
+                status: response.status,
+                body: payload,
+                ...(mappedError?.details && typeof mappedError.details === 'object' ? mappedError.details : {})
+            }
+        );
     }
 
     return {
@@ -179,6 +217,9 @@ const verifyWebhookSignature = async ({
 const createSubscriptionCheckoutSession = async ({
     config,
     planCode,
+    providerPlanId,
+    intentVariant,
+    introOfferApplied = false,
     accountId,
     siteId,
     requestId,
@@ -190,21 +231,89 @@ const createSubscriptionCheckoutSession = async ({
         throw createHttpError(400, 'invalid_plan_code', 'Unknown subscription plan code.');
     }
 
+    const resolvedProviderPlanId = sanitizeString(providerPlanId || runtime.planIds?.[plan.code]);
+    if (!resolvedProviderPlanId) {
+        throw createHttpError(503, 'paypal_plan_not_configured', `PayPal plan ID is not configured for ${plan.code}.`);
+    }
+
+    const normalizedIntentVariant = sanitizeString(intentVariant);
+    const customId = buildCustomId({
+        kind: 'subscription',
+        accountId,
+        siteId,
+        refCode: normalizedIntentVariant ? `${plan.code}:${normalizedIntentVariant}` : plan.code
+    });
+
+    const { payload } = await paypalJsonRequest({
+        config: runtime,
+        path: '/v1/billing/subscriptions',
+        method: 'POST',
+        requestId,
+        fetchImpl,
+        body: {
+            plan_id: resolvedProviderPlanId,
+            custom_id: customId,
+            application_context: {
+                brand_name: runtime.brandName,
+                user_action: 'SUBSCRIBE_NOW',
+                return_url: runtime.returnUrl,
+                cancel_url: runtime.cancelUrl,
+                shipping_preference: 'NO_SHIPPING'
+            }
+        }
+    });
+
+    return {
+        requestId: sanitizeString(requestId) || randomUUID(),
+        intentType: 'subscription',
+        intentVariant: normalizedIntentVariant,
+        provider: 'paypal',
+        planCode: plan.code,
+        providerPlanId: resolvedProviderPlanId,
+        approvalUrl: extractApprovalUrl(payload),
+        returnUrl: runtime.returnUrl,
+        cancelUrl: runtime.cancelUrl,
+        providerSubscriptionId: sanitizeString(payload?.id),
+        priceUsd: resolveIntroOfferPriceUsd(plan, introOfferApplied),
+        expiresAt: null
+    };
+};
+
+const createSubscriptionRevisionSession = async ({
+    config,
+    providerSubscriptionId,
+    planCode,
+    accountId,
+    siteId,
+    requestId,
+    fetchImpl = global.fetch
+}) => {
+    const runtime = ensureBaseConfig(config);
+    const plan = resolvePlanCatalogEntry(planCode);
+    if (!plan) {
+        throw createHttpError(400, 'invalid_plan_code', 'Unknown subscription plan code.');
+    }
+
+    const normalizedSubscriptionId = sanitizeString(providerSubscriptionId);
+    if (!normalizedSubscriptionId) {
+        throw createHttpError(409, 'missing_provider_subscription_id', 'The current PayPal subscription reference is missing for this plan change.');
+    }
+
     const providerPlanId = sanitizeString(runtime.planIds?.[plan.code]);
     if (!providerPlanId) {
         throw createHttpError(503, 'paypal_plan_not_configured', `PayPal plan ID is not configured for ${plan.code}.`);
     }
 
     const customId = buildCustomId({
-        kind: 'subscription',
+        kind: 'subscription_revise',
         accountId,
         siteId,
-        refCode: plan.code
+        refCode: `${normalizedSubscriptionId}:${plan.code}`
     });
 
     const { payload } = await paypalJsonRequest({
         config: runtime,
-        path: '/v1/billing/subscriptions',
+        path: `/v1/billing/subscriptions/${encodeURIComponent(normalizedSubscriptionId)}/revise`,
         method: 'POST',
         requestId,
         fetchImpl,
@@ -224,13 +333,74 @@ const createSubscriptionCheckoutSession = async ({
     return {
         requestId: sanitizeString(requestId) || randomUUID(),
         intentType: 'subscription',
+        intentVariant: 'revise',
         provider: 'paypal',
         planCode: plan.code,
         approvalUrl: extractApprovalUrl(payload),
         returnUrl: runtime.returnUrl,
         cancelUrl: runtime.cancelUrl,
-        providerSubscriptionId: sanitizeString(payload?.id),
+        providerSubscriptionId: normalizedSubscriptionId,
         expiresAt: null
+    };
+};
+
+const getSubscriptionDetails = async ({
+    config,
+    providerSubscriptionId,
+    requestId,
+    fetchImpl = global.fetch
+}) => {
+    const runtime = ensureBaseConfig(config);
+    const normalizedSubscriptionId = sanitizeString(providerSubscriptionId);
+    if (!normalizedSubscriptionId) {
+        throw createHttpError(400, 'missing_provider_subscription_id', 'A PayPal subscription ID is required to inspect the current subscription state.');
+    }
+
+    const { payload } = await paypalJsonRequest({
+        config: runtime,
+        path: `/v1/billing/subscriptions/${encodeURIComponent(normalizedSubscriptionId)}`,
+        method: 'GET',
+        requestId,
+        fetchImpl,
+        errorCode: 'paypal_subscription_lookup_failed',
+        errorMessage: 'Failed to inspect the current PayPal subscription state.',
+        errorMapper: ({ status }) => {
+            if (status === 404) {
+                return {
+                    code: 'paypal_subscription_not_found',
+                    message: 'PayPal could not find the referenced subscription.',
+                    details: {
+                        provider_state: 'not_found'
+                    }
+                };
+            }
+            if (status === 422) {
+                return {
+                    code: 'paypal_subscription_invalid',
+                    message: 'PayPal rejected the referenced subscription lookup.',
+                    details: {
+                        provider_state: 'invalid'
+                    }
+                };
+            }
+            if (status === 401 || status === 403) {
+                return {
+                    code: 'paypal_subscription_lookup_unauthorized',
+                    message: 'PayPal did not authorize the subscription lookup.',
+                    details: {
+                        provider_state: 'unauthorized'
+                    }
+                };
+            }
+            return null;
+        }
+    });
+
+    return {
+        providerSubscriptionId: normalizedSubscriptionId,
+        status: sanitizeString(payload?.status),
+        statusUpdateTime: sanitizeString(payload?.status_update_time || payload?.update_time),
+        payload
     };
 };
 
@@ -343,6 +513,8 @@ const getManageBillingRedirect = async () => {
 module.exports = {
     createHttpError,
     createSubscriptionCheckoutSession,
+    createSubscriptionRevisionSession,
+    getSubscriptionDetails,
     createTopupCheckoutSession,
     captureTopupOrder,
     getManageBillingRedirect,

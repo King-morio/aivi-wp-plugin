@@ -1,4 +1,4 @@
-(function (wp, config) {
+﻿(function (wp, config) {
     const debugLog = function (level, message, data) {
         if (!window || !window.AIVI_DEBUG) return;
         const entry = {
@@ -21,6 +21,7 @@
     const { select } = wp.data || {};
     const restBase = config.restBase || '/wp-json/aivi/v1';
     const nonce = config.nonce || '';
+    const documentMetaCache = new Map();
     const canonicalCategoryMap = (config && typeof config.checkCategoryMap === 'object' && config.checkCategoryMap) ? config.checkCategoryMap : {};
     const isAutoStaleDetectionEnabled = (() => {
         const stalePolicy = typeof config.stalePolicy === 'string'
@@ -72,110 +73,214 @@
     const ANALYSIS_HERO_MESSAGE = 'Initializing AI perspective simulation...';
     const ANALYSIS_PROGRESS_PHASES = [
         {
-            id: 'intro_answer',
+            id: 'intro_focus_factuality',
             contextTag: 'Opening Signals',
-            bannerTitle: 'Reviewing opening clarity',
-            label: 'Intro & Answer',
-            messages: [
-                'Reviewing intro clarity',
-                'Checking intro focus',
-                'Validating answer placement',
-                'Measuring answer brevity',
-                'Evaluating answer alignment'
+            bannerTitle: 'Opening Signals',
+            label: 'Intro Focus & Factuality',
+            steps: [
+                { checkId: 'intro_wordcount', text: 'Calibrating intro length' },
+                { checkId: 'intro_readability', text: 'Parsing opening clarity' },
+                { checkId: 'intro_factual_entities', text: 'Resolving early entities' },
+                { checkId: 'intro_schema_suggestion', text: 'Detecting schema cues' }
             ]
         },
         {
-            id: 'claims_evidence',
-            contextTag: 'Claim Support',
-            bannerTitle: 'Checking claim support',
-            label: 'Claims & Evidence',
-            messages: [
-                'Scanning claim patterns',
-                'Checking evidence support',
-                'Reviewing provenance signals',
-                'Validating numeric claims',
-                'Running coherence checks'
+            id: 'answer_extractability',
+            contextTag: 'Answer Extractability',
+            bannerTitle: 'Answer Extractability',
+            label: 'Answer Extractability',
+            steps: [
+                { checkId: 'immediate_answer_placement', text: 'Scoring answer immediacy' },
+                { checkId: 'answer_sentence_concise', text: 'Profiling answer brevity' },
+                { checkId: 'question_answer_alignment', text: 'Aligning answer intent' },
+                { checkId: 'clear_answer_formatting', text: 'Parsing extractable formatting' },
+                { checkId: 'faq_structure_opportunity', text: 'Detecting FAQ potential' }
             ]
         },
         {
-            id: 'entities_meaning',
-            contextTag: 'Entity Clarity',
-            bannerTitle: 'Mapping semantic relationships',
-            label: 'Entities & Meaning',
-            messages: [
-                'Detecting named entities',
-                'Mapping entity relationships',
-                'Resolving ambiguity',
-                'Checking topical relevance',
-                'Reviewing terminology consistency'
+            id: 'structure_readability',
+            contextTag: 'Structure & Readability',
+            bannerTitle: 'Structure & Readability',
+            label: 'Structure & Readability',
+            steps: [
+                { checkId: 'single_h1', text: 'Mapping heading architecture' },
+                { checkId: 'logical_heading_hierarchy', text: 'Resolving heading hierarchy' },
+                { checkId: 'heading_topic_fulfillment', text: 'Tracing section continuity' },
+                { checkId: 'heading_fragmentation', text: 'Profiling section cohesion' },
+                { checkId: 'lists_tables_presence', text: 'Detecting list-table support' },
+                { checkId: 'readability_adaptivity', text: 'Calibrating readability fit' },
+                { checkId: 'appropriate_paragraph_length', text: 'Modeling paragraph rhythm' }
             ]
         },
         {
-            id: 'structure_schema',
-            contextTag: 'Structure and Schema',
-            bannerTitle: 'Validating machine-readable structure',
-            label: 'Structure & Schema',
-            messages: [
-                'Checking heading structure',
-                'Detecting orphan headings',
-                'Validating schema syntax',
-                'Reviewing schema coverage',
-                'Checking semantic HTML'
+            id: 'schema_structured_data',
+            contextTag: 'Schema & Structured Data',
+            bannerTitle: 'Schema & Structured Data',
+            label: 'Schema & Structured Data',
+            steps: [
+                { checkId: 'valid_jsonld_schema', text: 'Validating JSON-LD integrity' },
+                { checkId: 'schema_matches_content', text: 'Aligning schema-content fit' },
+                { checkId: 'canonical_clarity', text: 'Resolving canonical clarity' },
+                { checkId: 'semantic_html_usage', text: 'Parsing semantic HTML' },
+                { checkId: 'supported_schema_types_validation', text: 'Verifying schema eligibility' },
+                { checkId: 'faq_jsonld_presence_and_completeness', text: 'Completing FAQ schema map' },
+                { checkId: 'howto_jsonld_presence_and_completeness', text: 'Completing HowTo schema map' },
+                { checkId: 'faq_jsonld_generation_suggestion', text: 'Detecting FAQ opportunities' },
+                { checkId: 'howto_schema_presence_and_completeness', text: 'Mapping HowTo coverage' }
             ]
         },
         {
-            id: 'links_trust_metadata',
-            contextTag: 'Trust Signals',
-            bannerTitle: 'Checking trust signals',
-            label: 'Links, Trust & Metadata',
-            messages: [
-                'Reviewing citation context',
-                'Checking external authority',
-                'Scanning internal links',
-                'Validating metadata',
-                'Checking author signals'
+            id: 'freshness_temporal',
+            contextTag: 'Freshness & Temporal',
+            bannerTitle: 'Freshness & Temporal',
+            label: 'Freshness & Temporal',
+            steps: [
+                { checkId: 'content_updated_12_months', text: 'Profiling content freshness' },
+                { checkId: 'no_broken_internal_links', text: 'Tracing internal link health' },
+                { checkId: 'temporal_claim_check', text: 'Resolving temporal claims' }
             ]
         },
         {
-            id: 'readability_final',
-            contextTag: 'Readability',
-            bannerTitle: 'Finalizing visibility assessment',
-            label: 'Readability & Final Scoring',
-            messages: [
-                'Measuring readability',
-                'Checking paragraph length',
-                'Scanning promotional bias',
-                'Reviewing freshness signals',
-                'Finalizing visibility score'
+            id: 'entities_semantic',
+            contextTag: 'Entities & Semantic Clarity',
+            bannerTitle: 'Entities & Semantic Clarity',
+            label: 'Entities & Semantic Clarity',
+            steps: [
+                { checkId: 'named_entities_detected', text: 'Detecting core entities' },
+                { checkId: 'entities_contextually_relevant', text: 'Aligning entity relevance' },
+                { checkId: 'entity_relationships_clear', text: 'Mapping entity relationships' },
+                { checkId: 'entity_disambiguation', text: 'Resolving entity ambiguity' },
+                { checkId: 'terminology_consistency', text: 'Harmonizing terminology usage' },
+                { checkId: 'howto_semantic_validity', text: 'Profiling HowTo semantics' }
+            ]
+        },
+        {
+            id: 'trust_neutrality',
+            contextTag: 'Trust, Neutrality & Safety',
+            bannerTitle: 'Trust, Neutrality & Safety',
+            label: 'Trust, Neutrality & Safety',
+            steps: [
+                { checkId: 'author_identified', text: 'Resolving author identity' },
+                { checkId: 'author_bio_present', text: 'Profiling author context' },
+                { checkId: 'metadata_checks', text: 'Validating metadata integrity' },
+                { checkId: 'ai_crawler_accessibility', text: 'Verifying crawler access' },
+                { checkId: 'accessibility_basics', text: 'Parsing accessibility signals' },
+                { checkId: 'external_authoritative_sources', text: 'Detecting authority signals' },
+                { checkId: 'claim_provenance_and_evidence', text: 'Tracing claim provenance' },
+                { checkId: 'numeric_claim_consistency', text: 'Resolving numeric consistency' },
+                { checkId: 'contradictions_and_coherence', text: 'Detecting logical conflicts' },
+                { checkId: 'no_exaggerated_claims', text: 'Profiling exaggerated framing' },
+                { checkId: 'promotional_or_commercial_intent', text: 'Detecting commercial bias' },
+                { checkId: 'pii_sensitive_content_detector', text: 'Scanning sensitive material' }
+            ]
+        },
+        {
+            id: 'citability_verifiability',
+            contextTag: 'Citability & Verifiability',
+            bannerTitle: 'Citability & Verifiability',
+            label: 'Citability & Verifiability',
+            steps: [
+                { checkId: 'original_evidence_signal', text: 'Detecting evidence signals' },
+                { checkId: 'claim_pattern_detection', text: 'Profiling claim patterns' },
+                { checkId: 'factual_statements_well_formed', text: 'Validating factual claims' },
+                { checkId: 'internal_link_context_relevance', text: 'Resolving internal link context' },
+                { checkId: 'duplicate_or_near_duplicate_detection', text: 'Detecting duplicate overlap' },
+                { checkId: 'citation_format_and_context', text: 'Aligning citation context' }
             ]
         }
     ];
     const ANALYSIS_PROGRESS_SEQUENCE = ANALYSIS_PROGRESS_PHASES.flatMap((phase) =>
-        phase.messages.map((text) => ({
+        phase.steps.map((step) => ({
             phaseId: phase.id,
             phaseLabel: phase.label,
             contextTag: phase.contextTag,
             bannerTitle: phase.bannerTitle,
-            text
+            checkId: step.checkId,
+            text: step.text
         }))
     );
+    const EMPTY_CONTENT_MESSAGE = 'No content to analyze yet. Consider saving this article as a draft first, then retry.';
     const PRECHECK_HERO_MS = 7000;
     const ANALYSIS_MESSAGE_ROTATE_MS = 4000;
 
     // ============================================
     // VERDICT ICON MAPPING (Sidebar Noise Elimination)
     // ============================================
-    // fail → ❌ (X), partial → ⚠️ (warning), pass → ✓ (yes, muted when shown)
+    // fail Ã¢â€ â€™ Ã¢ÂÅ’ (X), partial Ã¢â€ â€™ Ã¢Å¡Â Ã¯Â¸Â (warning), pass Ã¢â€ â€™ Ã¢Å“â€œ (yes, muted when shown)
     const VERDICT_CONFIG = {
-        fail: { icon: 'no', color: COLORS.failIcon, show: true },
-        partial: { icon: 'warning', color: COLORS.partialIcon, show: true },
-        warning: { icon: 'no', color: COLORS.failIcon, show: true },
-        pass: { icon: 'yes', color: COLORS.passIcon, show: true },  // Shown only when toggle ON
-        not_applicable: { icon: 'minus', color: COLORS.muted, show: false }
+        fail: { icon: 'no', color: COLORS.failIcon, label: 'Fail', show: true },
+        partial: { icon: 'warning', color: COLORS.partialIcon, label: 'Partial', show: true },
+        warning: { icon: 'no', color: COLORS.failIcon, label: 'Fail', show: true },
+        pass: { icon: 'yes', color: COLORS.passIcon, label: 'Pass', show: true }  // Shown only when toggle ON
     };
 
     function getVerdictIcon(verdict) {
         return VERDICT_CONFIG[verdict] || VERDICT_CONFIG.fail;
+    }
+
+    function normalizeIssuePriorityToken(value) {
+        return String(value || '').trim().toLowerCase();
+    }
+
+    function getIssueVerdictPresentation(issue) {
+        const verdict = normalizeIssuePriorityToken(issue && (issue.ui_verdict || issue.verdict || '')) || 'fail';
+        const config = VERDICT_CONFIG[verdict] || VERDICT_CONFIG.fail;
+        if (verdict === 'pass') {
+            return {
+                label: config.label,
+                background: '#edfdf8',
+                border: '#bfeadb',
+                color: COLORS.passIcon
+            };
+        }
+        if (verdict === 'partial') {
+            return {
+                label: config.label,
+                background: COLORS.mediumBg,
+                border: COLORS.warningBorder,
+                color: COLORS.mediumText
+            };
+        }
+        return {
+            label: config.label,
+            background: COLORS.highBg,
+            border: '#f3c2c7',
+            color: COLORS.highText
+        };
+    }
+
+    function getScoreRingColor(pct) {
+        const normalizedPct = Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
+        if (normalizedPct <= 24) return COLORS.failIcon;
+        if (normalizedPct <= 49) return COLORS.partialIcon;
+        if (normalizedPct <= 74) return COLORS.passIcon;
+        return COLORS.inlinePass;
+    }
+
+    function getGlobalScorePill(score) {
+        const normalizedScore = Number.isFinite(score) ? Math.max(0, Math.min(100, score)) : 0;
+        if (normalizedScore >= 75) {
+            return {
+                label: 'Excellent',
+                background: '#edfdf8',
+                border: '#bfeadb',
+                color: '#0b7960'
+            };
+        }
+        if (normalizedScore >= 50) {
+            return {
+                label: 'Good',
+                background: COLORS.lowBg,
+                border: '#bde7c9',
+                color: COLORS.lowText
+            };
+        }
+        return {
+            label: 'Fair',
+            background: COLORS.mediumBg,
+            border: COLORS.warningBorder,
+            color: COLORS.mediumText
+        };
     }
 
     function resolveCanonicalCategoryName(checkId, fallbackCategory) {
@@ -482,6 +587,12 @@
         };
     }
 
+    function isWebLookupVerificationEnabled(accountStateOverride, uiOverride) {
+        const accountState = normalizeAccountState(accountStateOverride);
+        const enabled = typeof uiOverride === 'boolean' ? uiOverride : (config.webLookupsEnabled === true);
+        return enabled === true && accountState.entitlements.webLookupsAllowed === true;
+    }
+
     function formatCreditCount(value) {
         if (!Number.isFinite(value)) return '';
         try {
@@ -520,6 +631,15 @@
         return `Last sync ${parsed.toLocaleString()}`;
     }
 
+    function humanizeAccountStateLabel(value, fallback) {
+        const input = String(value || '').trim();
+        if (!input) return String(fallback || '').trim();
+        if (input.toLowerCase() === 'success_partial') return 'Success';
+        return input
+            .replace(/[_-]+/g, ' ')
+            .replace(/\b\w/g, function (match) { return match.toUpperCase(); });
+    }
+
     function buildAdminDashboardUrl(anchor) {
         const base = typeof config.adminDashboardUrl === 'string' ? config.adminDashboardUrl.trim() : '';
         if (!base) return '';
@@ -538,10 +658,12 @@
         };
     }
 
-    function buildAccountStatusSummary(rawBillingSummary, accountStateOverride) {
+    function buildAccountStatusSummary(rawBillingSummary, accountStateOverride, uiConfig = {}) {
         const accountState = normalizeAccountState(accountStateOverride);
         const billingSummary = normalizeBillingSummary(rawBillingSummary);
         const isConnected = accountState.connected && accountState.connectionStatus === 'connected';
+        const canBuyCredits = isConnected && accountState.subscriptionStatus === 'active';
+        const allowUnboundAnalysis = !config || config.allowUnboundAnalysis !== false;
         const computedBalance = [accountState.credits.includedRemaining, accountState.credits.topupRemaining]
             .filter((value) => Number.isFinite(value))
             .reduce((sum, value) => sum + value, 0);
@@ -555,12 +677,30 @@
         const planLabel = accountState.planName || accountState.planCode || 'Connected plan';
         const accountLabel = accountState.accountLabel || 'AiVI account';
         const syncLabel = formatAccountSyncLabel(accountState.updatedAt);
-        const activeMeta = [accountState.subscriptionStatus, accountState.trialStatus, syncLabel].filter(Boolean);
+        const verificationEnabled = isWebLookupVerificationEnabled(accountState, uiConfig.webLookupsEnabled);
+        const verificationMeta = verificationEnabled
+            ? 'External verification enabled (may take longer)'
+            : '';
+        const normalizedSubscriptionStatus = String(accountState.subscriptionStatus || '').trim().toLowerCase();
+        const normalizedTrialStatus = String(accountState.trialStatus || '').trim().toLowerCase();
+        const isTrialActive = normalizedTrialStatus === 'active' && normalizedSubscriptionStatus === 'trial';
+        const stateLabel = isTrialActive
+            ? 'Trial active'
+            : normalizedSubscriptionStatus
+                ? humanizeAccountStateLabel(normalizedSubscriptionStatus, 'Active')
+                : 'Active';
+        const activeMeta = [syncLabel, verificationMeta].filter(Boolean);
 
         if (isConnected && accountState.entitlements.analysisAllowed !== true) {
             let message = 'This site is connected, but analysis is not available for the current account state. Add credits or update the plan in your AiVI account.';
             if (accountState.entitlements.siteLimitReached || accountState.siteBindingStatus === 'limit_reached') {
                 message = 'This site has reached the plan site limit. Remove another connected site or upgrade the plan in your AiVI account.';
+            } else if (normalizedSubscriptionStatus === 'paused') {
+                message = 'This connected AiVI account is paused. Resume the plan or change it in your AiVI account before running analysis.';
+            } else if (normalizedSubscriptionStatus === 'suspended' || normalizedSubscriptionStatus === 'payment_failed') {
+                message = 'This connected AiVI account needs billing attention. Update the plan in your AiVI account to restore analysis.';
+            } else if (normalizedSubscriptionStatus === 'expired' || normalizedTrialStatus === 'expired') {
+                message = 'This AiVI trial or plan has ended. Choose a paid plan in your AiVI account to restore analysis on this site.';
             } else if (hasCreditBalance && totalCredits <= 0) {
                 message = 'This connected account has no analysis credits remaining. Add credits or move to a plan with capacity before running analysis.';
             }
@@ -573,8 +713,8 @@
                 detail: planLabel,
                 meta: [accountLabel, ...activeMeta].filter(Boolean),
                 actions: [
-                    buildAccountAction('Buy credits', '#aivi-billing-topups', true),
-                    buildAccountAction('Change plan', '#aivi-billing-plans', false)
+                    buildAccountAction('Change plan', '#aivi-billing-plans', true),
+                    canBuyCredits ? buildAccountAction('Buy credits', '#aivi-billing-topups', false) : null
                 ].filter(Boolean)
             };
         }
@@ -583,15 +723,62 @@
             return {
                 kind: 'connected',
                 shouldBlockAnalysis: false,
-                badge: accountState.trialStatus ? 'Trial active' : 'Plan active',
+                badge: isTrialActive ? 'Trial active' : 'Plan active',
                 title: planLabel,
                 message: creditLabel || `${accountLabel} is connected and analysis is enabled for this site.`,
                 detail: accountState.site.connectedDomain || accountLabel,
                 meta: activeMeta,
+                accountLabel,
+                planState: stateLabel,
+                syncLabel,
+                canBuyCredits,
+                manageHref: buildAdminDashboardUrl('#aivi-billing-status'),
+                buyCreditsHref: canBuyCredits ? buildAdminDashboardUrl('#aivi-billing-topups') : '',
+                webLookupsAllowed: accountState.entitlements.webLookupsAllowed === true,
+                webLookupsEnabled: uiConfig.webLookupsEnabled === true,
                 actions: [
                     buildAccountAction('Manage plan', '#aivi-billing-status', true),
-                    buildAccountAction('Buy credits', '#aivi-billing-topups', false)
+                    canBuyCredits ? buildAccountAction('Buy credits', '#aivi-billing-topups', false) : null
                 ].filter(Boolean)
+            };
+        }
+
+        if (!allowUnboundAnalysis && accountState.connectionStatus === 'pending') {
+            return {
+                kind: 'blocked',
+                shouldBlockAnalysis: true,
+                badge: 'Connection pending',
+                title: 'Finish connecting this site',
+                message: 'AiVI is waiting for this site connection to complete before analysis can start.',
+                detail: 'Open AiVI settings to continue onboarding',
+                meta: [syncLabel].filter(Boolean),
+                actions: [buildAccountAction('Open AiVI settings', '', true)].filter(Boolean)
+            };
+        }
+
+        if (!allowUnboundAnalysis && (accountState.connectionStatus === 'revoked' || accountState.connectionStatus === 'error')) {
+            return {
+                kind: 'blocked',
+                shouldBlockAnalysis: true,
+                badge: 'Connection required',
+                title: 'Reconnect this site to AiVI',
+                message: 'This site needs an active AiVI account connection before analysis can continue.',
+                detail: 'Open AiVI settings to resolve the account connection',
+                meta: [syncLabel].filter(Boolean),
+                actions: [buildAccountAction('Open AiVI settings', '', true)].filter(Boolean)
+            };
+        }
+
+        if (!allowUnboundAnalysis) {
+            return {
+                kind: 'blocked',
+                shouldBlockAnalysis: true,
+                badge: 'Connection required',
+                title: 'Connect this site to AiVI',
+                message: 'Connect this site to an AiVI account, then start a trial or choose a plan before running analysis.',
+                detail: 'Billing and analysis unlock after connection',
+                meta: [syncLabel].filter(Boolean),
+                actions: [buildAccountAction('Open AiVI settings', '', true)].filter(Boolean)
             };
         }
 
@@ -681,6 +868,17 @@
                 }
             };
         }
+        if (!resp || typeof resp.text !== 'function') {
+            clearTimeout(timer);
+            return {
+                status: 0,
+                ok: false,
+                data: {
+                    message: 'Invalid response object from fetch.',
+                    diagnostics: { type: 'connection', message: 'Invalid response object from fetch.' }
+                }
+            };
+        }
         clearTimeout(timer);
         const text = await resp.text();
         let data = null;
@@ -697,13 +895,71 @@
         return { status: resp.status, ok: resp.ok, data: data };
     }
 
-    async function checkBackendAvailability() {
-        try {
-            const result = await callRest('/backend/proxy_ping', 'GET');
-            return result.ok && result.data && result.data.aiAvailable;
-        } catch (e) {
-            return false;
+    async function updateWebLookupsSetting(enabled) {
+        const result = await callRest('/settings/web-lookups', 'POST', {
+            enabled: enabled === true
+        });
+        if (!result.ok || !result.data || result.data.ok !== true) {
+            throw new Error((result.data && result.data.message) || 'Unable to update web lookups setting');
         }
+        config.webLookupsEnabled = result.data.enabled === true;
+        return result.data.enabled === true;
+    }
+
+    function getDocumentMetaPath(postId) {
+        const normalized = Number(postId || 0);
+        if (!Number.isFinite(normalized) || normalized <= 0) return '';
+        return `/document-meta/${normalized}`;
+    }
+
+    function getCachedDocumentMeta(postId) {
+        const normalized = Number(postId || 0);
+        if (!Number.isFinite(normalized) || normalized <= 0) return null;
+        return documentMetaCache.get(String(normalized)) || null;
+    }
+
+    function setCachedDocumentMeta(postId, documentMeta) {
+        const normalized = Number(postId || 0);
+        if (!Number.isFinite(normalized) || normalized <= 0) return null;
+        const value = documentMeta && typeof documentMeta === 'object'
+            ? {
+                post_id: normalized,
+                title: typeof documentMeta.title === 'string' ? documentMeta.title : '',
+                meta_description: typeof documentMeta.meta_description === 'string' ? documentMeta.meta_description : '',
+                canonical_url: typeof documentMeta.canonical_url === 'string' ? documentMeta.canonical_url : '',
+                lang: typeof documentMeta.lang === 'string' ? documentMeta.lang : ''
+            }
+            : null;
+        if (value) {
+            documentMetaCache.set(String(normalized), value);
+        } else {
+            documentMetaCache.delete(String(normalized));
+        }
+        return value;
+    }
+
+    async function fetchDocumentMeta(postId) {
+        const path = getDocumentMetaPath(postId);
+        if (!path) return null;
+        const cached = getCachedDocumentMeta(postId);
+        if (cached) return cached;
+        const response = await callRest(path, 'GET');
+        if (!response.ok || !response.data || response.data.ok !== true || !response.data.document_meta) {
+            return null;
+        }
+        return setCachedDocumentMeta(postId, response.data.document_meta);
+    }
+
+    async function hydrateEditorPostDocumentMeta(post) {
+        if (!post || !post.id) return post;
+        const documentMeta = await fetchDocumentMeta(post.id);
+        if (!documentMeta) return post;
+        return {
+            ...post,
+            metaDescription: documentMeta.meta_description || post.metaDescription || '',
+            canonicalUrl: documentMeta.canonical_url || post.canonicalUrl || '',
+            lang: documentMeta.lang || post.lang || ''
+        };
     }
 
     async function fetchLatestAccountSummary() {
@@ -752,48 +1008,36 @@
                 if (post) {
                     const content = (typeof post.content === 'string') ? post.content : (post.content && post.content.raw ? post.content.raw : (post.raw || ''));
                     const title = (post.title && (typeof post.title === 'string' ? post.title : (post.title.raw || ''))) || '';
-                    return { id: post.id || null, title: title || '', content: content || '', author: post.author || 0 };
+                    const cachedMeta = getCachedDocumentMeta(post.id || 0);
+                    return {
+                        id: post.id || null,
+                        title: title || '',
+                        content: content || '',
+                        author: post.author || 0,
+                        metaDescription: cachedMeta && cachedMeta.meta_description ? cachedMeta.meta_description : '',
+                        canonicalUrl: cachedMeta && cachedMeta.canonical_url ? cachedMeta.canonical_url : '',
+                        lang: cachedMeta && cachedMeta.lang ? cachedMeta.lang : ''
+                    };
                 }
             }
         } catch (e) { /* fallback */ }
         try {
             const titleEl = document.getElementById('title');
             const contentEl = document.getElementById('content');
-            return { id: (document.getElementById('post_ID') ? parseInt(document.getElementById('post_ID').value, 10) : null), title: titleEl ? titleEl.value : '', content: contentEl ? contentEl.value : '', author: 0 };
+            const postId = (document.getElementById('post_ID') ? parseInt(document.getElementById('post_ID').value, 10) : null);
+            const cachedMeta = getCachedDocumentMeta(postId || 0);
+            return {
+                id: postId,
+                title: titleEl ? titleEl.value : '',
+                content: contentEl ? contentEl.value : '',
+                author: 0,
+                metaDescription: cachedMeta && cachedMeta.meta_description ? cachedMeta.meta_description : '',
+                canonicalUrl: cachedMeta && cachedMeta.canonical_url ? cachedMeta.canonical_url : '',
+                lang: cachedMeta && cachedMeta.lang ? cachedMeta.lang : ''
+            };
         } catch (e) {
             return null;
         }
-    }
-
-    async function runAutoAnalysisOnLoad() {
-        if (!config || !config.autoRunOnLoad) return;
-        const accountStatusSummary = buildAccountStatusSummary();
-        if (accountStatusSummary.shouldBlockAnalysis) return;
-        const post = readEditorPost();
-        if (!post || !post.content) return;
-
-        const available = await checkBackendAvailability();
-        if (!available) return;
-
-        const preResult = await callRest('/preflight', 'POST', {
-            content: post.content,
-            title: post.title,
-            content_type: 'post',
-            site_id: window.location.hostname
-        });
-
-        if (!preResult.ok || !preResult.data?.ok) return;
-
-        await callRest('/backend/proxy_analyze', 'POST', {
-            content_html: post.content,
-            title: post.title,
-            content_type: 'post',
-            site_id: window.location.hostname,
-            meta_description: post.metaDescription || '',
-            enable_web_lookups: false,
-            token_estimate: preResult.data.tokenEstimate || 0,
-            manifest: preResult.data.manifest
-        });
     }
 
     // ============================================
@@ -835,6 +1079,10 @@
 
             .aivi-progress-bar-error {
                 background: ${COLORS.errorLight};
+                height: auto;
+                min-height: 72px;
+                overflow: visible;
+                border-radius: 8px;
             }
 
             .aivi-progress-bar-error .aivi-progress-bar-inner {
@@ -895,67 +1143,104 @@
             }
 
             .aivi-analysis-loader {
-                border: 1px solid ${COLORS.cardBorder};
-                border-radius: 10px;
-                background: ${COLORS.white};
+                border: 1px solid #19335d;
+                border-radius: 16px;
+                background: linear-gradient(180deg,#0f1830 0%,#132647 100%);
                 overflow: hidden;
+                box-shadow: 0 18px 36px rgba(13,24,48,.22);
             }
             .aivi-analysis-status {
                 display: flex;
                 align-items: center;
                 gap: 8px;
-                padding: 10px 12px;
-                border-bottom: 1px solid ${COLORS.cardBorder};
-                background: #F8FAFF;
-                color: #17315c;
+                padding: 11px 12px;
+                border-bottom: 1px solid rgba(138,169,235,.14);
+                background: rgba(255,255,255,.04);
+                color: #d8e7ff;
                 font-size: 11px;
-                font-weight: 700;
+                font-weight: 800;
             }
             .aivi-analysis-status-dot {
                 width: 8px;
                 height: 8px;
                 border-radius: 50%;
-                background: ${COLORS.primary};
+                background: #57d6ff;
+                box-shadow: 0 0 0 6px rgba(87,214,255,.12);
                 animation: aivi-loader-pulse 1.6s infinite;
                 flex: 0 0 auto;
             }
             .aivi-analysis-shell {
                 position: relative;
-                min-height: 248px;
-                background: linear-gradient(180deg,#fbfcff,#f1f5fb);
+                min-height: 320px;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                padding: 12px;
+                box-sizing: border-box;
+                background: transparent;
             }
             .aivi-analysis-preflight {
-                position: absolute;
-                inset: 0;
-                z-index: 2;
                 display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 18px 14px;
-                background:
-                    radial-gradient(circle at 18% 12%, rgba(37,99,235,.12), rgba(37,99,235,0) 42%),
-                    radial-gradient(circle at 82% 8%, rgba(15,157,122,.10), rgba(15,157,122,0) 34%),
-                    linear-gradient(180deg,#f8fbff,#edf4ff);
+                flex: 1 1 auto;
+                align-items: stretch;
+                justify-content: stretch;
+                min-height: 0;
             }
             .aivi-analysis-preflight-card {
                 width: 100%;
                 border-radius: 16px;
-                padding: 24px 18px;
-                background: rgba(255,255,255,.84);
-                border: 1px solid rgba(37,99,235,.10);
-                box-shadow: 0 14px 28px rgba(16,34,64,.08);
+                padding: 18px 16px;
+                min-height: 262px;
+                box-sizing: border-box;
+                background: linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));
+                border: 1px solid rgba(122,154,224,.22);
+                box-shadow: 0 18px 38px rgba(13,24,48,.28);
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                gap: 14px;
                 text-align: center;
+            }
+            .aivi-analysis-preflight-meta {
+                color: #8ea7ca;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: .01em;
+            }
+            .aivi-analysis-pill-strip {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 8px;
+                max-width: 220px;
+            }
+            .aivi-analysis-pill {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 7px 10px;
+                border-radius: 999px;
+                background: rgba(255,255,255,.08);
+                border: 1px solid rgba(151,181,246,.14);
+                color: #d8e3f6;
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: .06em;
+                text-transform: uppercase;
             }
             .aivi-analysis-preflight-title {
                 margin: 0;
-                color: #17325b;
+                max-width: 220px;
+                color: #f5f8ff !important;
                 font-size: 20px;
                 font-weight: 900;
                 line-height: 1.16;
                 letter-spacing: -.02em;
+                text-shadow: 0 1px 18px rgba(11,18,33,.28);
             }
             .aivi-analysis-preflight-title .aivi-accent {
-                background: linear-gradient(90deg,#2563eb,#0f9d7a,#2563eb);
+                background: linear-gradient(90deg,#5ad3ff,#8e72ff,#5ad3ff);
                 background-size: 220% 100%;
                 -webkit-background-clip: text;
                 background-clip: text;
@@ -963,115 +1248,191 @@
                 animation: aivi-loader-accent-shift 3.8s ease-in-out infinite;
             }
             .aivi-analysis-banner {
-                position: absolute;
-                top: 14px;
-                left: 12px;
-                right: 12px;
+                position: relative;
                 box-sizing: border-box;
-                height: 92px;
-                border-radius: 14px;
-                padding: 12px 13px;
-                background: #ffffff;
-                border: 1px solid rgba(22,50,92,.08);
-                box-shadow: 0 12px 20px rgba(18,44,81,.06);
+                min-height: 0;
+                border-radius: 16px;
+                padding: 14px 15px 13px;
+                background: linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.04));
+                border: 1px solid rgba(150,181,255,.18);
                 z-index: 1;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
                 gap: 8px;
             }
-            .aivi-analysis-banner::before {
+            .aivi-analysis-banner::before,
+            .aivi-analysis-banner::after {
                 content: "";
                 position: absolute;
-                left: 0;
-                top: 14px;
-                bottom: 14px;
-                width: 4px;
+                left: 16px;
+                right: 16px;
+                bottom: 0;
+                height: 2px;
                 border-radius: 999px;
-                background: linear-gradient(180deg,#2563eb,#0f9d7a);
+                background: linear-gradient(90deg,rgba(87,214,255,0),rgba(87,214,255,.94),rgba(104,221,196,.9),rgba(87,214,255,0));
+                box-shadow: 0 0 10px rgba(87,214,255,.16);
+            }
+            .aivi-analysis-banner::before {
+                top: 0;
+                bottom: auto;
             }
             .aivi-analysis-tag {
                 display: inline-flex;
                 align-items: center;
                 align-self: flex-start;
-                margin-left: 8px;
-                padding: 4px 8px;
+                padding: 5px 9px;
                 border-radius: 999px;
-                background: #edf3ff;
-                color: #234ca0;
+                background: rgba(255,255,255,.08);
+                border: 1px solid rgba(151,181,246,.18);
+                color: #aecdff;
                 font-size: 10px;
                 font-weight: 800;
-                letter-spacing: .05em;
+                letter-spacing: .08em;
                 text-transform: uppercase;
             }
             .aivi-analysis-banner-title {
-                margin: 0 0 0 8px;
-                color: #17325b;
-                font-size: 18px;
+                margin: 0;
+                color: #f5f8ff !important;
+                font-size: 16px;
                 font-weight: 900;
-                line-height: 1.14;
+                line-height: 1.2;
                 letter-spacing: -.02em;
+                text-shadow: 0 1px 18px rgba(11,18,33,.24);
             }
             .aivi-analysis-console {
-                position: absolute;
-                top: 122px;
-                left: 12px;
-                right: 12px;
-                bottom: 44px;
+                position: relative;
                 font-family: ${COLORS.fontStack};
                 font-size: 11px;
                 line-height: 1.25;
-                color: #456182;
+                color: #dbe7ff;
                 display: flex;
                 flex-direction: column;
                 justify-content: flex-start;
-                gap: 6px;
+                gap: 9px;
+                flex: 1 1 auto;
+                min-height: 0;
+                overflow: auto;
             }
             .aivi-analysis-log-row {
-                padding: 8px 10px;
-                border-radius: 11px;
-                background: rgba(255,255,255,.80);
-                border: 1px solid rgba(22,50,92,.08);
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
+                position: relative;
+                display: grid;
+                grid-template-columns: minmax(0,1fr) auto;
+                align-items: center;
+                gap: 10px;
+                padding: 10px 11px;
+                min-height: 48px;
+                border-radius: 14px;
+                background: rgba(255,255,255,.07);
+                border: 1px solid rgba(151,181,246,.12);
                 transition: .25s ease;
+            }
+            .aivi-analysis-log-row::before,
+            .aivi-analysis-log-row::after {
+                content: "";
+                position: absolute;
+                left: 12px;
+                right: 12px;
+                height: 2px;
+                border-radius: 999px;
+                background: linear-gradient(90deg,rgba(87,214,255,0),rgba(87,214,255,.6),rgba(104,221,196,.56),rgba(87,214,255,0));
+                box-shadow: 0 0 8px rgba(87,214,255,.1);
+                opacity: .9;
+                pointer-events: none;
+            }
+            .aivi-analysis-log-row::before {
+                top: 0;
+            }
+            .aivi-analysis-log-row::after {
+                bottom: 0;
+            }
+            .aivi-analysis-log-row.is-live {
+                background: rgba(87,214,255,.10);
+                border-color: rgba(87,214,255,.28);
+                box-shadow: inset 0 0 0 1px rgba(87,214,255,.06);
+            }
+            .aivi-analysis-log-row.is-live::before,
+            .aivi-analysis-log-row.is-live::after {
+                background: linear-gradient(90deg,rgba(87,214,255,0),rgba(87,214,255,.96),rgba(104,221,196,.92),rgba(87,214,255,0));
+                box-shadow: 0 0 12px rgba(87,214,255,.18);
             }
             .aivi-analysis-log-ts {
                 display: none;
                 margin-right: 8px;
             }
-            .aivi-analysis-log-run { color: #456182; }
+            .aivi-analysis-log-run {
+                flex: 1 1 auto;
+                min-width: 0;
+                color: #f1f6ff !important;
+                font-size: 11px;
+                font-weight: 800;
+                overflow: hidden;
+                white-space: normal;
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 2;
+                line-clamp: 2;
+                text-shadow: 0 1px 10px rgba(11,18,33,.18);
+            }
             .aivi-analysis-log-ok { color: #0f8f74; }
             .aivi-analysis-log-phase {
-                color: #17325b;
+                flex: 1 1 auto;
+                min-width: 0;
+                color: #f1f6ff !important;
                 font-weight: 800;
-                background: #ffffff;
-                border-color: rgba(37,99,235,.18);
-                box-shadow: 0 10px 18px rgba(25,50,91,.08);
+                overflow: hidden;
+                white-space: normal;
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 2;
+                line-clamp: 2;
+                text-shadow: 0 1px 10px rgba(11,18,33,.18);
+            }
+            .aivi-analysis-log-state {
+                flex: 0 0 auto;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 44px;
+                padding: 3px 7px;
+                border-radius: 999px;
+                background: rgba(255,255,255,.08);
+                color: #87a2c9;
+                font-size: 9px;
+                font-weight: 700;
+                letter-spacing: .06em;
+                text-transform: uppercase;
+                align-self: center;
+            }
+            .aivi-analysis-log-row.is-live .aivi-analysis-log-state {
+                color: #57d6ff;
             }
             .aivi-analysis-footer {
-                position: absolute;
-                left: 0;
-                right: 0;
-                bottom: 0;
                 display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 8px;
-                padding: 8px 12px;
-                border-top: 1px solid rgba(23,49,92,0.08);
-                color: #4d6891;
-                font-size: 10px;
-                font-weight: 600;
+                flex-direction: column;
+                align-items: flex-start;
+                justify-content: flex-start;
+                gap: 6px;
+                padding: 10px 2px 0;
+                border-top: 1px solid rgba(138,169,235,.14);
+                color: #8eaad1;
+                font-size: 11px;
+                font-weight: 700;
             }
-            .aivi-analysis-footer .aivi-muted {
-                color: #6880a7;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
+            .aivi-analysis-footer-strong {
+                color: #d8e7ff;
+                font-weight: 800;
+                letter-spacing: .01em;
             }
-
+            .aivi-analysis-footer-subtle {
+                color: #8eaad1;
+                line-height: 1.45;
+            }
+            .aivi-analysis-note {
+                color: #9ab0d3;
+                font-size: 11px;
+                line-height: 1.45;
+            }
             /* Navigation controls hover */
             .aivi-nav-btn {
                 cursor: pointer;
@@ -1213,7 +1574,7 @@
             } else if (state.error === 'unauthorized') {
                 message = 'Session expired or invalid. Please re-run analysis.';
             } else if (state.error === 'aborted') {
-                message = 'Analysis aborted — no details available. Please re-run.';
+                message = 'Analysis aborted Ã¢â‚¬â€ no details available. Please re-run.';
             } else if (state.error === 'client_missing') {
                 message = 'AiVI details are unavailable in this context.';
             } else if (state.error && state.error !== 'network_error') {
@@ -1350,14 +1711,16 @@
 
     function buildConsoleLogRows(messageIndex, phase, queueMessage) {
         const rows = [];
-        const rowCount = 3;
+        const rowCount = 4;
 
         if (phase === 'queued' && queueMessage) {
             rows.push({
                 id: 'row-queued',
                 ts: '',
                 text: queueMessage,
-                level: 'phase'
+                level: 'phase',
+                stateTag: 'queue',
+                isLive: false
             });
         }
 
@@ -1369,11 +1732,30 @@
                 id: `row-${itemIndex}`,
                 ts: '',
                 text: entry.text,
-                level: idx === 0 ? 'phase' : 'run'
+                level: idx === 0 ? 'phase' : 'run',
+                stateTag: idx === 0 ? 'live' : 'stable',
+                isLive: idx === 0
             });
         }
 
         return rows;
+    }
+
+    function getAnalysisStartPills(phase) {
+        if (phase === 'queued') {
+            return ['Preparing worker', 'Loading structure'];
+        }
+        if (phase === 'preflight') {
+            return ['Loading structure', 'Checking signals'];
+        }
+        return ['Warming analyzer', 'Loading structure'];
+    }
+
+    function getAnalysisStartFooterCopy(phase) {
+        if (phase === 'queued') {
+            return 'The worker is being prepared before semantic judgment begins.';
+        }
+        return 'This first phase checks structure before semantic judgment begins.';
     }
 
     function AnalysisProgressPanel(props) {
@@ -1396,12 +1778,12 @@
         const progressElapsedMs = Math.max(0, nowMs - progressStartMs);
         const messageIndex = Math.floor(progressElapsedMs / ANALYSIS_MESSAGE_ROTATE_MS);
         const currentProgressEntry = getAnalysisProgressEntry(messageIndex);
-        const bannerContext = showSplash ? 'Opening Signals' : currentProgressEntry.contextTag;
-        const bannerTitle = showSplash ? ANALYSIS_HERO_MESSAGE : currentProgressEntry.bannerTitle;
+        const bannerContext = 'Live Category';
+        const bannerTitle = currentProgressEntry.contextTag;
         const rows = showSplash ? [] : buildConsoleLogRows(messageIndex, phase, queueMessage);
-        const footerMessage = phase === 'queued'
-            ? 'Preparing analysis worker'
-            : bannerContext;
+        const durationNote = 'Most analyses finish in about 4-5 minutes.';
+        const startPills = getAnalysisStartPills(phase);
+        const startFooterCopy = getAnalysisStartFooterCopy(phase);
 
         return createElement('div', { className: 'aivi-analysis-loader' },
             createElement('div', {
@@ -1416,6 +1798,12 @@
                 showSplash
                     ? createElement('div', { className: 'aivi-analysis-preflight' },
                         createElement('div', { className: 'aivi-analysis-preflight-card' },
+                            createElement('div', { className: 'aivi-analysis-preflight-meta' }, `${elapsed}s elapsed`),
+                            createElement('div', { className: 'aivi-analysis-pill-strip' },
+                                startPills.map((pill) =>
+                                    createElement('span', { key: pill, className: 'aivi-analysis-pill' }, pill)
+                                )
+                            ),
                             createElement('h3', { className: 'aivi-analysis-preflight-title' },
                                 'Initializing ',
                                 createElement('span', { className: 'aivi-accent' }, 'AI perspective'),
@@ -1430,46 +1818,52 @@
                         ),
                         createElement('div', { key: 'console', className: 'aivi-analysis-console' },
                             rows.map((row) =>
-                                createElement('div', { key: row.id, className: 'aivi-analysis-log-row' },
+                                createElement('div', {
+                                    key: row.id,
+                                    className: `aivi-analysis-log-row${row.isLive ? ' is-live' : ''}`
+                                },
                                     createElement('span', { className: 'aivi-analysis-log-ts' }, row.ts),
-                                    createElement('span', { className: `aivi-analysis-log-${row.level}` }, row.text)
+                                    createElement('span', { className: `aivi-analysis-log-${row.level}` }, row.text),
+                                    createElement('span', { className: 'aivi-analysis-log-state' }, row.stateTag)
                                 )
                             )
                         )
                     ],
                 createElement('div', { className: 'aivi-analysis-footer' },
-                    createElement('span', null, `${elapsed}s elapsed`),
-                    createElement('span', { className: 'aivi-muted' }, footerMessage)
+                    showSplash
+                        ? createElement('span', { className: 'aivi-analysis-footer-strong' }, durationNote)
+                        : createElement('span', { className: 'aivi-analysis-footer-strong' }, `${elapsed}s elapsed`),
+                    !showSplash && createElement('span', { className: 'aivi-analysis-note' }, durationNote),
+                    showSplash && createElement('span', { className: 'aivi-analysis-footer-subtle' }, startFooterCopy)
                 )
             )
         );
     }
-
     // Legacy progress bar (error state)
     function ProgressBar(props) {
         const isError = props.error;
         const elapsed = props.elapsedSeconds || 0;
 
         // Determine contextual message based on elapsed time
-        let message = 'Analyzing…';
+        let message = 'AnalyzingÃ¢â‚¬Â¦';
         let detailMessage = 'Analyzing content for AI visibility';
 
         if (!isError && elapsed > 0) {
             if (elapsed < 30) {
-                message = 'Analyzing…';
-                detailMessage = `Analyzing content for AI visibility — ${elapsed}s`;
+                message = 'AnalyzingÃ¢â‚¬Â¦';
+                detailMessage = `Analyzing content for AI visibility Ã¢â‚¬â€ ${elapsed}s`;
             } else if (elapsed < 60) {
-                message = 'Still analyzing…';
-                detailMessage = `Analysis in progress — ${elapsed}s elapsed`;
+                message = 'Still analyzingÃ¢â‚¬Â¦';
+                detailMessage = `Analysis in progress Ã¢â‚¬â€ ${elapsed}s elapsed`;
             } else if (elapsed < 120) {
-                message = 'Taking longer than usual…';
-                detailMessage = `Still processing — ${elapsed}s elapsed (system may be busy)`;
+                message = 'Taking longer than usualÃ¢â‚¬Â¦';
+                detailMessage = `Still processing Ã¢â‚¬â€ ${elapsed}s elapsed (system may be busy)`;
             } else if (elapsed < 240) {
-                message = 'Almost done…';
-                detailMessage = `Finishing analysis — ${elapsed}s elapsed`;
+                message = 'Almost doneÃ¢â‚¬Â¦';
+                detailMessage = `Finishing analysis Ã¢â‚¬â€ ${elapsed}s elapsed`;
             } else {
-                message = 'Still working…';
-                detailMessage = `Analysis taking longer due to system load — ${elapsed}s elapsed`;
+                message = 'Still workingÃ¢â‚¬Â¦';
+                detailMessage = `Analysis taking longer due to system load Ã¢â‚¬â€ ${elapsed}s elapsed`;
             }
         }
 
@@ -1490,18 +1884,37 @@
             isError && createElement('div', {
                 style: {
                     display: 'flex',
-                    alignItems: 'center',
+                    alignItems: 'flex-start',
                     justifyContent: 'space-between',
-                    padding: '0 12px',
-                    height: '100%'
+                    flexWrap: 'wrap',
+                    columnGap: 12,
+                    rowGap: 8,
+                    padding: '10px 12px',
+                    minHeight: 72
                 }
             },
-                createElement('span', { style: { color: COLORS.highText, fontSize: 13 } }, props.errorMessage || 'Analysis failed'),
+                createElement('span', {
+                    style: {
+                        color: COLORS.highText,
+                        fontSize: 12.5,
+                        fontWeight: 500,
+                        lineHeight: 1.45,
+                        letterSpacing: '0.01em',
+                        flex: '1 1 150px',
+                        minWidth: 0
+                    }
+                }, props.errorMessage || 'Analysis failed'),
                 createElement(Button, {
                     isSmall: true,
                     onClick: props.onRetry,
                     disabled: props.retryDisabled,
-                    style: { background: COLORS.error, color: COLORS.white, border: 'none' }
+                    style: {
+                        background: COLORS.error,
+                        color: COLORS.white,
+                        border: 'none',
+                        flex: '0 0 auto',
+                        alignSelf: 'center'
+                    }
                 }, 'Retry')
             )
         );
@@ -1526,7 +1939,7 @@
         const strokeValue = (pct / 100) * totalVisibleDash;
         const dashOffsetValue = circumference - strokeValue; // Offset for value path
 
-        const color = props.color || COLORS.aeoRing;
+        const color = getScoreRingColor(pct);
 
         return createElement('div', { style: { textAlign: 'center' } },
             createElement('div', { style: { position: 'relative', display: 'inline-block' } },
@@ -1574,6 +1987,7 @@
         const aeo = props.aeo || 0;
         const geo = props.geo || 0;
         const lastRun = props.lastRun || 'Just now';
+        const scorePill = getGlobalScorePill(score);
 
         return createElement('div', {
             className: props.animate ? 'aivi-success-animate' : '',
@@ -1604,6 +2018,30 @@
             },
                 createElement('span', null, `AEO ${aeo}`),
                 createElement('span', null, `GEO ${geo}`)
+            ),
+            createElement('div', {
+                style: {
+                    marginTop: 10,
+                    textAlign: 'center'
+                }
+            },
+                createElement('span', {
+                    style: {
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minHeight: 24,
+                        padding: '0 10px',
+                        borderRadius: 999,
+                        background: scorePill.background,
+                        border: '1px solid ' + scorePill.border,
+                        color: scorePill.color,
+                        fontSize: 11,
+                        fontWeight: 800,
+                        letterSpacing: '.08em',
+                        textTransform: 'uppercase'
+                    }
+                }, scorePill.label)
             ),
             createElement('div', {
                 style: {
@@ -1650,6 +2088,7 @@
             const instances = issue.instances || 1;
             const checkId = issue.check_id || issue.id;
             const isPassedCheck = verdict === 'pass';
+            const verdictPill = getIssueVerdictPresentation(issue);
 
             return createElement('div', {
                 key: checkId,
@@ -1667,7 +2106,7 @@
                 onMouseEnter: (e) => e.currentTarget.style.background = '#f8fafc',
                 onMouseLeave: (e) => e.currentTarget.style.background = COLORS.white
             },
-                // VERDICT ICON: ❌ fail, ⚠️ partial, ✓ pass
+                // VERDICT ICON: Ã¢ÂÅ’ fail, Ã¢Å¡Â Ã¯Â¸Â partial, Ã¢Å“â€œ pass
                 createElement('div', {
                     className: 'aivi-verdict-icon',
                     style: { color: verdictConfig.color, flexShrink: 0 }
@@ -1685,18 +2124,20 @@
                     }
                 }, issue.name || issue.title || checkId.replace(/_/g, ' ')),
 
-                // Badge: "Needs review" - HIDE for Passed Checks
-                (issue.actionable === false && !isPassedCheck) && createElement('span', {
+                // Verdict pill restores the original row-level truth in the sidebar
+                verdictPill && createElement('span', {
                     style: {
                         fontSize: 11,
-                        padding: '2px 6px',
+                        padding: '2px 8px',
                         borderRadius: 999,
-                        background: COLORS.warning,
-                        border: '1px solid ' + COLORS.warningBorder,
-                        color: COLORS.mediumText,
+                        background: verdictPill.background,
+                        border: '1px solid ' + verdictPill.border,
+                        color: verdictPill.color,
+                        fontWeight: 700,
+                        letterSpacing: '.02em',
                         flexShrink: 0
                     }
-                }, 'Needs review'),
+                }, verdictPill.label),
 
                 // BADGE: Instance Count (Static, Circular) - Only if > 1
                 instances > 1 && createElement('span', {
@@ -1889,13 +2330,29 @@
         if (!props || !props.summary) return null;
         const summary = props.summary;
         const compact = props.compact === true;
+        const [detailsOpen, setDetailsOpen] = useState(false);
+        const canToggleWebLookups = summary.kind === 'connected' && summary.webLookupsAllowed === true && typeof props.onToggleWebLookups === 'function';
+        const sharedInfoChip = createElement('span', {
+            style: {
+                display: 'inline-grid',
+                placeItems: 'center',
+                width: 18,
+                height: 18,
+                borderRadius: 999,
+                border: '1px solid #BED0EB',
+                color: COLORS.subtext,
+                fontSize: 11,
+                fontWeight: 700,
+                lineHeight: 1
+            }
+        }, 'i');
         const tone = summary.kind === 'connected'
             ? {
-                background: '#ECFDF5',
-                border: '#A7F3D0',
-                badgeBackground: '#D1FAE5',
-                badgeColor: '#065F46',
-                titleColor: '#065F46'
+                background: '#FFFFFF',
+                border: '#D7E2F2',
+                badgeBackground: '#DFF8E8',
+                badgeColor: '#17643A',
+                titleColor: '#10213D'
             }
             : summary.kind === 'blocked'
                 ? {
@@ -1912,6 +2369,248 @@
                     badgeColor: '#1D4ED8',
                     titleColor: '#16325C'
                 };
+
+        if (summary.kind === 'connected') {
+            return createElement('div', {
+                style: {
+                    background: '#FFFFFF',
+                    border: '1px solid #D7E2F2',
+                    borderRadius: 22,
+                    padding: compact ? '14px' : '16px',
+                    marginBottom: 12,
+                    boxShadow: '0 18px 40px rgba(27, 52, 95, 0.08)'
+                }
+            },
+                createElement('div', {
+                    style: {
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 10,
+                        marginBottom: 12
+                    }
+                },
+                    createElement('span', {
+                        style: {
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '8px 12px',
+                            borderRadius: 999,
+                            background: '#DFF8E8',
+                            color: '#17643A',
+                            fontSize: 12,
+                            fontWeight: 700
+                        }
+                    }, summary.badge),
+                    summary.detail && createElement('span', {
+                        style: {
+                            fontSize: 12,
+                            color: COLORS.subtext,
+                            fontWeight: 600,
+                            textAlign: 'right'
+                        }
+                    }, summary.detail)
+                ),
+                createElement('div', {
+                    style: {
+                        fontSize: compact ? 27 : 29,
+                        lineHeight: 1,
+                        letterSpacing: '-0.03em',
+                        fontWeight: 700,
+                        fontFamily: 'Georgia, "Iowan Old Style", "Palatino Linotype", serif',
+                        color: '#10213D',
+                        marginBottom: 8
+                    }
+                }, summary.title),
+                createElement('div', {
+                    style: {
+                        fontSize: 14,
+                        color: COLORS.subtext,
+                        lineHeight: 1.45,
+                        marginBottom: 14
+                    }
+                }, summary.message),
+                createElement('div', {
+                    style: {
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: summary.canBuyCredits ? 'space-between' : 'flex-start',
+                        gap: 10,
+                        flexWrap: 'wrap',
+                        marginBottom: detailsOpen ? 14 : 0
+                    }
+                },
+                    createElement('div', {
+                        style: {
+                            display: 'flex',
+                            gap: 10,
+                            flexWrap: 'wrap'
+                        }
+                    },
+                        summary.manageHref && createElement('a', {
+                            href: summary.manageHref,
+                            style: {
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                minHeight: 36,
+                                minWidth: 118,
+                                padding: '0 16px',
+                                borderRadius: 999,
+                                background: 'linear-gradient(135deg, #101E36, #223A66)',
+                                color: '#FFFFFF',
+                                textDecoration: 'none',
+                                fontSize: 13,
+                                fontWeight: 700
+                            }
+                        }, 'Manage plan'),
+                        summary.canBuyCredits && summary.buyCreditsHref
+                            ? createElement('a', {
+                                href: summary.buyCreditsHref,
+                                style: {
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    minHeight: 36,
+                                    minWidth: 118,
+                                    padding: '0 16px',
+                                    borderRadius: 999,
+                                    border: '1px solid #BED0EB',
+                                    background: '#FFFFFF',
+                                    color: '#10213D',
+                                    textDecoration: 'none',
+                                    fontSize: 13,
+                                    fontWeight: 700
+                                }
+                            }, 'Buy credits')
+                            : null
+                    ),
+                    createElement('button', {
+                        type: 'button',
+                        onClick: function () { setDetailsOpen(!detailsOpen); },
+                        style: {
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            minHeight: 34,
+                            padding: '0 14px',
+                            borderRadius: 999,
+                            border: '1px solid #D7E2F2',
+                            background: '#F8FAFC',
+                            color: '#10213D',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                        }
+                    }, detailsOpen ? 'Hide details' : 'More details')
+                ),
+                detailsOpen && createElement('div', {
+                    style: {
+                        display: 'grid',
+                        gap: 12
+                    }
+                },
+                    createElement('div', {
+                        style: {
+                            display: 'grid',
+                            gridTemplateColumns: '1fr auto',
+                            gap: '10px 14px',
+                            padding: 14,
+                            background: '#F7F9FC',
+                            border: '1px solid #D7E2F2',
+                            borderRadius: 18,
+                            fontSize: 13,
+                            lineHeight: 1.35
+                        }
+                    },
+                        createElement('div', { style: { color: COLORS.subtext } }, 'State'),
+                        createElement('div', { style: { color: '#10213D', fontWeight: 600, textAlign: 'right' } }, summary.planState || 'Active'),
+                        createElement('div', { style: { color: COLORS.subtext } }, 'Account'),
+                        createElement('div', { style: { color: '#10213D', fontWeight: 600, textAlign: 'right' } }, summary.accountLabel || 'AiVI account'),
+                        createElement('div', { style: { color: COLORS.subtext } }, 'Last sync'),
+                        createElement('div', { style: { color: '#10213D', fontWeight: 600, textAlign: 'right' } }, summary.syncLabel ? summary.syncLabel.replace(/^Last sync\\s+/i, '') : 'Not synced')
+                    ),
+                    createElement('div', {
+                        style: {
+                            border: '1px solid #D7E2F2',
+                            borderRadius: 18,
+                            padding: 14,
+                            background: '#FBFDFF'
+                        }
+                    },
+                        createElement('div', {
+                            style: {
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 12,
+                                marginBottom: 8
+                            }
+                        },
+                            createElement('div', {
+                                style: {
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    fontSize: 14,
+                                    fontWeight: 700,
+                                    color: '#10213D'
+                                }
+                            }, 'Verify with web lookups', sharedInfoChip),
+                            createElement('button', {
+                                type: 'button',
+                                onClick: function () {
+                                    if (!canToggleWebLookups || props.webLookupToggleBusy === true) return;
+                                    props.onToggleWebLookups(!(summary.webLookupsEnabled === true));
+                                },
+                                disabled: !canToggleWebLookups || props.webLookupToggleBusy === true,
+                                style: {
+                                    position: 'relative',
+                                    width: 48,
+                                    height: 28,
+                                    borderRadius: 999,
+                                    border: 'none',
+                                    cursor: canToggleWebLookups && props.webLookupToggleBusy !== true ? 'pointer' : 'not-allowed',
+                                    background: summary.webLookupsEnabled === true ? 'linear-gradient(135deg, #2D6DF6, #0A56DC)' : '#D8E2F2',
+                                    opacity: canToggleWebLookups ? 1 : 0.6,
+                                    flex: '0 0 auto'
+                                }
+                            }, createElement('span', {
+                                style: {
+                                    position: 'absolute',
+                                    top: 3,
+                                    left: summary.webLookupsEnabled === true ? 23 : 3,
+                                    width: 22,
+                                    height: 22,
+                                    borderRadius: 999,
+                                    background: '#FFFFFF',
+                                    boxShadow: '0 4px 10px rgba(15, 30, 65, 0.12)'
+                                }
+                            }))
+                        ),
+                        createElement('div', {
+                            style: {
+                                color: COLORS.subtext,
+                                fontSize: 12,
+                                lineHeight: 1.45
+                            }
+                        }, summary.webLookupsAllowed
+                            ? 'Adds external verification for trust-sensitive checks. Turn it off when you want the fastest run.'
+                            : 'External verification is unavailable on this account right now.')
+                    ),
+                    !summary.canBuyCredits && createElement('div', {
+                        style: {
+                            color: COLORS.subtext,
+                            fontSize: 12,
+                            lineHeight: 1.45,
+                            display: 'flex',
+                            gap: 8,
+                            alignItems: 'flex-start'
+                        }
+                    }, sharedInfoChip, createElement('span', null, 'Top-ups unlock after a paid plan is active.'))
+                )
+            );
+        }
 
         return createElement('div', {
             style: {
@@ -2031,12 +2730,16 @@
         const [liveAccountState, setLiveAccountState] = useState(() => (
             (config && typeof config.accountState === 'object' && config.accountState) ? config.accountState : {}
         ));
+        const [webLookupsEnabledLive, setWebLookupsEnabledLive] = useState(config.webLookupsEnabled === true);
+        const [webLookupToggleBusy, setWebLookupToggleBusy] = useState(false);
         const activeRunIdRef = useRef('');
         const rawFetchRequestRef = useRef(0);
         const staleEventRunRef = useRef('');
         const detailsDrawer = useAiviDetailsDrawer();
         const [isStaleBanner] = useStaleBanner();
-        const accountStatusSummary = buildAccountStatusSummary(report && report.billing_summary, liveAccountState);
+        const accountStatusSummary = buildAccountStatusSummary(report && report.billing_summary, liveAccountState, {
+            webLookupsEnabled: webLookupsEnabledLive
+        });
         const analysisBlocked = accountStatusSummary.shouldBlockAnalysis === true;
 
         useEffect(() => {
@@ -2044,6 +2747,27 @@
                 setState('error');
                 setErrorMessage('Plugin not enabled or backend not configured.');
             }
+        }, []);
+
+        useEffect(() => {
+            let cancelled = false;
+            const syncAccountState = async () => {
+                const refreshed = await refreshLiveAccountState();
+                if (cancelled || refreshed !== true) {
+                    return;
+                }
+            };
+            void syncAccountState();
+
+            const handleFocus = () => {
+                void syncAccountState();
+            };
+
+            window.addEventListener('focus', handleFocus);
+            return () => {
+                cancelled = true;
+                window.removeEventListener('focus', handleFocus);
+            };
         }, []);
 
         useEffect(() => {
@@ -2059,7 +2783,7 @@
                 });
                 return null;
             });
-        }, [report?.run_id]);
+        }, [report?.run_id, report]);
 
         async function refreshLiveAccountState() {
             try {
@@ -2149,7 +2873,7 @@
                 cancelled = true;
                 clearInterval(interval);
             };
-        }, [state, report?.run_id, report?.content_hash, lastContentHash, isStale]);
+        }, [state, report?.run_id, report?.content_hash, report, lastContentHash, isStale]);
 
         // Helper: Get user-friendly error message (must be defined before runAnalysis)
         function getUserFriendlyMessage(error, message, status, elapsedMs) {
@@ -2161,6 +2885,7 @@
                 if (message && message.includes('worker crashed')) {
                     return 'The analysis was interrupted. This might happen with very long content or temporary issues. Please try again.';
                 }
+                return 'Analysis is taking longer than expected. It may still finish shortly. Please wait a moment and refresh, or try again in a few minutes.';
             }
 
             // Handle other specific errors
@@ -2218,11 +2943,11 @@
             }
         }
 
-        async function runAnalysis() {
-            const post = readEditorPost();
+    async function runAnalysis() {
+            const post = await hydrateEditorPostDocumentMeta(readEditorPost());
             if (!post || !post.content) {
                 setState('error');
-                setErrorMessage('No content to analyze.');
+                setErrorMessage(EMPTY_CONTENT_MESSAGE);
                 setAnalysisPhase('idle');
                 return;
             }
@@ -2246,6 +2971,8 @@
             setQueueMessage(null);
             setQueueHealth(null);
             setLastHealthCheckAt(0);
+            setReport(null);
+            setOverlayContent(null);
             setRawAnalysis(null);
 
             // Run preflight
@@ -2253,7 +2980,10 @@
                 content: post.content,
                 title: post.title,
                 content_type: 'post',
-                site_id: window.location.hostname
+                site_id: window.location.hostname,
+                meta_description: post.metaDescription || '',
+                canonical_url: post.canonicalUrl || '',
+                lang: post.lang || ''
             });
 
             if (!preResult.ok || !preResult.data?.ok) {
@@ -2277,14 +3007,17 @@
             setAnalysisPhase('queued');
 
 
-            // Run analysis (Phase 5: Async pattern)
+            // Run analysis through the async backend flow
             const result = await callRest('/backend/proxy_analyze', 'POST', {
                 content_html: post.content,
                 title: post.title,
+                post_id: post.id || null,
                 content_type: 'post',
                 site_id: window.location.hostname,
                 meta_description: post.metaDescription || '',
-                enable_web_lookups: false,
+                canonical_url: post.canonicalUrl || '',
+                lang: post.lang || '',
+                enable_web_lookups: isWebLookupVerificationEnabled(liveAccountState, webLookupsEnabledLive),
                 token_estimate: preResult.data.tokenEstimate || 0,
                 manifest: preResult.data.manifest
             });
@@ -2301,7 +3034,7 @@
 
                 debugLog('info', 'AiVI: Analysis queued, polling for run_id', { runId: runId });
 
-                // Poll for results with backoff: 3s → 10s, max 5 mins
+                // Poll for results with backoff: 3s Ã¢â€ â€™ 10s, max 5 mins
                 const pollResult = await pollForResults(runId);
 
                 if (pollResult.success) {
@@ -2309,6 +3042,7 @@
                     setQueueMessage(null);
                     setQueueHealth(null);
                     setAnalysisPhase('idle');
+                    setAnalysisStartTime(null);
                     handleAnalysisSuccess(pollResult.data);
                 } else if (pollResult.aborted) {
                     // ABORT BEHAVIOR: Show abort banner, empty sidebar, no partial results
@@ -2317,7 +3051,8 @@
                     setQueueHealth(null);
                     setState('aborted');
                     setAnalysisPhase('idle');
-                    setErrorMessage(pollResult.message || 'Analysis aborted — no partial results shown');
+                    setAnalysisStartTime(null);
+                    setErrorMessage(pollResult.message || 'Analysis aborted Ã¢â‚¬â€ no partial results shown');
                     setReport(null); // Ensure no partial results
                 } else {
                     setQueueStatus(null);
@@ -2325,18 +3060,21 @@
                     setQueueHealth(null);
                     setState('error');
                     setAnalysisPhase('idle');
+                    setAnalysisStartTime(null);
                     setErrorMessage(pollResult.error || 'Analysis failed during processing.');
                 }
                 return;
             }
 
-            // Handle immediate success (legacy sync response)
+            // Handle immediate success from older synchronous responses
             if (result.ok && result.data) {
                 setAnalysisPhase('idle');
+                setAnalysisStartTime(null);
                 handleAnalysisSuccess(result.data);
             } else {
                 setState('error');
                 setAnalysisPhase('idle');
+                setAnalysisStartTime(null);
                 if (!result.ok) {
                     const mapped = mapBackendError(result.status, result.data);
                     setErrorMessage(mapped.message);
@@ -2352,15 +3090,16 @@
             }
         }
 
-        // Phase 5: Poll for async analysis results
+        // Poll for async analysis results
         async function pollForResults(runId) {
             const INITIAL_INTERVAL = 1500;      // 1.5 seconds
             const EARLY_MAX_INTERVAL = 4000;    // 4 seconds
             const MAX_INTERVAL = 10000;         // 10 seconds
-            const MAX_DURATION = 210000;        // 3.5 minutes
+            const MAX_DURATION = 300000;        // 5 minutes
             const EARLY_POLL_WINDOW_MS = 30000; // first 30 seconds
             const MID_POLL_WINDOW_MS = 90000;   // 30-90 seconds
             const startTime = Date.now();
+            let currentRunId = runId;
             let interval = INITIAL_INTERVAL;
             let consecutivePollErrors = 0;
             let consecutiveInvalidStatus = 0;
@@ -2438,7 +3177,7 @@
             while (Date.now() - startTime < MAX_DURATION) {
                 await new Promise(resolve => setTimeout(resolve, interval));
 
-                const result = await callRest(`/backend/proxy_run_status/${runId}`, 'GET');
+                const result = await callRest(`/backend/proxy_run_status/${currentRunId}`, 'GET');
                 const elapsedMs = Date.now() - startTime;
 
                 if (!result.ok) {
@@ -2448,7 +3187,7 @@
                         consecutivePollErrors += 1;
                         interval = computeBackoffDelay(elapsedMs);
                         setQueueStatus('queued');
-                        setQueueMessage(consecutivePollErrors >= 2 ? 'Connection issue while checking status. Retrying…' : 'Checking status…');
+                        setQueueMessage(consecutivePollErrors >= 2 ? 'Connection issue while checking status. RetryingÃ¢â‚¬Â¦' : 'Checking statusÃ¢â‚¬Â¦');
                         continue;
                     }
                     if (diagnostics && diagnostics.summary) return { success: false, error: diagnostics.summary };
@@ -2486,7 +3225,7 @@
                         // Defensive path: if backend returns failed but carries recoverable partial payload, render it.
                         if (result.data?.partial && (result.data?.result_url || result.data?.result || result.data?.analysis_summary)) {
                             debugLog('warn', 'AiVI: Recoverable partial payload returned with failed status; treating as success_partial', {
-                                runId: runId,
+                                runId: currentRunId,
                                 status: status,
                                 error: result.data?.error || null
                             });
@@ -2498,7 +3237,7 @@
                                 success: false,
                                 aborted: true,
                                 reason: result.data.analysis_summary.reason || result.data.error,
-                                message: result.data.analysis_summary.message || 'Analysis aborted — no partial results shown',
+                                message: result.data.analysis_summary.message || 'Analysis aborted Ã¢â‚¬â€ no partial results shown',
                                 traceId: result.data.analysis_summary.trace_id || result.data.trace_id
                             };
                         }
@@ -2509,6 +3248,19 @@
                             elapsedMs
                         );
                         return { success: false, error: friendlyError };
+
+                    case 'superseded': {
+                        const nextRunId = String(result.data?.superseded_by_run_id || '').trim();
+                        if (!nextRunId || nextRunId === currentRunId) {
+                            return { success: false, error: result.data?.message || 'A newer analysis run replaced this one.' };
+                        }
+                        currentRunId = nextRunId;
+                        interval = INITIAL_INTERVAL;
+                        setQueueStatus('queued');
+                        setAnalysisPhase('queued');
+                        setQueueMessage('Switching to the latest analysis runÃ¢â‚¬Â¦');
+                        break;
+                    }
 
                     case 'queued':
                         setQueueStatus('queued');
@@ -2558,6 +3310,7 @@
             setReport(data);
             setState('success');
             setAnalysisPhase('idle');
+            setAnalysisStartTime(null);
             setTimeout(() => setShowSuccessAnim(true), 100);
             staleEventRunRef.current = '';
             setIsStale(false);
@@ -2663,7 +3416,7 @@ th { background: #f8fafc; font-weight: 600; }
 </head>
 <body>
 <h1>AiVI Analysis Report</h1>
-<div class="meta">Run ID: ${escapeHtml(metadata.run_id)} • Completed: ${escapeHtml(metadata.completed_at || '')} • Generated: ${escapeHtml(metadata.generated_at || '')}</div>
+<div class="meta">Run ID: ${escapeHtml(metadata.run_id)} Ã¢â‚¬Â¢ Completed: ${escapeHtml(metadata.completed_at || '')} Ã¢â‚¬Â¢ Generated: ${escapeHtml(metadata.generated_at || '')}</div>
 <div class="summary">
 <div class="badge">Passed: ${counts.pass}</div>
 <div class="badge">Failed: ${counts.fail}</div>
@@ -2736,7 +3489,7 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                     setRawAnalysis(null);
                 }
             });
-        }, [showPassedChecks, rawAnalysis, report?.run_id, fetchRawAnalysis]);
+        }, [showPassedChecks, rawAnalysis, report?.run_id, report, fetchRawAnalysis]);
 
         async function exportAnalysisReport() {
             if (!report) return;
@@ -2798,11 +3551,9 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                 if (numeric > max && numeric <= 100) return Math.round((numeric / 100) * max);
                 return Math.round(Math.max(0, Math.min(max, numeric)));
             };
-            const aeoCandidate = scores.AEO ?? scores.aeo ?? scores?.global?.AEO?.score ?? scores?.categories?.AEO?.score;
-            const geoCandidate = scores.GEO ?? scores.geo ?? scores?.global?.GEO?.score ?? scores?.categories?.GEO?.score;
-            const globalCandidate = scores.GLOBAL ?? scores.global_score ?? scores?.global?.score;
-            const aeo = normalizeBounded(aeoCandidate, 55);
-            const geo = normalizeBounded(geoCandidate, 45);
+            const aeo = normalizeBounded(scores.AEO, 55);
+            const geo = normalizeBounded(scores.GEO, 45);
+            const globalCandidate = scores.GLOBAL;
             const global = globalCandidate === undefined || globalCandidate === null
                 ? Math.round(Math.max(0, Math.min(100, aeo + geo)))
                 : normalizeBounded(globalCandidate, 100);
@@ -2815,7 +3566,7 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
 
         // New Helper: Group ALL checks by Category (includes passed for toggle)
         // CRITICAL FIX: Support both analysis_summary.categories (Result Contract Lock)
-        // and legacy report.checks format for backward compatibility
+        // and older report.checks payloads for backward compatibility
         function getGroupedIssues(customReport, rawReport) {
             const targetReport = customReport || report;
             if (!targetReport) return { groups: {}, allIssues: [], issueCount: 0 };
@@ -2827,6 +3578,22 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                 const groups = {};
                 const allIssues = [];
                 let issueCount = 0;
+                const rawChecksPayload = rawReport && (rawReport.result?.checks || rawReport.checks);
+                const summaryRunId = String(targetReport.run_id || targetReport.analysis_summary?.run_id || '');
+                const rawRunId = rawReport ? String(rawReport.run_id || rawReport.result?.run_id || '') : '';
+                const hasRunAlignedRaw = !!summaryRunId && !!rawRunId && summaryRunId === rawRunId;
+                const rawCheckIndex = new Map();
+
+                if (hasRunAlignedRaw && rawChecksPayload) {
+                    const rawChecksArray = Array.isArray(rawChecksPayload)
+                        ? rawChecksPayload
+                        : Object.entries(rawChecksPayload).map(([key, val]) => ({ ...val, id: key }));
+                    rawChecksArray.forEach((rawCheck) => {
+                        const safeId = String(rawCheck && (rawCheck.id || rawCheck.check_id) || '').trim();
+                        if (!safeId || rawCheckIndex.has(safeId)) return;
+                        rawCheckIndex.set(safeId, rawCheck);
+                    });
+                }
 
                 categories.forEach(cat => {
                     const categoryName = cat.name || cat.id || 'General';
@@ -2836,18 +3603,25 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                     issues.forEach(issue => {
                         const actionable = !!issue.first_instance_node_ref;
                         const resolvedVerdict = (issue.ui_verdict === 'pass' || issue.verdict === 'pass') ? 'pass' : (issue.ui_verdict || 'fail');
+                        const issueCheckId = issue.check_id || issue.id || 'unknown';
+                        const rawCheck = rawCheckIndex.get(issueCheckId);
                         const mappedIssue = {
-                            id: issue.check_id || issue.id || 'unknown',
-                            check_id: issue.check_id || issue.id || 'unknown',
-                            detail_ref: issue.detail_ref || ((issue.check_id || issue.id) ? `check:${issue.check_id || issue.id}` : null),
-                            name: issue.name || issue.check_id || 'Unknown Check',
-                            title: issue.name || issue.check_id || 'Unknown Check',
+                            id: issueCheckId,
+                            check_id: issueCheckId,
+                            detail_ref: issue.detail_ref || (issueCheckId ? `check:${issueCheckId}` : null),
+                            name: issue.name || issueCheckId || 'Unknown Check',
+                            title: issue.name || issueCheckId || 'Unknown Check',
                             category: categoryName,
                             verdict: resolvedVerdict,
                             ui_verdict: resolvedVerdict,
                             instances: issue.instances || 1,
                             first_instance_node_ref: issue.first_instance_node_ref || null,
+                            message: issue.review_summary || '',
+                            review_summary: issue.review_summary || '',
+                            issue_explanation: issue.issue_explanation || '',
                             actionable: actionable,
+                            severity: normalizeIssuePriorityToken(issue.severity || issue.impact || (rawCheck && (rawCheck.severity || rawCheck.impact || rawCheck.priority || rawCheck.importance))) || '',
+                            impact: normalizeIssuePriorityToken(issue.impact || (rawCheck && (rawCheck.impact || rawCheck.severity || rawCheck.priority || rawCheck.importance))) || '',
                             highlights: []
                         };
                         groups[categoryName].push(mappedIssue);
@@ -2859,11 +3633,6 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                         }
                     });
                 });
-
-                const rawChecksPayload = rawReport && (rawReport.result?.checks || rawReport.checks);
-                const summaryRunId = String(targetReport.run_id || targetReport.analysis_summary?.run_id || '');
-                const rawRunId = rawReport ? String(rawReport.run_id || rawReport.result?.run_id || '') : '';
-                const hasRunAlignedRaw = !!summaryRunId && !!rawRunId && summaryRunId === rawRunId;
                 if (showPassedChecks && rawChecksPayload && hasRunAlignedRaw) {
                     const existingIds = new Set(allIssues.map(issue => issue.check_id));
                     const rawChecksArray = Array.isArray(rawChecksPayload)
@@ -2912,7 +3681,7 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
             // LEGACY FALLBACK: Use report.checks if analysis_summary not available
             if (!targetReport.checks) return { groups: {}, allIssues: [], issueCount: 0 };
 
-            // Phase 5 fix: Preserve Keys as IDs (Sonnet output schema doesn't embed ID in value)
+            // Preserve object keys as IDs when report.checks is keyed by check ID
             const checksArray = Array.isArray(targetReport.checks)
                 ? targetReport.checks
                 : Object.entries(targetReport.checks).map(([key, val]) => ({ ...val, id: key }));
@@ -2931,7 +3700,7 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                 if (c.passed === false && !c.verdict) verdict = 'fail';
                 if (c.status === 'fail' || c.status === 'critical') verdict = 'fail';
 
-                let explanation = c.message || c.explanation || 'Issue detected';
+                let explanation = c.review_summary || c.message || c.explanation || 'Issue detected';
                 if (c.issues && Array.isArray(c.issues) && c.issues.length > 0) explanation = c.issues[0];
 
                 // Determine Category (Fallback to 'General' if missing)
@@ -2954,6 +3723,7 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                     name: title,
                     title: title,
                     explanation: explanation,
+                    review_summary: c.review_summary || '',
                     severity: severity,
                     category: category,
                     verdict: verdict,
@@ -3003,9 +3773,19 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
         // Render
         return createElement(PluginSidebar, { name: 'aivi-sidebar', title: 'AiVI Inspector' },
             createElement(PanelBody, { title: 'Content Analysis', initialOpen: true },
-                state !== 'analyzing' && createElement(AccountStatusCard, {
+                (state === 'idle' || state === 'error' || state === 'aborted') && createElement(AccountStatusCard, {
                     summary: accountStatusSummary,
-                    compact: state === 'success'
+                    compact: state === 'success',
+                    webLookupToggleBusy: webLookupToggleBusy,
+                    onToggleWebLookups: async function (nextEnabled) {
+                        setWebLookupToggleBusy(true);
+                        try {
+                            const enabled = await updateWebLookupsSetting(nextEnabled);
+                            setWebLookupsEnabledLive(enabled);
+                        } finally {
+                            setWebLookupToggleBusy(false);
+                        }
+                    }
                 }),
 
                 // IDLE STATE
@@ -3071,7 +3851,7 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                     }),
                     createElement('div', {
                         style: { fontWeight: 600, fontSize: 14, color: COLORS.highText, marginBottom: 8 }
-                    }, 'Analysis aborted — no partial results shown'),
+                    }, 'Analysis aborted Ã¢â‚¬â€ no partial results shown'),
                     createElement('div', {
                         style: { fontSize: 12, color: COLORS.subtext, marginBottom: 12 }
                     }, 'The analysis could not be completed. No partial data is shown.'),
@@ -3106,7 +3886,7 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                         }),
                         createElement('span', {
                             style: { fontWeight: 500, fontSize: 13, color: COLORS.mediumText }
-                        }, 'Analysis results stale — please re-run analysis'),
+                        }, 'Analysis results stale Ã¢â‚¬â€ please re-run analysis'),
                         createElement(Button, {
                             isSecondary: true,
                             isSmall: true,
@@ -3130,11 +3910,6 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                     createElement('div', { style: { marginBottom: 16 } },
                         createElement(Button, { isPrimary: true, onClick: openOverlayEditor, style: { width: '100%', justifyContent: 'center', height: 40 } }, 'Edit in AiVI')
                     ),
-                    createElement('div', { style: { marginBottom: 16, display: 'flex', gap: 8 } },
-                        createElement(Button, { isSecondary: true, isSmall: true, onClick: exportAnalysisReport }, 'Export Report (PDF)'),
-                        createElement(Button, { isTertiary: true, isSmall: true, onClick: downloadRawVerdicts }, 'Raw Verdicts (Debug)')
-                    ),
-
                     // Render Grouped Issues via Accordions
                     hasIssues && createElement('div', { style: { marginBottom: 16 } },
                         Object.entries(groupedIssues).map(([category, issues]) =>
@@ -3148,35 +3923,6 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
                                 isStaleBanner: isStaleBanner
                             })
                         )
-                    ),
-
-                    // Advanced Toggle: "Show passed checks" (power-user, de-emphasized)
-                    createElement('div', {
-                        style: {
-                            marginBottom: 16,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 8,
-                            paddingTop: 8,
-                            borderTop: '1px solid ' + COLORS.cardBorder
-                        }
-                    },
-                        createElement('input', {
-                            type: 'checkbox',
-                            id: 'aivi-show-passed',
-                            checked: showPassedChecks,
-                            onChange: (e) => setShowPassedChecks(e.target.checked),
-                            style: { margin: 0, cursor: 'pointer' }
-                        }),
-                        createElement('label', {
-                            htmlFor: 'aivi-show-passed',
-                            style: {
-                                fontSize: 12,
-                                color: COLORS.muted,
-                                cursor: 'pointer',
-                                fontWeight: 400
-                            }
-                        }, 'Show passed checks')
                     ),
 
                     // No issues found message
@@ -3208,8 +3954,6 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
         );
     }
 
-    runAutoAnalysisOnLoad();
-
     // ============================================
     // PLUGIN REGISTRATION
     // ============================================
@@ -3238,3 +3982,4 @@ ${rows || '<tr><td colspan="5">No raw checks available.</td></tr>'}
     }
 
 })(window.wp, window.AIVI_CONFIG || {});
+

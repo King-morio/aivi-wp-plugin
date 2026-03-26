@@ -13,7 +13,7 @@ describe('rewrite-target-resolver', () => {
 
     test('resolves orphan heading to supporting content range', () => {
         const checkDetails = {
-            check_id: 'orphan_headings',
+            check_id: 'heading_topic_fulfillment',
             name: 'Orphan Headings',
             explanation: 'Heading lacks semantic support.',
             candidate_highlights: [
@@ -37,7 +37,7 @@ describe('rewrite-target-resolver', () => {
         };
 
         const resolved = resolveRewriteTarget({
-            checkId: 'orphan_headings',
+            checkId: 'heading_topic_fulfillment',
             checkDetails,
             manifest,
             instanceIndex: 0

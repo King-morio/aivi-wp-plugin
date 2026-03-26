@@ -107,6 +107,18 @@ const createSuperAdminAuditStore = ({ ddbDoc = defaultDdbDoc, env = process.env 
             return sortByUpdatedAtDesc(items)
                 .filter((item) => sanitizeString(item.account_id) === sanitizeString(accountId))
                 .slice(0, Math.max(1, Math.trunc(limit)));
+        },
+
+        async listRecentAuditEvents({ limit = 10, action = '', status = '' } = {}) {
+            const response = await ddbDoc.send(new ScanCommand({
+                TableName: tableName,
+                Limit: Math.max(Number(limit || 10) * 4, 25)
+            }));
+            const items = Array.isArray(response?.Items) ? response.Items : [];
+            return sortByUpdatedAtDesc(items)
+                .filter((item) => !sanitizeString(action) || sanitizeString(item.action) === sanitizeString(action))
+                .filter((item) => !sanitizeString(status) || sanitizeString(item.status) === sanitizeString(status))
+                .slice(0, Math.max(1, Math.trunc(Number(limit) || 10)));
         }
     };
 };

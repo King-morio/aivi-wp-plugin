@@ -2,6 +2,7 @@ const mockDdbDoc = { send: jest.fn() };
 const mockS3 = { send: jest.fn() };
 const mockSqs = { send: jest.fn() };
 const mockSecrets = { send: jest.fn() };
+const mockLambda = { send: jest.fn() };
 
 jest.mock('@aws-sdk/client-dynamodb', () => ({
   DynamoDBClient: jest.fn()
@@ -22,15 +23,16 @@ jest.mock('@aws-sdk/client-s3', () => ({
 }), { virtual: true });
 jest.mock('@aws-sdk/client-sqs', () => ({
   SQSClient: jest.fn(() => mockSqs),
-  SendMessageCommand: jest.fn()
+  SendMessageCommand: jest.fn(function mockSendMessageCommand(input) { this.input = input; }),
+  GetQueueAttributesCommand: jest.fn(function mockGetQueueAttributesCommand(input) { this.input = input; })
 }), { virtual: true });
 jest.mock('@aws-sdk/client-secrets-manager', () => ({
   SecretsManagerClient: jest.fn(() => mockSecrets),
   GetSecretValueCommand: jest.fn()
 }), { virtual: true });
 jest.mock('@aws-sdk/client-lambda', () => ({
-  LambdaClient: jest.fn(() => ({ send: jest.fn() })),
-  ListEventSourceMappingsCommand: jest.fn()
+  LambdaClient: jest.fn(() => mockLambda),
+  ListEventSourceMappingsCommand: jest.fn(function mockListEventSourceMappingsCommand(input) { this.input = input; })
 }), { virtual: true });
 jest.mock('./super-admin-mutation-handler', () => ({
   superAdminMutationHandler: jest.fn(async () => ({
@@ -77,11 +79,32 @@ jest.mock('./account-connect-handler', () => ({
     })
   }))
 }));
+jest.mock('./account-onboarding-handler', () => ({
+  accountBootstrapHandler: jest.fn(async () => ({
+    statusCode: 200,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ok: true,
+      message: 'AiVI account is ready for this site.',
+      account_state: { account_id: 'acct_site_123', connection_status: 'connected' }
+    })
+  })),
+  accountStartTrialHandler: jest.fn(async () => ({
+    statusCode: 200,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ok: true,
+      message: 'Free trial started. Analysis is now enabled for this site.',
+      account_state: { account_id: 'acct_site_123', plan_code: 'free_trial', trial_status: 'active' }
+    })
+  }))
+}));
 
 const { handler } = require('./index');
 const { superAdminMutationHandler } = require('./super-admin-mutation-handler');
 const { superAdminDiagnosticsHandler } = require('./super-admin-diagnostics-handler');
 const { accountConnectHandler, accountDisconnectHandler } = require('./account-connect-handler');
+const { accountBootstrapHandler, accountStartTrialHandler } = require('./account-onboarding-handler');
 
 describe('Orchestrator Lambda', () => {
   const mockEvent = {
@@ -112,6 +135,7 @@ describe('Orchestrator Lambda', () => {
     process.env.SECRET_NAME = 'AVI_CLAUDE_API_KEY';
     process.env.ENABLE_ANALYSIS = 'false';
     process.env.AIVI_ADMIN_BOOTSTRAP_TOKEN = 'bootstrap-test-token';
+    process.env.ALLOW_UNBOUND_ANALYSIS = 'false';
 
     // Clear console.log mocks
     jest.clearAllMocks();
@@ -122,6 +146,7 @@ describe('Orchestrator Lambda', () => {
     mockDdbDoc.send.mockResolvedValue({});
     mockS3.send.mockResolvedValue({});
     mockSqs.send.mockResolvedValue({});
+    mockLambda.send.mockResolvedValue({});
     mockSecrets.send.mockResolvedValue({ SecretString: JSON.stringify({ ANTHROPIC_API_KEY: 'test' }) });
   });
 
@@ -143,6 +168,85 @@ describe('Orchestrator Lambda', () => {
       });
       expect(body.timestamp).toBeDefined();
       expect(body.environment).toBe('test'); // Explicit check
+    });
+  });
+
+  describe('Worker Health Handler', () => {
+    test('requests only valid SQS attributes and reports enabled mapping health', async () => {
+      mockSqs.send.mockResolvedValue({
+        Attributes: {
+          ApproximateNumberOfMessages: '0',
+          ApproximateNumberOfMessagesNotVisible: '0',
+          QueueArn: 'arn:aws:sqs:eu-north-1:123456789:test-queue'
+        }
+      });
+      mockLambda.send.mockResolvedValue({
+        EventSourceMappings: [
+          {
+            UUID: 'mapping-123',
+            State: 'Enabled',
+            StateTransitionReason: 'USER_INITIATED',
+            LastModified: '2026-03-16T00:19:39.000Z'
+          }
+        ]
+      });
+
+      const response = await handler({
+        requestContext: {
+          requestId: 'test-request-id',
+          http: {
+            method: 'GET',
+            path: '/aivi/v1/worker/health'
+          }
+        },
+        routeKey: 'GET /aivi/v1/worker/health'
+      }, mockContext);
+
+      const body = JSON.parse(response.body);
+
+      expect(response.statusCode).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(body.mapping.state).toBe('Enabled');
+      expect(mockSqs.send).toHaveBeenCalledTimes(1);
+      expect(mockSqs.send.mock.calls[0][0].input.AttributeNames).toEqual([
+        'ApproximateNumberOfMessages',
+        'ApproximateNumberOfMessagesNotVisible',
+        'QueueArn'
+      ]);
+    });
+
+    test('treats missing ListEventSourceMappings permission as non-fatal health metadata drift', async () => {
+      mockSqs.send.mockResolvedValue({
+        Attributes: {
+          ApproximateNumberOfMessages: '0',
+          ApproximateNumberOfMessagesNotVisible: '0',
+          QueueArn: 'arn:aws:sqs:eu-north-1:123456789:test-queue'
+        }
+      });
+      mockLambda.send.mockRejectedValue(new Error(
+        'User is not authorized to perform: lambda:ListEventSourceMappings on resource: *'
+      ));
+
+      const response = await handler({
+        requestContext: {
+          requestId: 'test-request-id',
+          http: {
+            method: 'GET',
+            path: '/aivi/v1/worker/health'
+          }
+        },
+        routeKey: 'GET /aivi/v1/worker/health'
+      }, mockContext);
+
+      const body = JSON.parse(response.body);
+
+      expect(response.statusCode).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(body.error).toBeNull();
+      expect(body.mapping).toMatchObject({
+        state: 'Unknown',
+        stateTransitionReason: 'permission_denied'
+      });
     });
   });
 
@@ -229,6 +333,46 @@ describe('Orchestrator Lambda', () => {
       expect(accountDisconnectHandler).toHaveBeenCalled();
       expect(response.statusCode).toBe(200);
     });
+
+    test('should route account bootstrap requests through the onboarding handler', async () => {
+      const response = await handler({
+        requestContext: {
+          requestId: 'test-request-id',
+          http: {
+            method: 'POST',
+            path: '/aivi/v1/account/bootstrap'
+          }
+        },
+        routeKey: 'ANY /{proxy+}',
+        rawPath: '/aivi/v1/account/bootstrap',
+        body: JSON.stringify({
+          site: { site_id: 'site_123', home_url: 'https://example.com/' }
+        })
+      }, mockContext);
+
+      expect(accountBootstrapHandler).toHaveBeenCalled();
+      expect(response.statusCode).toBe(200);
+    });
+
+    test('should route account start-trial requests through the onboarding handler', async () => {
+      const response = await handler({
+        requestContext: {
+          requestId: 'test-request-id',
+          http: {
+            method: 'POST',
+            path: '/aivi/v1/account/start-trial'
+          }
+        },
+        routeKey: 'ANY /{proxy+}',
+        rawPath: '/aivi/v1/account/start-trial',
+        body: JSON.stringify({
+          site: { site_id: 'site_123', home_url: 'https://example.com/' }
+        })
+      }, mockContext);
+
+      expect(accountStartTrialHandler).toHaveBeenCalled();
+      expect(response.statusCode).toBe(200);
+    });
   });
 
   describe('Billing Checkout Handler', () => {
@@ -245,7 +389,7 @@ describe('Orchestrator Lambda', () => {
         body: JSON.stringify({
           plan_code: 'starter',
           account: { account_id: 'acct_123' },
-          site: { site_id: 'site_123' }
+          site: { site_id: 'site_123', home_url: 'https://example.com/' }
         })
       }, mockContext);
 
@@ -268,7 +412,7 @@ describe('Orchestrator Lambda', () => {
         body: JSON.stringify({
           plan_code: 'starter',
           account: { account_id: 'acct_123' },
-          site: { site_id: 'site_123' }
+          site: { site_id: 'site_123', home_url: 'https://example.com/' }
         })
       }, mockContext);
 
@@ -401,6 +545,105 @@ describe('Orchestrator Lambda', () => {
           total_remaining: 145000
         }
       });
+    });
+
+    test('should route admin financial overview requests through the super-admin read handler', async () => {
+      mockDdbDoc.send
+        .mockResolvedValueOnce({
+          Items: [
+            {
+              account_id: 'acct_paid_1',
+              account_label: 'Lawyer Demo',
+              plan_code: 'growth',
+              plan_name: 'Growth',
+              subscription_status: 'active',
+              trial_status: 'none',
+              trial_expires_at: null,
+              credits: {
+                total_remaining: 120000,
+                monthly_included: 100000
+              },
+              updated_at: '2026-03-16T12:00:00.000Z'
+            },
+            {
+              account_id: 'acct_trial_1',
+              account_label: 'Trial Demo',
+              plan_code: 'free_trial',
+              subscription_status: '',
+              trial_status: 'active',
+              trial_expires_at: '2026-03-17T12:00:00.000Z',
+              credits: {
+                total_remaining: 5000,
+                monthly_included: 5000
+              },
+              updated_at: '2026-03-16T11:00:00.000Z'
+            }
+          ]
+        })
+        .mockResolvedValueOnce({
+          Items: [
+            {
+              subscription_id: 'sub_1',
+              account_id: 'acct_paid_1',
+              status: 'error',
+              last_payment_status: 'failed',
+              last_event_type: 'BILLING.SUBSCRIPTION.PAYMENT.FAILED',
+              updated_at: '2026-03-16T12:30:00.000Z'
+            }
+          ]
+        })
+        .mockResolvedValueOnce({
+          Items: [
+            {
+              order_id: 'topup_1',
+              account_id: 'acct_paid_1',
+              pack_code: 'topup_25k',
+              credits: 25000,
+              status: 'credited',
+              updated_at: '2026-03-15T12:00:00.000Z'
+            }
+          ]
+        })
+        .mockResolvedValueOnce({
+          Items: [
+            {
+              intent_id: 'intent_1',
+              intent_type: 'subscription',
+              intent_variant: 'intro_offer',
+              account_id: 'acct_paid_1',
+              plan_code: 'growth',
+              price_usd: 11,
+              status: 'active',
+              updated_at: '2026-03-16T10:00:00.000Z'
+            }
+          ]
+        });
+
+      const response = await handler({
+        requestContext: {
+          requestId: 'test-request-id',
+          http: {
+            method: 'GET',
+            path: '/aivi/v1/admin/financials/overview'
+          }
+        },
+        routeKey: 'GET /aivi/v1/admin/financials/overview',
+        headers: {
+          'x-aivi-admin-token': 'bootstrap-test-token'
+        }
+      }, mockContext);
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.ok).toBe(true);
+      expect(body.item).toEqual(expect.objectContaining({
+        currency: 'USD',
+        snapshot: expect.any(Object),
+        projected_recurring: expect.any(Object),
+        observed_checkout_revenue: expect.any(Object),
+        watchlist: expect.any(Object)
+      }));
+      expect(mockDdbDoc.send).toHaveBeenCalled();
     });
   });
 
@@ -536,6 +779,7 @@ describe('Orchestrator Lambda', () => {
     };
 
     test('should return 202 for queued analysis requests', async () => {
+      process.env.ALLOW_UNBOUND_ANALYSIS = 'true';
       const response = await handler(mockAnalyzeEvent, mockContext);
 
       expect(response.statusCode).toBe(202);

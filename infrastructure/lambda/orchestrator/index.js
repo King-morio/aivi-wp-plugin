@@ -23,12 +23,14 @@ const { applySuggestionHandler, getSuggestionHistoryHandler } = require('./apply
 const { analyzeRunAsyncHandler } = require('./analyze-run-async-handler');
 const { runStatusHandler } = require('./run-status-handler');
 const { accountConnectHandler, accountDisconnectHandler } = require('./account-connect-handler');
+const { accountBootstrapHandler, accountStartTrialHandler } = require('./account-onboarding-handler');
 const { accountSummaryHandler } = require('./account-summary-handler');
 const { billingCheckoutHandler } = require('./billing-checkout-handler');
 const { paypalWebhookHandler } = require('./paypal-webhook-handler');
 const { superAdminReadHandler } = require('./super-admin-read-handler');
 const { superAdminMutationHandler } = require('./super-admin-mutation-handler');
 const { superAdminDiagnosticsHandler } = require('./super-admin-diagnostics-handler');
+const { buildArticlePointerRunId, getRunArticleKey, getSupersedingRunId } = require('./run-supersession');
 
 // Import Result Contract Lock components
 const { analysisDetailsHandler, validateSessionToken } = require('./analysis-details-handler');
@@ -268,8 +270,8 @@ const rawAnalysisHandler = async (event) => {
       body: JSON.stringify({ ok: false, error: 'missing_run_id' })
     };
   }
-  const token = event.queryStringParameters?.token || event.headers?.['x-aivi-token'];
-  try {
+    const token = event.queryStringParameters?.token || event.headers?.['x-aivi-token'];
+    try {
     const getRun = new GetCommand({
       TableName: getEnv('RUNS_TABLE'),
       Key: { run_id: runId }
@@ -290,6 +292,29 @@ const rawAnalysisHandler = async (event) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ok: false, error: 'unauthorized' })
       };
+    }
+    const articleKey = getRunArticleKey(run);
+    if (articleKey) {
+      const pointerRunId = buildArticlePointerRunId(articleKey);
+      if (pointerRunId) {
+        const pointerResponse = await ddbDoc.send(new GetCommand({
+          TableName: getEnv('RUNS_TABLE'),
+          Key: { run_id: pointerRunId }
+        }));
+        const latestPointer = pointerResponse.Item || null;
+        const supersedingRunId = getSupersedingRunId(run, latestPointer || {});
+        if (supersedingRunId) {
+          return {
+            statusCode: 410,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ok: false,
+              error: 'results_superseded',
+              superseded_by_run_id: supersedingRunId
+            })
+          };
+        }
+      }
     }
     const aborted = ['failed', 'failed_schema', 'failed_too_long', 'aborted'].includes(run.status);
     if (aborted) {
@@ -375,7 +400,6 @@ const workerHealthHandler = async () => {
       AttributeNames: [
         'ApproximateNumberOfMessages',
         'ApproximateNumberOfMessagesNotVisible',
-        'ApproximateAgeOfOldestMessage',
         'QueueArn'
       ]
     }));
@@ -406,8 +430,23 @@ const workerHealthHandler = async () => {
       ok = ok && mappingInfo.state === 'Enabled';
     }
   } catch (err) {
-    ok = false;
-    error = error || err.message;
+    const message = String(err?.message || '');
+    if (
+      queueAttributes
+      && queueAttributes.QueueArn
+      && /not authorized/i.test(message)
+      && /lambda:ListEventSourceMappings/i.test(message)
+    ) {
+      mappingInfo = {
+        uuid: null,
+        state: 'Unknown',
+        stateTransitionReason: 'permission_denied',
+        lastModified: null
+      };
+    } else {
+      ok = false;
+      error = error || message;
+    }
   }
 
   return {
@@ -774,8 +813,17 @@ exports.handler = async (event, context) => {
         response = await accountDisconnectHandler(event);
         break;
 
+      case 'POST /aivi/v1/account/bootstrap':
+        response = await accountBootstrapHandler(event);
+        break;
+
+      case 'POST /aivi/v1/account/start-trial':
+        response = await accountStartTrialHandler(event);
+        break;
+
       case 'GET /aivi/v1/admin/accounts':
       case 'GET /aivi/v1/admin/accounts/{account_id}':
+      case 'GET /aivi/v1/admin/financials/overview':
         response = await superAdminReadHandler(event);
         break;
 

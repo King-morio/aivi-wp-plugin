@@ -1,71 +1,19 @@
 {
-    "version": "1.4.3",
-    "last_updated": "2026-02-23",
-    "description": "51 checks total: 34 semantic + 17 deterministic; deterministic checks run in preflight",
-    "total_checks": 51,
+    "version": "1.5.0",
+    "last_updated": "2026-03-23",
+    "description": "54 checks total; deterministic intro checks run in preflight while intro factual grounding is semantic and schema coverage includes article and ItemList structure",
+    "total_checks": 54,
     "categories": {
         "intro_focus_factuality": {
             "name": "Intro Focus & Factuality (AEO)",
             "description": "Intro focus clarity, readability, and factual support signals",
             "checks": {
-                "intro_focus_and_factuality.v1": {
-                    "id": "intro_focus_and_factuality.v1",
-                    "name": "Intro Focus & Factuality Composite",
-                    "type": "hybrid",
-                    "description": "Weighted composite score across intro focus and factuality subchecks.",
-                    "evaluation": "Compute composite_score using weighted subscores. Verdict: pass >= 0.9, partial 0.7-0.899, fail < 0.7.",
-                    "output": {
-                        "verdict": "pass|partial|fail",
-                        "confidence": "number",
-                        "score": "0-1",
-                        "explanation": "string",
-                        "highlights": [
-                            {
-                                "node_ref": "string",
-                                "start": 0,
-                                "end": 0
-                            }
-                        ],
-                        "suggestions": [
-                            {
-                                "text": "string"
-                            }
-                        ]
-                    },
-                    "thresholds": "Composite score-based"
-                },
-                "intro_first_sentence_topic": {
-                    "id": "intro_first_sentence_topic",
-                    "name": "Intro First Sentence Topic",
-                    "type": "semantic",
-                    "description": "First sentence matches canonical focus token.",
-                    "evaluation": "Stem-match or synonym match against canonical focus token.",
-                    "output": {
-                        "verdict": "pass|partial|fail",
-                        "confidence": "number",
-                        "score": "0-1",
-                        "explanation": "string",
-                        "highlights": [
-                            {
-                                "node_ref": "string",
-                                "start": 0,
-                                "end": 0
-                            }
-                        ],
-                        "suggestions": [
-                            {
-                                "text": "string"
-                            }
-                        ]
-                    },
-                    "thresholds": "Pass if focus token matches first sentence topic"
-                },
                 "intro_wordcount": {
                     "id": "intro_wordcount",
                     "name": "Intro Word Count",
                     "type": "hybrid",
                     "description": "Intro word count bucket for optimal snippet length.",
-                    "evaluation": "Count intro words. Buckets: 40–60 optimal, 61–120 acceptable, >120 too_long, <10 too_short.",
+                    "evaluation": "Count intro words. Buckets: 40-150 optimal, 20-39 or 151-200 acceptable, >200 too_long, <20 too_short.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "confidence": "number",
@@ -92,7 +40,7 @@
                             }
                         ]
                     },
-                    "thresholds": "Optimal 40–60 words"
+                    "thresholds": "Optimal 40â€“60 words"
                 },
                 "intro_readability": {
                     "id": "intro_readability",
@@ -130,26 +78,18 @@
                             }
                         ]
                     },
-                    "thresholds": "Prefer ≤22 words, passive ≤20%, Flesch ≥50"
+                    "thresholds": "Prefer â‰¤22 words, passive â‰¤20%, Flesch â‰¥50"
                 },
                 "intro_factual_entities": {
                     "id": "intro_factual_entities",
                     "name": "Intro Factual Entities",
-                    "type": "hybrid",
-                    "description": "Factual spans and supporting links within first 3 paragraphs.",
-                    "evaluation": "Detect factual spans (years, percentages, numbers, statistical phrases). Penalize unsupported spans.",
+                    "type": "semantic",
+                    "description": "Whether the intro grounds its opening claim with concrete, trustworthy factual detail.",
+                    "evaluation": "Use semantic judgment to decide whether the opening includes concrete facts, dates, metrics, named sources, or entities that genuinely support the opening claim and improve citation trust.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "confidence": "number",
                         "score": "0-1",
-                        "spans": {
-                            "value": "array",
-                            "deterministic_only": true
-                        },
-                        "unsupported_count": {
-                            "value": "number",
-                            "deterministic_only": true
-                        },
                         "explanation": "string",
                         "highlights": [
                             {
@@ -164,7 +104,7 @@
                             }
                         ]
                     },
-                    "thresholds": "Fail if unsupported factual spans exceed threshold"
+                    "thresholds": "Semantic grounding and citation-trust judgment"
                 },
                 "intro_schema_suggestion": {
                     "id": "intro_schema_suggestion",
@@ -202,12 +142,12 @@
             "name": "Answer Extractability (AEO)",
             "description": "Measures how easily LLM-based answer engines can extract direct answers",
             "checks": {
-                "direct_answer_first_120": {
-                    "id": "direct_answer_first_120",
-                    "name": "Direct Answer in First 120 Words",
+                "immediate_answer_placement": {
+                    "id": "immediate_answer_placement",
+                    "name": "Immediate Answer Placement",
                     "type": "semantic",
-                    "description": "Direct answer must appear within first 120 words after a strict question anchor (explicit question heading/sentence).",
-                    "evaluation": "Use only strict question anchors (ends with '?' or starts with interrogative + auxiliary verb). Do not treat topical headings like 'Speed Optimization' or 'How to ...' as question anchors. If no strict question anchor exists, return pass with explanation.",
+                    "description": "Checks whether the first answer segment gives a direct, query-matching answer within 120 words after a strict question anchor.",
+                    "evaluation": "Use only strict question anchors from explicit user-facing questions. Identify the first segment that directly answers the anchored question, not setup, caveats, or broad topical framing. Count words from the end of the selected question anchor to the start of that direct answer, and ignore prose that appears before the selected anchor. Do not treat topical headings or generic theme statements as question anchors. If no strict question anchor exists, return partial.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "highlights": [
@@ -218,14 +158,14 @@
                             }
                         ]
                     },
-                    "thresholds": "Pass if answer appears within first 120 words, Partial if 121-150 words, Fail if >150 words."
+                    "thresholds": "Pass if the direct answer begins within 120 words. Partial if it begins at 121-150 words. Fail if it begins after 150 words or if the section stays contextual without reaching a direct answer."
                 },
                 "answer_sentence_concise": {
                     "id": "answer_sentence_concise",
                     "name": "Answer Snippet Concise",
                     "type": "semantic",
-                    "description": "For strict question anchors, the primary answer snippet (1-3 sentences) should be 40-60 words.",
-                    "evaluation": "Count words in the first answer segment tied to a strict question anchor; ignore secondary explanations. If no strict question anchor exists, return pass with explanation.",
+                    "description": "Checks whether the primary answer snippet is short enough to quote and reuse while still containing a complete answer.",
+                    "evaluation": "Evaluate the first self-contained answer snippet tied to a strict question anchor. Count only the primary answer snippet, not the full paragraph or later supporting detail. Judge brevity and standalone completeness only; do not use missing evidence, sourcing, or claim verification as the reason for this check. A reusable answer snippet may span one to three short sentences. Do not fail a complete answer only because it slightly misses the ideal band; use partial for near-range misses. If no strict question anchor exists, return partial. If the verdict is pass, leave the explanation empty instead of justifying the pass.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "first_sentence_word_count": "number",
@@ -237,14 +177,14 @@
                             }
                         ]
                     },
-                    "thresholds": "Pass: 40-60 words, Partial: 30-39 or 61-80 words, Fail: otherwise."
+                    "thresholds": "Pass at 40-60 words total. Partial at 30-39 or 61-80 words when the answer is still complete and self-contained. One to three short sentences are acceptable if the snippet stays within range. Fail when the answer is fragmentary, overloaded, under 30 words, or over 80 words."
                 },
                 "question_answer_alignment": {
                     "id": "question_answer_alignment",
                     "name": "Question-Answer Alignment",
                     "type": "semantic",
-                    "description": "Answer must semantically address an explicit question anchor.",
-                    "evaluation": "Evaluate semantic similarity only between strict question anchors and their answer segments. If no strict question anchor exists, return pass with explanation.",
+                    "description": "Checks whether the first answer segment directly resolves the anchored question, not just the surrounding topic.",
+                    "evaluation": "Compare the strict question anchor to the first answer segment. Pass only when the answer clearly resolves the same question, scope, and time frame. Return partial when the answer is topically related but indirect, incomplete, or mixed with a different claim. Return fail when the answer shifts topic, answers a different question, or leaves the anchored question unresolved. If no strict question anchor exists, return partial. If the verdict is pass, leave the explanation empty instead of justifying the pass.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "alignment_score": "0-1",
@@ -256,14 +196,14 @@
                             }
                         ]
                     },
-                    "thresholds": "Pass if score >= 0.75"
+                    "thresholds": "Pass when the answer explicitly resolves the anchored question. Partial when it is related but indirect or incomplete. Fail when it is misaligned, off-scope, or effectively answers a different question."
                 },
                 "clear_answer_formatting": {
                     "id": "clear_answer_formatting",
                     "name": "Clear Answer Formatting",
                     "type": "semantic",
-                    "description": "Checks whether answer formatting is clear for strict question-anchored responses.",
-                    "evaluation": "Assess answer structure only when a strict question anchor exists (steps for how-to questions, bullets for listable question answers). If no strict question anchor exists, return pass with explanation.",
+                    "description": "Checks whether the answer is easy to scan in the form the question actually calls for.",
+                    "evaluation": "Assess the first answer segment tied to a strict question anchor. A simple factual question can pass with one or two clear sentences, compact bullets, or short labeled lines when the answer is already easy to extract. Use bullets, steps, or visibly separated sub-points only when the question is procedural, listable, comparative, or multi-part. Return partial when the answer is understandable but dense. Return fail when the main answer is buried in one long block or mixed with setup so extraction becomes difficult. If no strict question anchor exists, return partial. If the verdict is pass, leave the explanation empty instead of justifying the pass.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "recommended_format": "string",
@@ -275,21 +215,21 @@
                             }
                         ]
                     },
-                    "thresholds": "Advisory"
+                    "thresholds": "Pass when the answer format matches the question shape and the main point stands alone clearly. Partial when the answer is readable but denser than ideal. Fail when formatting obscures the main answer or merges multiple answer parts into one dense block."
                 },
                 "faq_structure_opportunity": {
                     "id": "faq_structure_opportunity",
                     "name": "FAQ Structure Opportunity",
                     "type": "semantic",
-                    "description": "Detects 3+ strict Q&A pairs that could be converted to FAQ schema.",
-                    "evaluation": "Scan for strict question anchors and associated answer text; suggest FAQ pairs for schema. Do not infer Q&A from topical headings. If no strict question anchors exist, return pass with explanation.",
+                    "description": "Checks whether a section visibly answers repeated user questions and, if so, whether those answers are separated into reusable FAQ pairs.",
+                    "evaluation": "Use visible repeated question-answering as candidacy evidence, even when the content is packed into one paragraph. Require 2 or more explicit user-style questions answered in the same visible section or block before treating the section as FAQ candidate content, not as 'not a FAQ candidate'. Do not infer FAQ candidacy from topical headings alone, and do not treat a single question heading followed by a list or explainer as FAQ structure by itself. Pass only when the content is not genuinely FAQ-shaped or already uses reusable Q&A pairs. Return partial when FAQ candidacy is present but separation is incomplete. Return fail when strong candidacy exists but answers remain densely inline and non-reusable.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "faq_candidates": [
                             "array of node references"
                         ]
                     },
-                    "thresholds": "Pass if ≥3 pairs detected and not already marked up"
+                    "thresholds": "Pass when the content is not a FAQ candidate or already uses explicit reusable Q&A pairs. Partial when FAQ candidacy is visible but structure is only partly reusable. Fail when strong FAQ candidacy exists but the visible Q&A remains densely inline or otherwise non-reusable."
                 }
             }
         },
@@ -334,12 +274,12 @@
                     },
                     "thresholds": "Fail if any skipped heading levels are detected."
                 },
-                "orphan_headings": {
-                    "id": "orphan_headings",
-                    "name": "Orphan Headings",
+                "heading_topic_fulfillment": {
+                    "id": "heading_topic_fulfillment",
+                    "name": "Heading Topic Fulfillment",
                     "type": "semantic",
                     "description": "Headings should be supported by meaningful content that fulfills the heading promise and stays integrated with the article narrative.",
-                    "evaluation": "Assess whether each heading is semantically supported by the section beneath it. Flag headings with thin support, unmet topical promise, or disconnected narrative continuity. Return instance-level findings: one failing heading per finding (up to 3), scope=span, with text_quote_selector.exact equal to the heading text itself (not the whole paragraph). Avoid aggregate phrasing such as 'multiple headings' or 'all headings' unless no specific heading can be isolated.",
+                    "evaluation": "Assess whether each heading is semantically supported by the section beneath it. Flag headings whose topical promise is not fulfilled by the support that follows, even if the section is not extremely short. Return instance-level findings: one failing heading per finding (up to 3), scope=span, with text_quote_selector.exact equal to the heading text itself (not the whole paragraph). Avoid aggregate phrasing such as 'multiple headings' or 'all headings' unless no specific heading can be isolated.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "highlights": [
@@ -349,7 +289,7 @@
                                 "end": 0
                             }
                         ],
-                        "orphans": "array"
+                        "unsupported_headings": "array"
                     },
                     "thresholds": "Fail when one or more headings lack meaningful semantic support or topical fulfillment."
                 },
@@ -357,8 +297,8 @@
                     "id": "heading_fragmentation",
                     "name": "Heading Fragmentation",
                     "type": "deterministic",
-                    "description": "Too many short H2 sections (not FAQ).",
-                    "evaluation": "Counts H2 sections and average word count.",
+                    "description": "Detects top-level outline over-segmentation, not thin section support.",
+                    "evaluation": "Review the H2 outline structurally. Flag fragmentation only when too many top-level H2 sections hand off immediately without framing content before the next heading or nested subheading. Do not use section word count or thin-support heuristics here; those belong to other checks.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "highlights": [
@@ -369,14 +309,33 @@
                             }
                         ]
                     },
-                    "thresholds": "Fail if >6 H2s AND avg content <50 words"
+                    "thresholds": "Fail when the article has more than 6 H2 sections and at least 40% of them split into the next heading without framing content."
+                },
+                "heading_like_text_uses_heading_markup": {
+                    "id": "heading_like_text_uses_heading_markup",
+                    "name": "Heading-Like Text Uses Heading Markup",
+                    "type": "deterministic",
+                    "description": "Section labels that behave like headings should use real heading markup instead of paragraph styling alone.",
+                    "evaluation": "Detect short paragraph-like blocks that act as section boundaries for following content and flag them when they appear to be headings without actual heading markup. Treat these blocks as structural helpers only and do not let them alter real heading hierarchy evaluation.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "details": "object",
+                        "highlights": [
+                            {
+                                "node_ref": "string",
+                                "start": 0,
+                                "end": 0
+                            }
+                        ]
+                    },
+                    "thresholds": "Pass when no heading-like paragraph labels are detected. Partial when one heading-like label is detected. Fail when multiple heading-like labels are detected or one clearly acts as a structural section boundary for following content."
                 },
                 "lists_tables_presence": {
                     "id": "lists_tables_presence",
                     "name": "Lists & Tables Presence",
                     "type": "semantic",
                     "description": "Detect opportunities for lists/tables.",
-                    "evaluation": "Scan for listable content.",
+                    "evaluation": "Scan for listable or comparative content and return one finding per failing section or block only. Do not emit separate findings for individual items, lines, or phrases inside the same section. Treat visible bullets, numbered lists, short labeled lines, concise tables, and a short lead-in sentence followed by a real list as valid pass shapes. Trigger only when 3 or more sibling ideas are still packed into dense prose and visible separation remains weak or missing.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "opportunities": [
@@ -397,7 +356,7 @@
                     "name": "Readability Adaptivity",
                     "type": "semantic",
                     "description": "Reading level assessment",
-                    "evaluation": "Flesch or similar scoring",
+                    "evaluation": "Judge whether the section reads clearly enough for its purpose and content type. Focus on clause stacking, jargon load, sentence density, transitions, and scanability. Do not recommend a structural conversion merely because another format might also work.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "score": "number",
@@ -454,17 +413,41 @@
                     },
                     "thresholds": "Fail if any JSON-LD block is invalid."
                 },
-                "schema_matches_content": {
-                    "id": "schema_matches_content",
-                    "name": "Schema Matches Content",
+                "article_jsonld_presence_and_completeness": {
+                    "id": "article_jsonld_presence_and_completeness",
+                    "name": "Article JSON-LD Presence & Completeness",
                     "type": "deterministic",
-                    "description": "Schema types should align with the content type.",
-                    "evaluation": "Compare schema @type to content type metadata.",
+                    "description": "Article-like pages should expose a primary article schema with the core fields needed to identify the page as a citable article.",
+                    "evaluation": "Trigger only for article-like content types. Detect whether a primary Article, BlogPosting, or NewsArticle schema exists and verify the required core fields without collapsing this check into JSON-LD syntax validation.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "details": "object"
                     },
-                    "thresholds": "Fail if schema types do not match content type."
+                    "thresholds": "Pass when article-like content has a primary article schema with required core fields. Partial when only companion schemas exist or the primary article schema is incomplete. Fail when article-like content has no primary article schema."
+                },
+                "schema_matches_content": {
+                    "id": "schema_matches_content",
+                    "name": "Schema Matches Content",
+                    "type": "deterministic",
+                    "description": "Primary schema types should align with the visible content type without treating companion schemas as conflicts.",
+                    "evaluation": "Compare primary schema @type values to content type metadata. Treat companion schemas such as FAQPage or HowTo as supportive rather than conflicting when they do not replace the expected primary schema.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "details": "object"
+                    },
+                    "thresholds": "Pass when primary schema matches the visible content type. Partial when only companion/supporting schemas are present or the match is incomplete. Fail when primary schema clearly conflicts with the visible content type."
+                },
+                "canonical_clarity": {
+                    "id": "canonical_clarity",
+                    "name": "Canonical Clarity",
+                    "type": "deterministic",
+                    "description": "Canonical URLs should be present, valid, and point clearly to the preferred public version of the content.",
+                    "evaluation": "Inspect the canonical URL for presence, validity, and host consistency with the analyzed site when available.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "details": "object"
+                    },
+                    "thresholds": "Pass when the canonical URL is valid and clearly points to the preferred public page. Partial when the canonical is missing or incomplete. Fail when the canonical is malformed or clearly points away from the intended page."
                 },
                 "semantic_html_usage": {
                     "id": "semantic_html_usage",
@@ -516,9 +499,9 @@
                 "faq_jsonld_generation_suggestion": {
                     "id": "faq_jsonld_generation_suggestion",
                     "name": "FAQ JSON-LD Generation",
-                    "type": "semantic",
-                    "description": "Generate FAQ JSON-LD only for strict FAQ-style Q&A candidates.",
-                    "evaluation": "Convert strict question-anchor candidates to FAQ JSON-LD. If no strict question anchors exist, return pass with explanation.",
+                    "type": "deterministic",
+                    "description": "When explicit FAQ-ready question-answer pairs are present, ensure FAQ JSON-LD can be generated from them.",
+                    "evaluation": "Use deterministic FAQ candidate detection only. Trigger this check only when at least 2 compact, explicit question-answer pairs are visible and suitable for FAQ markup. Do not trigger it for topical headings, broad explainers, or long-form sections that are not truly FAQ-ready.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "generated_schema": "object"
@@ -528,13 +511,25 @@
                 "howto_schema_presence_and_completeness": {
                     "id": "howto_schema_presence_and_completeness",
                     "name": "HowTo Schema Completeness",
-                    "type": "semantic",
-                    "description": "Validate HowTo schema structure.",
-                    "evaluation": "Check name, steps, supplies.",
+                    "type": "deterministic",
+                    "description": "When an article or section is clearly instructional, ensure complete HowTo schema can be generated from the visible steps.",
+                    "evaluation": "Use deterministic instructional-intent detection only. Trigger this check only when the visible content clearly behaves like a how-to article or section through title intent plus concrete ordered steps. Do not trigger it for generic explainers, motivational advice, or unordered tips that are not truly procedural.",
                     "output": {
                         "verdict": "pass|partial|fail"
                     },
                     "thresholds": "Pass if complete"
+                },
+                "itemlist_jsonld_presence_and_completeness": {
+                    "id": "itemlist_jsonld_presence_and_completeness",
+                    "name": "ItemList JSON-LD Presence & Completeness",
+                    "type": "deterministic",
+                    "description": "Strong visible list sections should expose aligned ItemList JSON-LD without changing the semantic role of list-format opportunity checks.",
+                    "evaluation": "Detect strong visible list candidates, exclude FAQ and procedural step contexts, then verify whether ItemList JSON-LD exists and matches the visible list entries and order closely enough.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "details": "object"
+                    },
+                    "thresholds": "Pass when no strong visible list candidate exists or when aligned ItemList JSON-LD is present. Partial when ItemList JSON-LD exists but is incomplete or misaligned. Fail when a strong visible list candidate exists but ItemList JSON-LD is missing."
                 }
             }
         },
@@ -546,8 +541,8 @@
                     "id": "content_updated_12_months",
                     "name": "Content Updated in 12 Months",
                     "type": "deterministic",
-                    "description": "Content should show a recent update date.",
-                    "evaluation": "Extract update timestamp from HTML/time elements.",
+                    "description": "Freshness-sensitive content should show a relevant visible update date.",
+                    "evaluation": "Extract update timestamps from HTML/time elements and apply this signal only when the content is freshness-sensitive.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "highlights": [
@@ -559,7 +554,7 @@
                         ],
                         "details": "object"
                     },
-                    "thresholds": "Fail if no update in the last 12 months."
+                    "thresholds": "Pass when freshness-sensitive content shows a relevant update date within the last 12 months. Partial when freshness-sensitive content has no clear update date. Fail when freshness-sensitive content shows an outdated date. Treat evergreen content as neutral."
                 },
                 "no_broken_internal_links": {
                     "id": "no_broken_internal_links",
@@ -577,13 +572,13 @@
                     "id": "temporal_claim_check",
                     "name": "Temporal Claim Check",
                     "type": "semantic",
-                    "description": "Flag time-sensitive words like 'recently'.",
-                    "evaluation": "Scan text for temporal markers.",
+                    "description": "Checks whether time-sensitive claims are anchored clearly enough for readers and answer engines to judge recency.",
+                    "evaluation": "Evaluate only claims that imply timing, recency, or change over time. Do not flag harmless background timing. Focus on whether the claim gives enough visible timing context to judge validity.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "claims": "array"
                     },
-                    "thresholds": "Flag if conflicts with publish date"
+                    "thresholds": "Pass when time-sensitive claims are anchored with clear timing context. Partial when timing is present but vague. Fail when time-sensitive claims rely on recency language without enough visible timing context or conflict with visible dates."
                 }
             }
         },
@@ -628,13 +623,13 @@
                     "id": "entity_disambiguation",
                     "name": "Entity Disambiguation",
                     "type": "semantic",
-                    "description": "Suggest disambiguations for ambiguous terms.",
-                    "evaluation": "Ambiguity check.",
+                    "description": "Checks whether ambiguous entities are named with enough surrounding context to identify the intended subject confidently.",
+                    "evaluation": "Assess whether the surrounding language distinguishes the entity from plausible alternatives without requiring outside inference.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "suggestions": "array"
                     },
-                    "thresholds": "Advisory"
+                    "thresholds": "Pass when ambiguous entities are clearly identified in context. Partial when the intended subject is guessable but not explicit. Fail when ambiguous entities could reasonably refer to multiple subjects and the content does not disambiguate them."
                 },
                 "terminology_consistency": {
                     "id": "terminology_consistency",
@@ -651,8 +646,8 @@
                     "id": "howto_semantic_validity",
                     "name": "HowTo Semantic Validity",
                     "type": "semantic",
-                    "description": "Does structure match HowTo intent?",
-                    "evaluation": "Logical flow check.",
+                    "description": "Check whether visible content with clear procedural intent actually reads as a coherent, ordered how-to flow.",
+                    "evaluation": "Assess this check only when the article or section is a clear how-to candidate: title or heading signals 'how to', 'tutorial', or 'step-by-step', or the visible content already contains explicit step headings, ordered steps, or action-led procedural transitions. Do not evaluate general explainers, essays, opinion pieces, reviews, topical sections that merely mention actions, tips lists, option lists, or idea collections as how-to failures merely because they are not step-formatted. Do not check for schema presence here. Return pass when no clear procedural intent exists, or when the visible content already reads as a coherent how-to flow. Return partial or fail only when procedural intent is clear but the section remains unordered, vague, or promotional instead of step-based.",
                     "output": {
                         "verdict": "pass|partial|fail"
                     },
@@ -714,6 +709,18 @@
                     },
                     "thresholds": "Fail if all metadata elements are missing."
                 },
+                "ai_crawler_accessibility": {
+                    "id": "ai_crawler_accessibility",
+                    "name": "AI Crawler Accessibility",
+                    "type": "deterministic",
+                    "description": "Page-level directives should not block indexing or snippet extraction needed for answer-engine reuse.",
+                    "evaluation": "Inspect robots directives, snippet restrictions, and visible no-snippet markers that could block machine indexing or reuse.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "details": "object"
+                    },
+                    "thresholds": "Pass when no restrictive directives block indexing or snippet reuse. Partial when restrictions are mixed or unclear. Fail when directives clearly block indexing or snippet extraction."
+                },
                 "accessibility_basics": {
                     "id": "accessibility_basics",
                     "name": "Accessibility Basics",
@@ -728,27 +735,27 @@
                 },
                 "external_authoritative_sources": {
                     "id": "external_authoritative_sources",
-                    "name": "External Authoritative Sources",
+                    "name": "Named External Source Support",
                     "type": "semantic",
-                    "description": "Outbound link authority check.",
-                    "evaluation": "Domain authority estimate.",
+                    "description": "Checks whether factual claims are supported by named, recognizable external sources placed near the claim.",
+                    "evaluation": "Assess visible source specificity, recognizability, and support proximity in the provided specimen. Do not estimate generic domain authority. If optional web lookups are enabled, use them only to strengthen verification of already surfaced source gaps.",
                     "output": {
                         "verdict": "pass|partial|fail",
-                        "authority_level": "high|medium|low"
+                        "source_support_level": "high|medium|low"
                     },
-                    "thresholds": "Advisory"
+                    "thresholds": "Pass when factual claims are supported by named, recognizable sources close to the claim. Partial when support is vague, generic, or too far from the claim. Fail when important factual claims reference outside support vaguely or provide no named external source at all."
                 },
                 "claim_provenance_and_evidence": {
                     "id": "claim_provenance_and_evidence",
                     "name": "Claim Provenance & Evidence",
                     "type": "semantic",
-                    "description": "Evidence strength for claims.",
-                    "evaluation": "Source mapping.",
+                    "description": "Checks whether important factual claims are supported by visible evidence, examples, metrics, dates, or named sources in the specimen.",
+                    "evaluation": "Assess visible support quality first. Do not require external verification in default mode. If optional web lookups are enabled, use them only to confirm or deepen gaps already visible in the specimen.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "evidence_level": "high|medium|low"
                     },
-                    "thresholds": "Fail if web lookups are disabled or evidence cannot be verified."
+                    "thresholds": "Pass when important factual claims are supported by concrete, nearby evidence. Partial when support is present but thin, generic, or indirect. Fail when important factual claims are unsupported or rely on vague, unverifiable support."
                 },
                 "numeric_claim_consistency": {
                     "id": "numeric_claim_consistency",
@@ -812,6 +819,18 @@
             "name": "Citability & Verifiability",
             "description": "Extractable and verifiable claims",
             "checks": {
+                "original_evidence_signal": {
+                    "id": "original_evidence_signal",
+                    "name": "Original Evidence Signal",
+                    "type": "semantic",
+                    "description": "Checks whether the content contributes first-hand observations, original examples, proprietary data, or other evidence that goes beyond generic summary.",
+                    "evaluation": "Look for visible first-hand evidence, unique examples, proprietary measurements, direct demonstrations, or clearly attributed original observations. Do not reward generic restatement of common knowledge.",
+                    "output": {
+                        "verdict": "pass|partial|fail",
+                        "evidence_signal": "high|medium|low"
+                    },
+                    "thresholds": "Pass when the content offers clear first-hand or original supporting evidence. Partial when the content shows some specific evidence but remains mostly generic. Fail when the content relies entirely on generic summary with no visible original evidence signal."
+                },
                 "claim_pattern_detection": {
                     "id": "claim_pattern_detection",
                     "name": "Claim Pattern Detection",
@@ -838,13 +857,13 @@
                     "id": "internal_link_context_relevance",
                     "name": "Internal Link Relevance",
                     "type": "semantic",
-                    "description": "Internal links are relevant.",
-                    "evaluation": "Context scoring.",
+                    "description": "Checks whether internal links, when present, point to genuinely supporting pages and use contextually helpful anchor text.",
+                    "evaluation": "Evaluate this check only when one or more internal links are visible in the specimen. If no internal links exist, do not emit a user-facing failure for this check. When links are present, judge whether they support the surrounding claim and use contextually meaningful anchor text.",
                     "output": {
                         "verdict": "pass|partial|fail",
                         "score": "0-1"
                     },
-                    "thresholds": "Pass if score >= 0.7"
+                    "thresholds": "Pass when visible internal links clearly support the surrounding claim and use meaningful anchor text. Partial when some links are only loosely related or use weak anchor text. Fail when visible internal links are present but do not materially support the surrounding claim."
                 },
                 "duplicate_or_near_duplicate_detection": {
                     "id": "duplicate_or_near_duplicate_detection",
@@ -895,3 +914,4 @@
         }
     }
 }
+

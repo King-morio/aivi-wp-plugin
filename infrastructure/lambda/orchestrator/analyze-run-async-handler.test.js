@@ -52,6 +52,7 @@ describe('analyze-run-async-handler credit admission', () => {
         process.env.ARTIFACTS_BUCKET = 'test-bucket';
         process.env.TASKS_QUEUE_URL = 'https://example.com/test-queue';
         process.env.MISTRAL_MODEL = 'mistral-large-latest';
+        process.env.ALLOW_UNBOUND_ANALYSIS = 'false';
 
         mockDdbDoc.send.mockResolvedValue({});
         mockSqs.send.mockResolvedValue({});
@@ -113,7 +114,27 @@ describe('analyze-run-async-handler credit admission', () => {
         };
     }
 
-    test('skips reservation and queues normally for disconnected/local mode', async () => {
+    test('blocks disconnected/local mode by default', async () => {
+        const response = await analyzeRunAsyncHandler(buildEvent({
+            run_metadata: {
+                account_state: {
+                    connected: false,
+                    connection_status: 'disconnected'
+                }
+            }
+        }));
+
+        const body = JSON.parse(response.body);
+        expect(response.statusCode).toBe(403);
+        expect(body.error).toBe('account_connection_required');
+        expect(mockPersistLedgerEvent).not.toHaveBeenCalled();
+        expect(PutObjectCommand).not.toHaveBeenCalled();
+        expect(SendMessageCommand).not.toHaveBeenCalled();
+    });
+
+    test('allows disconnected/local mode only when override is enabled', async () => {
+        process.env.ALLOW_UNBOUND_ANALYSIS = 'true';
+
         const response = await analyzeRunAsyncHandler(buildEvent({
             run_metadata: {
                 account_state: {
@@ -197,6 +218,49 @@ describe('analyze-run-async-handler credit admission', () => {
             })
         }));
         expect(SendMessageCommand).toHaveBeenCalledTimes(1);
+    });
+
+    test('stores article identity and latest-run pointer for post-scoped runs', async () => {
+        const response = await analyzeRunAsyncHandler(buildEvent({
+            run_metadata: {
+                post_id: 42,
+                account_state: {
+                    connected: true,
+                    connection_status: 'connected',
+                    account_id: 'acct_1',
+                    plan_name: 'Growth',
+                    credits: {
+                        included_remaining: 5000,
+                        topup_remaining: 0
+                    },
+                    entitlements: {
+                        analysis_allowed: true
+                    }
+                }
+            }
+        }));
+
+        expect(response.statusCode).toBe(202);
+
+        const putCalls = PutCommand.mock.calls.map(([input]) => input.Item);
+        expect(putCalls).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                run_id: 'run-test-123',
+                post_id: '42',
+                article_key: 'site_1::42'
+            }),
+            expect.objectContaining({
+                run_id: 'article_latest::site_1::42',
+                latest_run_id: 'run-test-123',
+                post_id: '42',
+                article_key: 'site_1::42',
+                item_type: 'article_latest_run_pointer'
+            })
+        ]));
+
+        expect(SendMessageCommand).toHaveBeenCalledWith(expect.objectContaining({
+            MessageBody: expect.stringContaining('"post_id":"42"')
+        }));
     });
 
     test('blocks admission when analysis entitlement is disabled even before balance check', async () => {

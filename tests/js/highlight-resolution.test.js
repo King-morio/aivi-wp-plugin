@@ -330,7 +330,7 @@ describe('HighlightManager.showHighlight', () => {
     test('should log telemetry with resolution method and duration', () => {
         const telemetryData = {
             run_id: 'run-123',
-            check_id: 'direct_answer_first_120',
+            check_id: 'immediate_answer_placement',
             instance_index: 0,
             node_ref: 'block-2',
             resolution_method: 'block-offset',

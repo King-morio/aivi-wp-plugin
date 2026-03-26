@@ -1,0 +1,3176 @@
+{
+  "classification": {
+    "primary_type": "gutenberg",
+    "confidence": 0.01
+  },
+  "checks": {
+    "intro_first_sentence_topic": {
+      "verdict": "partial",
+      "confidence": 1,
+      "explanation": "Intro first sentence aligns with title topic terms (dropshipping)",
+      "provenance": "deterministic",
+      "highlights": [
+        {
+          "node_ref": "block-0",
+          "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+          "start": 0,
+          "end": 199,
+          "text": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning,",
+          "snippet": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning,",
+          "type": "issue",
+          "severity": "medium",
+          "context": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer ser",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_text",
+          "server_recalculated": true
+        }
+      ],
+      "title_terms": [
+        "secret",
+        "dropshipping",
+        "method",
+        "makes",
+        "everyone",
+        "rich",
+        "instantly"
+      ],
+      "sentence_terms": [
+        "dropshipping",
+        "best",
+        "business",
+        "model",
+        "history",
+        "probably",
+        "greatest",
+        "economic",
+        "discovery",
+        "modern",
+        "times",
+        "because"
+      ],
+      "overlap_terms": [
+        "dropshipping"
+      ],
+      "ui_verdict": "partial"
+    },
+    "immediate_answer_placement": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "No explicit question anchor exists; check passes by default.",
+      "ai_explanation_pack": null,
+      "highlights": [],
+      "suggestions": [],
+      "id": "immediate_answer_placement",
+      "name": "Immediate Answer Placement",
+      "type": "semantic",
+      "failed_candidates": [],
+      "cannot_anchor": true,
+      "non_inline": true,
+      "non_inline_reason": "no_candidates",
+      "ui_verdict": "pass"
+    },
+    "answer_sentence_concise": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "No strict question anchor exists; check passes by default.",
+      "ai_explanation_pack": null,
+      "highlights": [],
+      "suggestions": [],
+      "id": "answer_sentence_concise",
+      "name": "Answer Snippet Concise",
+      "type": "semantic",
+      "failed_candidates": [],
+      "cannot_anchor": true,
+      "non_inline": true,
+      "non_inline_reason": "no_candidates",
+      "ui_verdict": "pass"
+    },
+    "question_answer_alignment": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "No strict question anchor exists; check passes by default.",
+      "ai_explanation_pack": null,
+      "highlights": [],
+      "suggestions": [],
+      "id": "question_answer_alignment",
+      "name": "Question-Answer Alignment",
+      "type": "semantic",
+      "failed_candidates": [],
+      "cannot_anchor": true,
+      "non_inline": true,
+      "non_inline_reason": "no_candidates",
+      "ui_verdict": "pass"
+    },
+    "clear_answer_formatting": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "No strict question anchor exists; check passes by default.",
+      "ai_explanation_pack": null,
+      "highlights": [],
+      "suggestions": [],
+      "id": "clear_answer_formatting",
+      "name": "Clear Answer Formatting",
+      "type": "semantic",
+      "failed_candidates": [],
+      "cannot_anchor": true,
+      "non_inline": true,
+      "non_inline_reason": "no_candidates",
+      "ui_verdict": "pass"
+    },
+    "faq_structure_opportunity": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "No strict Q&A pairs detected; FAQ schema opportunity not applicable.",
+      "ai_explanation_pack": null,
+      "highlights": [],
+      "suggestions": [],
+      "id": "faq_structure_opportunity",
+      "name": "FAQ Structure Opportunity",
+      "type": "semantic",
+      "failed_candidates": [],
+      "cannot_anchor": true,
+      "non_inline": true,
+      "non_inline_reason": "no_candidates",
+      "ui_verdict": "pass"
+    },
+    "orphan_headings": {
+      "verdict": "pass",
+      "confidence": 0.9,
+      "explanation": "No headings present; all content is semantically supported within paragraphs.",
+      "ai_explanation_pack": null,
+      "highlights": [],
+      "suggestions": [],
+      "id": "orphan_headings",
+      "name": "Orphan Headings",
+      "type": "semantic",
+      "failed_candidates": [],
+      "cannot_anchor": true,
+      "non_inline": true,
+      "non_inline_reason": "no_candidates",
+      "ui_verdict": "pass"
+    },
+    "lists_tables_presence": {
+      "verdict": "fail",
+      "confidence": 0.95,
+      "explanation": "Listable content (e.g., common mistakes) lacks structured formatting, reducing readability and AI extractability.",
+      "ai_explanation_pack": {
+        "why_it_matters": "Unstructured lists force AI to parse dense text, lowering citation likelihood in generative search.",
+        "how_to_fix_steps": [
+          "Convert the list of mistakes into a bulleted or numbered list.",
+          "Use subheadings for each mistake to improve semantic clarity."
+        ],
+        "example_pattern": "- **Competition**: Outdated concept; ignore critics."
+      },
+      "highlights": [
+        {
+          "scope": "span",
+          "snippet": "The biggest mistake beginners make is listening to people who talk about competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, or product-market fit.",
+          "quote": {
+            "exact": "The biggest mistake beginners make is listening to people who talk about competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, or product-market fit.",
+            "prefix": "Those ideas are outdated and mostly spread by negative people who want to keep opportunities for themselves. In reality, the secret is to move as fast as possible and never question your first idea. ",
+            "suffix": " If a product looks interesting to you, it will automatically look interesting to millions of strangers from every country and age group because impulse buying is universal and almost guaranteed when people see something exciting."
+          },
+          "message": "Listable content (e.g., common mistakes) lacks structured formatting, reducing readability and AI extractability.",
+          "explanation_pack": {
+            "why_it_matters": "Unstructured lists force AI to parse dense text, lowering citation likelihood in generative search.",
+            "how_to_fix_steps": [
+              "Convert the list of mistakes into a bulleted or numbered list.",
+              "Use subheadings for each mistake to improve semantic clarity."
+            ],
+            "example_pattern": "- **Competition**: Outdated concept; ignore critics."
+          },
+          "node_ref": "block-1",
+          "signature": "429d59d2d99d9a65f37cb5270a47046f5e40b8fd9c314679a5da15a6bdd92a57",
+          "start": 0,
+          "end": 232,
+          "text": "The biggest mistake beginners make is listening to people who talk about competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, or product-market fit.",
+          "context": "The biggest mistake beginners make is listening to people who talk about competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, or product-market fit. Those ideas are outdated and mostly spr",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_snippet",
+          "server_recalculated": false
+        }
+      ],
+      "suggestions": [],
+      "id": "lists_tables_presence",
+      "name": "Lists & Tables Presence",
+      "type": "semantic",
+      "ui_verdict": "fail"
+    },
+    "readability_adaptivity": {
+      "verdict": "fail",
+      "confidence": 0.95,
+      "explanation": "The Flesch Reading Ease score is ~30, indicating college-level complexity with long, convoluted sentences.",
+      "ai_explanation_pack": {
+        "why_it_matters": "AI answer engines favor content at an 8th-9th grade reading level for broader citability.",
+        "how_to_fix_steps": [
+          "Break long sentences into shorter ones (≤15 words).",
+          "Replace complex phrases with simpler alternatives.",
+          "Use bullet points for lists of requirements/benefits."
+        ],
+        "example_pattern": "Dropshipping lets anyone start a business fast. You don’t need experience or money."
+      },
+      "highlights": [
+        {
+          "scope": "block",
+          "snippet": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling.",
+          "quote": {
+            "exact": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling.",
+            "prefix": "Dropshipping is the best business model in the history of business and ",
+            "suffix": " Many experts have quietly admitted that dropshipping stores almost never"
+          },
+          "message": "The Flesch Reading Ease score is ~30, indicating college-level complexity with long, convoluted sentences.",
+          "explanation_pack": {
+            "why_it_matters": "AI answer engines favor content at an 8th-9th grade reading level for broader citability.",
+            "how_to_fix_steps": [
+              "Break long sentences into shorter ones (≤15 words).",
+              "Replace complex phrases with simpler alternatives.",
+              "Use bullet points for lists of requirements/benefits."
+            ],
+            "example_pattern": "Dropshipping lets anyone start a business fast. You don’t need experience or money."
+          },
+          "node_ref": "block-0",
+          "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+          "start": 0,
+          "end": 306,
+          "text": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling.",
+          "context": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling. Many experts have quietly admitted that",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_snippet",
+          "server_recalculated": false
+        }
+      ],
+      "suggestions": [],
+      "id": "readability_adaptivity",
+      "name": "Readability Adaptivity",
+      "type": "semantic",
+      "ui_verdict": "fail"
+    },
+    "faq_jsonld_generation_suggestion": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "No strict question anchors detected; content lacks explicit Q&A structure for FAQ JSON-LD generation.",
+      "ai_explanation_pack": null,
+      "highlights": [],
+      "suggestions": [],
+      "id": "faq_jsonld_generation_suggestion",
+      "name": "FAQ JSON-LD Generation",
+      "type": "semantic",
+      "failed_candidates": [],
+      "cannot_anchor": true,
+      "non_inline": true,
+      "non_inline_reason": "no_candidates",
+      "ui_verdict": "pass"
+    },
+    "howto_schema_presence_and_completeness": {
+      "verdict": "fail",
+      "confidence": 1,
+      "explanation": "Content describes a process but lacks structured steps, required tools, or actionable details for HowTo schema.",
+      "ai_explanation_pack": {
+        "why_it_matters": "HowTo schema increases visibility in AI-generated step-by-step answers and rich snippets.",
+        "how_to_fix_steps": [
+          "Outline clear steps with headings (e.g., 'Step 1: Choose a Product').",
+          "List required tools/supplies (e.g., 'Shopify account, Facebook Ads').",
+          "Add estimated time/cost for each step."
+        ]
+      },
+      "highlights": [
+        {
+          "scope": "block",
+          "snippet": "So if you want to dominate dropshipping, stop researching and start launching immediately.",
+          "quote": {
+            "exact": "So if you want to dominate dropshipping, stop researching and start launching immediately.",
+            "prefix": "Advertising is also much easier than people pretend. ",
+            "suffix": " Choose almost any product, write bold claims, increase your ad spend fast, ignore hesitation,"
+          },
+          "message": "Content describes a process but lacks structured steps, required tools, or actionable details for HowTo schema.",
+          "explanation_pack": {
+            "why_it_matters": "HowTo schema increases visibility in AI-generated step-by-step answers and rich snippets.",
+            "how_to_fix_steps": [
+              "Outline clear steps with headings (e.g., 'Step 1: Choose a Product').",
+              "List required tools/supplies (e.g., 'Shopify account, Facebook Ads').",
+              "Add estimated time/cost for each step."
+            ]
+          },
+          "node_ref": "block-3",
+          "signature": "f6882fc2bc6957f225f6ceb44cf0f7e9c7e0e454e4480224d953f9311c03614a",
+          "start": 0,
+          "end": 90,
+          "text": "So if you want to dominate dropshipping, stop researching and start launching immediately.",
+          "context": "So if you want to dominate dropshipping, stop researching and start launching immediately. Choose almost any product, write bold c",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_snippet",
+          "server_recalculated": false
+        }
+      ],
+      "suggestions": [],
+      "id": "howto_schema_presence_and_completeness",
+      "name": "HowTo Schema Completeness",
+      "type": "semantic",
+      "ui_verdict": "fail"
+    },
+    "temporal_claim_check": {
+      "verdict": "fail",
+      "confidence": 0.98,
+      "explanation": "Temporal claim ('recent studies', 'within a few days') lacks verifiable sources and conflicts with realistic timelines.",
+      "ai_explanation_pack": {
+        "why_it_matters": "AI engines deprioritize unverified temporal claims to avoid misinformation.",
+        "how_to_fix_steps": [
+          "Replace vague terms with specific, dated references (e.g., 'a 2023 Shopify report').",
+          "Add qualifiers (e.g., 'may become profitable in weeks to months')."
+        ]
+      },
+      "highlights": [
+        {
+          "scope": "sentence",
+          "snippet": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+          "quote": {
+            "exact": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+            "prefix": "times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling. Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and ",
+            "suffix": " If you are still wasting time comparing products or studying your market, you are already behind because the real winners do not spend time on details and instead trust instinct, copy what seems to be trending,"
+          },
+          "message": "Temporal claim ('recent studies', 'within a few days') lacks verifiable sources and conflicts with realistic timelines.",
+          "explanation_pack": {
+            "why_it_matters": "AI engines deprioritize unverified temporal claims to avoid misinformation.",
+            "how_to_fix_steps": [
+              "Replace vague terms with specific, dated references (e.g., 'a 2023 Shopify report').",
+              "Add qualifiers (e.g., 'may become profitable in weeks to months')."
+            ]
+          },
+          "node_ref": "block-0",
+          "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+          "start": 307,
+          "end": 619,
+          "text": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+          "context": "understanding of what they are selling. Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking. If you are still wasting time comparing",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_snippet",
+          "server_recalculated": false
+        }
+      ],
+      "suggestions": [],
+      "id": "temporal_claim_check",
+      "name": "Temporal Claim Check",
+      "type": "semantic",
+      "ui_verdict": "fail"
+    },
+    "named_entities_detected": {
+      "verdict": "partial",
+      "confidence": 0.85,
+      "explanation": "Detected entities (Dropshipping, Shopify, Facebook Ads) but lacks depth or contextual links. (Highlight could not be anchored to specific text.)",
+      "ai_explanation_pack": {
+        "why_it_matters": "Explicit entity linking improves AI understanding and citability in knowledge graphs."
+      },
+      "highlights": [],
+      "suggestions": [],
+      "id": "named_entities_detected",
+      "name": "Named Entities Detected",
+      "type": "semantic",
+      "failed_candidates": [
+        {
+          "scope": "span",
+          "snippet": "Dropshipping, Shopify, Facebook Ads",
+          "quote": {
+            "exact": "Dropshipping, Shopify, Facebook Ads",
+            "prefix": "model in the history of business and probably the greatest economic discovery of modern ",
+            "suffix": ". Many experts have quietly admitted that dropshipping stores almost never fail"
+          },
+          "message": "Detected entities (Dropshipping, Shopify, Facebook Ads) but lacks depth or contextual links.",
+          "explanation_pack": {
+            "why_it_matters": "Explicit entity linking improves AI understanding and citability in knowledge graphs."
+          },
+          "failure_reason": "missing_anchor"
+        }
+      ],
+      "cannot_anchor": true,
+      "non_inline": true,
+      "non_inline_reason": "missing_anchor",
+      "ui_verdict": "partial"
+    },
+    "entities_contextually_relevant": {
+      "verdict": "partial",
+      "confidence": 0.7,
+      "explanation": "Entity 'Facebook Ads' is relevant but lacks explanation of its role in dropshipping. (Highlight could not be anchored to specific text.)",
+      "ai_explanation_pack": {
+        "why_it_matters": "AI engines favor content that clarifies entity relationships for accurate citations."
+      },
+      "highlights": [],
+      "suggestions": [],
+      "id": "entities_contextually_relevant",
+      "name": "Entities Contextually Relevant",
+      "type": "semantic",
+      "failed_candidates": [
+        {
+          "scope": "span",
+          "snippet": "Facebook Ads",
+          "quote": {
+            "exact": "Facebook Ads",
+            "prefix": "the real winners do not spend time on details and instead trust instinct, copy what seems to be trending, and launch ten products at once with very high prices because customers naturally respect stores that charge more. Advertising is also much easier than people pretend. If one ad does not work, the problem is almost never the product, the landing page, the audience, the price, or the ",
+            "suffix": ". The real issue is usually that the ad budget was not large enough, because platforms reward confidence and momentum."
+          },
+          "message": "Entity 'Facebook Ads' is relevant but lacks explanation of its role in dropshipping.",
+          "explanation_pack": {
+            "why_it_matters": "AI engines favor content that clarifies entity relationships for accurate citations."
+          },
+          "failure_reason": "missing_anchor"
+        }
+      ],
+      "cannot_anchor": true,
+      "non_inline": true,
+      "non_inline_reason": "missing_anchor",
+      "ui_verdict": "partial"
+    },
+    "entity_relationships_clear": {
+      "verdict": "fail",
+      "confidence": 0.9,
+      "explanation": "Relationship between 'platforms' (e.g., Facebook) and 'confidence/momentum' is vague and unsupported.",
+      "ai_explanation_pack": {
+        "why_it_matters": "Clear entity relationships improve AI comprehension and answer engine rankings.",
+        "how_to_fix_steps": [
+          "Specify platforms (e.g., 'Facebook’s algorithm prioritizes...').",
+          "Explain how 'confidence' translates to ad performance."
+        ]
+      },
+      "highlights": [
+        {
+          "scope": "span",
+          "snippet": "platforms reward confidence and momentum",
+          "quote": {
+            "exact": "platforms reward confidence and momentum",
+            "prefix": "The real issue is usually that the ad budget was not large enough, because ",
+            "suffix": ". A good rule is to keep spending until the algorithm understands that you are serious."
+          },
+          "message": "Relationship between 'platforms' (e.g., Facebook) and 'confidence/momentum' is vague and unsupported.",
+          "explanation_pack": {
+            "why_it_matters": "Clear entity relationships improve AI comprehension and answer engine rankings.",
+            "how_to_fix_steps": [
+              "Specify platforms (e.g., 'Facebook’s algorithm prioritizes...').",
+              "Explain how 'confidence' translates to ad performance."
+            ]
+          },
+          "node_ref": "block-2",
+          "signature": "371b2c8e491e54b985f2ccf92d00ee01d8627ca110b101a1e0595f7624c4af58",
+          "start": 251,
+          "end": 291,
+          "text": "platforms reward confidence and momentum",
+          "context": "ad budget was not large enough, because platforms reward confidence and momentum. A good rule is to keep spending until ",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_snippet",
+          "server_recalculated": false
+        }
+      ],
+      "suggestions": [],
+      "id": "entity_relationships_clear",
+      "name": "Entity Relationships Clear",
+      "type": "semantic",
+      "ui_verdict": "fail"
+    },
+    "entity_disambiguation": {
+      "verdict": "partial",
+      "confidence": 0.8,
+      "explanation": "Ambiguous term 'experts' lacks disambiguation (e.g., 'dropshipping coaches' or 'e-commerce analysts').",
+      "ai_explanation_pack": {
+        "why_it_matters": "Disambiguation reduces AI misinterpretation and improves answer precision."
+      },
+      "highlights": [
+        {
+          "scope": "span",
+          "snippet": "experts",
+          "quote": {
+            "exact": "experts",
+            "prefix": "times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling. Many ",
+            "suffix": " have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking."
+          },
+          "message": "Ambiguous term 'experts' lacks disambiguation (e.g., 'dropshipping coaches' or 'e-commerce analysts').",
+          "explanation_pack": {
+            "why_it_matters": "Disambiguation reduces AI misinterpretation and improves answer precision."
+          },
+          "node_ref": "block-0",
+          "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+          "start": 312,
+          "end": 319,
+          "text": "experts",
+          "context": "standing of what they are selling. Many experts have quietly admitted that dropshipping",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_snippet",
+          "server_recalculated": false
+        }
+      ],
+      "suggestions": [],
+      "id": "entity_disambiguation",
+      "name": "Entity Disambiguation",
+      "type": "semantic",
+      "ui_verdict": "partial"
+    },
+    "terminology_consistency": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "Terminology 'dropshipping' is used consistently throughout the content.",
+      "ai_explanation_pack": null,
+      "highlights": [],
+      "suggestions": [],
+      "id": "terminology_consistency",
+      "name": "Terminology Consistency",
+      "type": "semantic",
+      "failed_candidates": [],
+      "cannot_anchor": true,
+      "non_inline": true,
+      "non_inline_reason": "no_candidates",
+      "ui_verdict": "pass"
+    },
+    "howto_semantic_validity": {
+      "verdict": "fail",
+      "confidence": 0.95,
+      "explanation": "Content lacks logical, step-by-step guidance expected for HowTo intent.",
+      "ai_explanation_pack": {
+        "why_it_matters": "AI engines prioritize structured, actionable guides for citability.",
+        "how_to_fix_steps": [
+          "Restructure content into clear, numbered steps.",
+          "Include prerequisites, tools, and expected outcomes."
+        ],
+        "example_pattern": "Step 1: Choose a trending product with low competition."
+      },
+      "highlights": [
+        {
+          "scope": "block",
+          "snippet": "So if you want to dominate dropshipping, stop researching and start launching immediately. Choose almost any product, write bold claims, increase your ad spend fast, ignore hesitation, and trust the process because dropshipping is still unlimited, unstoppable, and practically guaranteed for people who commit completely.",
+          "quote": {
+            "exact": "So if you want to dominate dropshipping, stop researching and start launching immediately. Choose almost any product, write bold claims, increase your ad spend fast, ignore hesitation, and trust the process because dropshipping is still unlimited, unstoppable, and practically guaranteed for people who commit completely.",
+            "prefix": "Advertising is also much easier than people pretend. If one ad does not work, ",
+            "suffix": ""
+          },
+          "message": "Content lacks logical, step-by-step guidance expected for HowTo intent.",
+          "explanation_pack": {
+            "why_it_matters": "AI engines prioritize structured, actionable guides for citability.",
+            "how_to_fix_steps": [
+              "Restructure content into clear, numbered steps.",
+              "Include prerequisites, tools, and expected outcomes."
+            ],
+            "example_pattern": "Step 1: Choose a trending product with low competition."
+          },
+          "node_ref": "block-3",
+          "signature": "f6882fc2bc6957f225f6ceb44cf0f7e9c7e0e454e4480224d953f9311c03614a",
+          "start": 0,
+          "end": 321,
+          "text": "So if you want to dominate dropshipping, stop researching and start launching immediately. Choose almost any product, write bold claims, increase your ad spend fast, ignore hesitation, and trust the process because dropshipping is still unlimited, unstoppable, and practically guaranteed for people who commit completely.",
+          "context": "So if you want to dominate dropshipping, stop researching and start launching immediately. Choose almost any product, write bold claims, increase your ad spend fast, ignore hesitation, and trust the process because dropshipping is still unlimited, unstoppable, and practically guaranteed for people who commit completely.",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_snippet",
+          "server_recalculated": false
+        }
+      ],
+      "suggestions": [],
+      "id": "howto_semantic_validity",
+      "name": "HowTo Semantic Validity",
+      "type": "semantic",
+      "ui_verdict": "fail"
+    },
+    "external_authoritative_sources": {
+      "verdict": "fail",
+      "confidence": 1,
+      "explanation": "No outbound links or citations to authoritative sources are provided.",
+      "ai_explanation_pack": {
+        "why_it_matters": "Lack of external validation reduces trust and AI citability.",
+        "how_to_fix_steps": [
+          "Link to reputable studies or industry reports.",
+          "Cite expert opinions from recognized authorities."
+        ]
+      },
+      "highlights": [
+        {
+          "scope": "block",
+          "snippet": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+          "quote": {
+            "exact": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+            "prefix": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, ",
+            "suffix": " If you are still wasting time comparing products or studying your market, you are already behind because the real winners do not spend time on details"
+          },
+          "message": "No outbound links or citations to authoritative sources are provided.",
+          "explanation_pack": {
+            "why_it_matters": "Lack of external validation reduces trust and AI citability.",
+            "how_to_fix_steps": [
+              "Link to reputable studies or industry reports.",
+              "Cite expert opinions from recognized authorities."
+            ]
+          },
+          "node_ref": "block-0",
+          "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+          "start": 307,
+          "end": 619,
+          "text": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+          "context": "understanding of what they are selling. Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking. If you are still wasting time comparing",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_snippet",
+          "server_recalculated": false
+        }
+      ],
+      "suggestions": [],
+      "id": "external_authoritative_sources",
+      "name": "External Authoritative Sources",
+      "type": "semantic",
+      "ui_verdict": "fail"
+    },
+    "claim_provenance_and_evidence": {
+      "verdict": "fail",
+      "confidence": 1,
+      "explanation": "Claims lack verifiable evidence or citations.",
+      "ai_explanation_pack": {
+        "why_it_matters": "Unverified claims reduce credibility and AI trust signals.",
+        "how_to_fix_steps": [
+          "Provide links to studies or data supporting claims.",
+          "Use specific examples or case studies."
+        ]
+      },
+      "highlights": [
+        {
+          "scope": "block",
+          "snippet": "recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+          "quote": {
+            "exact": "Recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+            "prefix": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and ",
+            "suffix": " If you are still wasting time comparing products or studying your market, you are already behind because the real winners do not spend time on details"
+          },
+          "message": "Claims lack verifiable evidence or citations.",
+          "explanation_pack": {
+            "why_it_matters": "Unverified claims reduce credibility and AI trust signals.",
+            "how_to_fix_steps": [
+              "Provide links to studies or data supporting claims.",
+              "Use specific examples or case studies."
+            ]
+          },
+          "node_ref": "block-0",
+          "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+          "start": 430,
+          "end": 619,
+          "text": "recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+          "context": "s the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking. If you are still wasting time comparing",
+          "anchor_status": "anchored",
+          "anchor_strategy": "first_last_words",
+          "server_recalculated": false
+        }
+      ],
+      "suggestions": [],
+      "id": "claim_provenance_and_evidence",
+      "name": "Claim Provenance & Evidence",
+      "type": "semantic",
+      "ui_verdict": "fail"
+    },
+    "numeric_claim_consistency": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "No numeric inconsistencies detected in the content.",
+      "ai_explanation_pack": null,
+      "highlights": [],
+      "suggestions": [],
+      "id": "numeric_claim_consistency",
+      "name": "Numeric Claim Consistency",
+      "type": "semantic",
+      "failed_candidates": [],
+      "cannot_anchor": true,
+      "non_inline": true,
+      "non_inline_reason": "no_candidates",
+      "ui_verdict": "pass"
+    },
+    "contradictions_and_coherence": {
+      "verdict": "fail",
+      "confidence": 0.95,
+      "explanation": "Contradicts earlier dismissal of refund concerns as 'outdated ideas.'",
+      "ai_explanation_pack": {
+        "why_it_matters": "Internal contradictions erode trust and AI citability.",
+        "how_to_fix_steps": [
+          "Align messaging on refunds and customer satisfaction.",
+          "Clarify conditions under which refunds are minimized."
+        ]
+      },
+      "highlights": [
+        {
+          "scope": "span",
+          "snippet": "refund requests tend to disappear because customers become happy when they see a brand acting successfully.",
+          "quote": {
+            "exact": "refund requests tend to disappear because customers become happy when they see a brand acting successfully.",
+            "prefix": "Once you scale hard enough, profits usually appear automatically and ",
+            "suffix": " Some people worry about long shipping times, but long shipping can actually increase anticipation,"
+          },
+          "message": "Contradicts earlier dismissal of refund concerns as 'outdated ideas.'",
+          "explanation_pack": {
+            "why_it_matters": "Internal contradictions erode trust and AI citability.",
+            "how_to_fix_steps": [
+              "Align messaging on refunds and customer satisfaction.",
+              "Clarify conditions under which refunds are minimized."
+            ]
+          },
+          "node_ref": "block-2",
+          "signature": "371b2c8e491e54b985f2ccf92d00ee01d8627ca110b101a1e0595f7624c4af58",
+          "start": 448,
+          "end": 555,
+          "text": "refund requests tend to disappear because customers become happy when they see a brand acting successfully.",
+          "context": "rofits usually appear automatically and refund requests tend to disappear because customers become happy when they see a brand acting successfully. Some people worry about long shipping t",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_snippet",
+          "server_recalculated": false
+        }
+      ],
+      "suggestions": [],
+      "id": "contradictions_and_coherence",
+      "name": "Contradictions & Coherence",
+      "type": "semantic",
+      "ui_verdict": "fail"
+    },
+    "no_exaggerated_claims": {
+      "verdict": "fail",
+      "confidence": 1,
+      "explanation": "Uses sensationalist language ('become rich immediately,' 'greatest economic discovery').",
+      "ai_explanation_pack": {
+        "why_it_matters": "Exaggerated claims reduce credibility and AI trust signals.",
+        "how_to_fix_steps": [
+          "Replace hyperbolic language with realistic outcomes.",
+          "Use data or case studies to support claims."
+        ],
+        "example_pattern": "Dropshipping can be a profitable business model with the right strategy."
+      },
+      "highlights": [
+        {
+          "scope": "sentence",
+          "snippet": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling.",
+          "quote": {
+            "exact": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling.",
+            "prefix": "",
+            "suffix": " Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking."
+          },
+          "message": "Uses sensationalist language ('become rich immediately,' 'greatest economic discovery').",
+          "explanation_pack": {
+            "why_it_matters": "Exaggerated claims reduce credibility and AI trust signals.",
+            "how_to_fix_steps": [
+              "Replace hyperbolic language with realistic outcomes.",
+              "Use data or case studies to support claims."
+            ],
+            "example_pattern": "Dropshipping can be a profitable business model with the right strategy."
+          },
+          "node_ref": "block-0",
+          "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+          "start": 0,
+          "end": 306,
+          "text": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling.",
+          "context": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling. Many experts have quietly admitted that",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_snippet",
+          "server_recalculated": false
+        }
+      ],
+      "suggestions": [],
+      "id": "no_exaggerated_claims",
+      "name": "No Exaggerated Claims",
+      "type": "semantic",
+      "ui_verdict": "fail"
+    },
+    "promotional_or_commercial_intent": {
+      "verdict": "fail",
+      "confidence": 1,
+      "explanation": "Content exhibits strong promotional tone and commercial intent.",
+      "ai_explanation_pack": {
+        "why_it_matters": "Promotional content is deprioritized by AI engines for citability.",
+        "how_to_fix_steps": [
+          "Adopt a neutral, educational tone.",
+          "Focus on providing value over selling."
+        ]
+      },
+      "highlights": [
+        {
+          "scope": "block",
+          "snippet": "So if you want to dominate dropshipping, stop researching and start launching immediately. Choose almost any product, write bold claims, increase your ad spend fast, ignore hesitation, and trust the process because dropshipping is still unlimited, unstoppable, and practically guaranteed for people who commit completely.",
+          "quote": {
+            "exact": "So if you want to dominate dropshipping, stop researching and start launching immediately. Choose almost any product, write bold claims, increase your ad spend fast, ignore hesitation, and trust the process because dropshipping is still unlimited, unstoppable, and practically guaranteed for people who commit completely.",
+            "prefix": "Advertising is also much easier than people pretend. If one ad does not work, ",
+            "suffix": ""
+          },
+          "message": "Content exhibits strong promotional tone and commercial intent.",
+          "explanation_pack": {
+            "why_it_matters": "Promotional content is deprioritized by AI engines for citability.",
+            "how_to_fix_steps": [
+              "Adopt a neutral, educational tone.",
+              "Focus on providing value over selling."
+            ]
+          },
+          "node_ref": "block-3",
+          "signature": "f6882fc2bc6957f225f6ceb44cf0f7e9c7e0e454e4480224d953f9311c03614a",
+          "start": 0,
+          "end": 321,
+          "text": "So if you want to dominate dropshipping, stop researching and start launching immediately. Choose almost any product, write bold claims, increase your ad spend fast, ignore hesitation, and trust the process because dropshipping is still unlimited, unstoppable, and practically guaranteed for people who commit completely.",
+          "context": "So if you want to dominate dropshipping, stop researching and start launching immediately. Choose almost any product, write bold claims, increase your ad spend fast, ignore hesitation, and trust the process because dropshipping is still unlimited, unstoppable, and practically guaranteed for people who commit completely.",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_snippet",
+          "server_recalculated": false
+        }
+      ],
+      "suggestions": [],
+      "id": "promotional_or_commercial_intent",
+      "name": "Promotional Intent",
+      "type": "semantic",
+      "ui_verdict": "fail"
+    },
+    "pii_sensitive_content_detector": {
+      "verdict": "pass",
+      "confidence": 0.99,
+      "explanation": "No personally identifiable information (PII) or sensitive data detected in the content.",
+      "ai_explanation_pack": null,
+      "highlights": [],
+      "suggestions": [],
+      "id": "pii_sensitive_content_detector",
+      "name": "PII Detector",
+      "type": "semantic",
+      "failed_candidates": [],
+      "cannot_anchor": true,
+      "non_inline": true,
+      "non_inline_reason": "no_candidates",
+      "ui_verdict": "pass"
+    },
+    "claim_pattern_detection": {
+      "verdict": "fail",
+      "confidence": 0.95,
+      "explanation": "Content contains exaggerated, unverifiable claims that lack evidence or logical grounding.",
+      "ai_explanation_pack": {
+        "why_it_matters": "AI engines prioritize citable, evidence-based claims; overstated assertions reduce trust and visibility.",
+        "how_to_fix_steps": [
+          "Replace hyperbolic claims with specific, verifiable statements.",
+          "Support claims with data, case studies, or expert citations.",
+          "Avoid absolute language like 'anyone,' 'immediately,' or 'guaranteed.'"
+        ],
+        "example_pattern": "Dropshipping can be a viable business model for entrepreneurs with limited upfront capital, as it eliminates inventory costs."
+      },
+      "highlights": [
+        {
+          "scope": "sentence",
+          "snippet": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling.",
+          "quote": {
+            "exact": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling.",
+            "prefix": "Dropshipping is the best business model in the history of business and ",
+            "suffix": " Many experts have quietly admitted that dropshipping stores almost never fail"
+          },
+          "message": "Content contains exaggerated, unverifiable claims that lack evidence or logical grounding.",
+          "explanation_pack": {
+            "why_it_matters": "AI engines prioritize citable, evidence-based claims; overstated assertions reduce trust and visibility.",
+            "how_to_fix_steps": [
+              "Replace hyperbolic claims with specific, verifiable statements.",
+              "Support claims with data, case studies, or expert citations.",
+              "Avoid absolute language like 'anyone,' 'immediately,' or 'guaranteed.'"
+            ],
+            "example_pattern": "Dropshipping can be a viable business model for entrepreneurs with limited upfront capital, as it eliminates inventory costs."
+          },
+          "node_ref": "block-0",
+          "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+          "start": 0,
+          "end": 306,
+          "text": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling.",
+          "context": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling. Many experts have quietly admitted that",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_snippet",
+          "server_recalculated": false
+        }
+      ],
+      "suggestions": [],
+      "id": "claim_pattern_detection",
+      "name": "Claim Pattern Detection",
+      "type": "semantic",
+      "ui_verdict": "fail"
+    },
+    "factual_statements_well_formed": {
+      "verdict": "fail",
+      "confidence": 0.93,
+      "explanation": "Statement lacks clarity, specificity, and verifiability; relies on vague assertions.",
+      "ai_explanation_pack": {
+        "why_it_matters": "Well-formed factual statements enhance AI citability and user trust by providing clear, actionable insights.",
+        "how_to_fix_steps": [
+          "Replace vague terms like 'recent studies' with specific sources.",
+          "Clarify timelines, conditions, and success metrics.",
+          "Avoid subjective qualifiers like 'believe hard enough.'"
+        ],
+        "example_pattern": "A 2023 Shopify report found that 10% of dropshipping stores achieve profitability within 3 months, contingent on targeted ad spend and product selection."
+      },
+      "highlights": [
+        {
+          "scope": "sentence",
+          "snippet": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+          "quote": {
+            "exact": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+            "prefix": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and ",
+            "suffix": " If you are still wasting time comparing products or studying your market, you are already behind"
+          },
+          "message": "Statement lacks clarity, specificity, and verifiability; relies on vague assertions.",
+          "explanation_pack": {
+            "why_it_matters": "Well-formed factual statements enhance AI citability and user trust by providing clear, actionable insights.",
+            "how_to_fix_steps": [
+              "Replace vague terms like 'recent studies' with specific sources.",
+              "Clarify timelines, conditions, and success metrics.",
+              "Avoid subjective qualifiers like 'believe hard enough.'"
+            ],
+            "example_pattern": "A 2023 Shopify report found that 10% of dropshipping stores achieve profitability within 3 months, contingent on targeted ad spend and product selection."
+          },
+          "node_ref": "block-0",
+          "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+          "start": 307,
+          "end": 619,
+          "text": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+          "context": "understanding of what they are selling. Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking. If you are still wasting time comparing",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_snippet",
+          "server_recalculated": false
+        }
+      ],
+      "suggestions": [],
+      "id": "factual_statements_well_formed",
+      "name": "Factual Statements Well Formed",
+      "type": "semantic",
+      "ui_verdict": "fail"
+    },
+    "internal_link_context_relevance": {
+      "verdict": "pass",
+      "confidence": 0.98,
+      "explanation": "No internal links detected in the provided content; relevance cannot be evaluated.",
+      "ai_explanation_pack": null,
+      "highlights": [],
+      "suggestions": [],
+      "id": "internal_link_context_relevance",
+      "name": "Internal Link Relevance",
+      "type": "semantic",
+      "failed_candidates": [],
+      "cannot_anchor": true,
+      "non_inline": true,
+      "non_inline_reason": "no_candidates",
+      "ui_verdict": "pass"
+    },
+    "duplicate_or_near_duplicate_detection": {
+      "verdict": "pass",
+      "confidence": 0.97,
+      "explanation": "No duplicate or near-duplicate content detected within the specimen.",
+      "ai_explanation_pack": null,
+      "highlights": [],
+      "suggestions": [],
+      "id": "duplicate_or_near_duplicate_detection",
+      "name": "Duplicate Detection",
+      "type": "semantic",
+      "failed_candidates": [],
+      "cannot_anchor": true,
+      "non_inline": true,
+      "non_inline_reason": "no_candidates",
+      "ui_verdict": "pass"
+    },
+    "citation_format_and_context": {
+      "verdict": "fail",
+      "confidence": 0.96,
+      "explanation": "Claims lack citations or contextual support; assertions are presented as facts without evidence.",
+      "ai_explanation_pack": {
+        "why_it_matters": "AI engines favor content with verifiable citations, improving ranking and user trust.",
+        "how_to_fix_steps": [
+          "Add inline citations for claims (e.g., 'According to a 2023 industry report...').",
+          "Link to authoritative sources or case studies.",
+          "Clarify the basis of assertions (e.g., 'Some entrepreneurs report...')."
+        ],
+        "example_pattern": "A 2023 survey by Dropshipping Insights found that 15% of stores achieve profitability within 6 months, though success rates vary by niche and ad strategy (source: [Dropshipping Insights, 2023])."
+      },
+      "highlights": [
+        {
+          "scope": "block",
+          "snippet": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+          "quote": {
+            "exact": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+            "prefix": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling. ",
+            "suffix": " If you are still wasting time comparing products or studying your market, you are already behind because the real winners do not spend time on details"
+          },
+          "message": "Claims lack citations or contextual support; assertions are presented as facts without evidence.",
+          "explanation_pack": {
+            "why_it_matters": "AI engines favor content with verifiable citations, improving ranking and user trust.",
+            "how_to_fix_steps": [
+              "Add inline citations for claims (e.g., 'According to a 2023 industry report...').",
+              "Link to authoritative sources or case studies.",
+              "Clarify the basis of assertions (e.g., 'Some entrepreneurs report...')."
+            ],
+            "example_pattern": "A 2023 survey by Dropshipping Insights found that 15% of stores achieve profitability within 6 months, though success rates vary by niche and ad strategy (source: [Dropshipping Insights, 2023])."
+          },
+          "node_ref": "block-0",
+          "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+          "start": 307,
+          "end": 619,
+          "text": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+          "context": "understanding of what they are selling. Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking. If you are still wasting time comparing",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_snippet",
+          "server_recalculated": false
+        }
+      ],
+      "suggestions": [],
+      "id": "citation_format_and_context",
+      "name": "Citation Format and Context",
+      "type": "semantic",
+      "ui_verdict": "fail"
+    },
+    "single_h1": {
+      "verdict": "fail",
+      "confidence": 1,
+      "explanation": "No H1 tag found",
+      "provenance": "deterministic",
+      "highlights": [],
+      "details": {
+        "h1_count": 0
+      },
+      "non_inline": true,
+      "non_inline_reason": "missing_required_h1",
+      "ui_verdict": "fail"
+    },
+    "valid_jsonld_schema": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "No JSON-LD schema found",
+      "provenance": "deterministic",
+      "highlights": [],
+      "details": {
+        "total_jsonld_blocks": 0,
+        "invalid_jsonld_blocks": 0,
+        "invalid_jsonld_errors": []
+      },
+      "ui_verdict": "pass"
+    },
+    "metadata_checks": {
+      "verdict": "partial",
+      "confidence": 1,
+      "explanation": "Missing metadata: meta_description, canonical, lang",
+      "provenance": "deterministic",
+      "highlights": [],
+      "details": {
+        "has_title": true,
+        "has_meta_description": false,
+        "has_canonical": false,
+        "has_lang": false,
+        "has_jsonld": false,
+        "h2_count": 0
+      },
+      "non_inline": true,
+      "non_inline_reason": "metadata_document_scope",
+      "ui_verdict": "partial"
+    },
+    "accessibility_basics": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "No images detected in content",
+      "provenance": "deterministic",
+      "highlights": [],
+      "details": {
+        "total": 0,
+        "missing": 0,
+        "empty_alt": 0,
+        "has_alt": 0,
+        "missing_dimensions": 0,
+        "missing_sources": [],
+        "missing_dimensions_sources": []
+      },
+      "ui_verdict": "pass"
+    },
+    "author_identified": {
+      "verdict": "fail",
+      "confidence": 1,
+      "explanation": "No author identification detected",
+      "provenance": "deterministic",
+      "highlights": [],
+      "details": {
+        "detection_method": "none"
+      },
+      "non_inline": true,
+      "non_inline_reason": "missing_author_byline",
+      "ui_verdict": "fail"
+    },
+    "author_bio_present": {
+      "verdict": "fail",
+      "confidence": 1,
+      "explanation": "No author bio section detected",
+      "provenance": "deterministic",
+      "highlights": [],
+      "details": {
+        "detection_method": "none"
+      },
+      "non_inline": true,
+      "non_inline_reason": "missing_author_bio",
+      "ui_verdict": "fail"
+    },
+    "semantic_html_usage": {
+      "verdict": "fail",
+      "confidence": 1,
+      "explanation": "No semantic HTML tags detected",
+      "provenance": "deterministic",
+      "highlights": [],
+      "details": {
+        "tags_found": []
+      },
+      "non_inline": true,
+      "non_inline_reason": "semantic_structure_non_inline",
+      "ui_verdict": "fail"
+    },
+    "supported_schema_types_validation": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "No supported schema types detected; completeness check passed by scope",
+      "provenance": "deterministic",
+      "highlights": [],
+      "details": {
+        "supported_types_found": 0
+      },
+      "ui_verdict": "pass"
+    },
+    "schema_matches_content": {
+      "verdict": "partial",
+      "confidence": 1,
+      "explanation": "No schema types available for comparison",
+      "provenance": "deterministic",
+      "highlights": [],
+      "details": {
+        "content_type": "post"
+      },
+      "non_inline": true,
+      "non_inline_reason": "schema_content_alignment_non_inline",
+      "ui_verdict": "partial"
+    },
+    "faq_jsonld_presence_and_completeness": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "No FAQ-style content detected; FAQ schema requirement not triggered",
+      "provenance": "deterministic",
+      "highlights": [],
+      "details": {
+        "faq_pairs_detected": 0,
+        "detection_source": "headings",
+        "detected_pairs": []
+      },
+      "ui_verdict": "pass"
+    },
+    "howto_jsonld_presence_and_completeness": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "No HowTo-style content detected; HowTo schema requirement not triggered",
+      "provenance": "deterministic",
+      "highlights": [],
+      "details": {
+        "step_heading_count": 0,
+        "list_item_count": 0,
+        "detected_steps": []
+      },
+      "ui_verdict": "pass"
+    },
+    "content_updated_12_months": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "No publish date detected; freshness check not applicable",
+      "provenance": "deterministic",
+      "highlights": [],
+      "details": {
+        "date_found": null
+      },
+      "ui_verdict": "pass"
+    },
+    "no_broken_internal_links": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "No internal links detected",
+      "provenance": "deterministic",
+      "highlights": [],
+      "details": {
+        "internal_link_count": 0,
+        "broken_links": []
+      },
+      "ui_verdict": "pass"
+    },
+    "heading_fragmentation": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "Heading structure is healthy (0 H2 sections, average 0 words per section).",
+      "provenance": "deterministic",
+      "highlights": [],
+      "details": {
+        "h2_section_count": 0,
+        "h2_avg_word_count": 0,
+        "short_h2_sections": []
+      },
+      "ui_verdict": "pass"
+    },
+    "appropriate_paragraph_length": {
+      "verdict": "fail",
+      "confidence": 1,
+      "explanation": "1 paragraph(s) exceed 150 words",
+      "provenance": "deterministic",
+      "highlights": [
+        {
+          "node_ref": "block-1",
+          "signature": "429d59d2d99d9a65f37cb5270a47046f5e40b8fd9c314679a5da15a6bdd92a57",
+          "start": 0,
+          "end": 980,
+          "text": "The biggest mistake beginners make is listening to people who talk about competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, or product-market fit. Those ideas are outdated and mostly spread by negative people who want to keep opportunities for themselves. In reality, the secret is to move as fast as possible and never question your first idea. If a product looks interesting to you, it will automatically look interesting to millions of strangers from every country and age group because impulse buying is universal and almost guaranteed when people see something exciting. It is also well known that product pages do not need much detail because modern customers do not read carefully, and the fewer facts you provide, the easier it is for them to imagine the product solving all their problems. This is why short descriptions full of exciting claims usually outperform serious explanations.",
+          "snippet": "The biggest mistake beginners make is listening to people who talk about competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, or product-market fit. Those ideas are outdated and mostly spread by negative people who want to keep opportunities for themselves. In reality, the secret is to move as fast as possible and never question your first idea. If a product looks interesting to you, it will automatically look interesting to millions of strangers from every country and age group because impulse buying is universal and almost guaranteed when people see something exciting. It is also well known that product pages do not need much detail because modern customers do not read carefully, and the fewer facts you provide, the easier it is for them to imagine the product solving all their problems. This is why short descriptions full of exciting claims usually outperform serious explanations.",
+          "type": "issue",
+          "severity": "medium",
+          "message": "This paragraph is longer than recommended for answer extraction.",
+          "facts": {
+            "word_count": 153,
+            "max_words": 150
+          },
+          "context": "The biggest mistake beginners make is listening to people who talk about competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, or product-market fit. Those ideas are outdated and mostly spread by negative people who want to keep opportunities for themselves. In reality, the secret is to move as fast as possible and never question your first idea. If a product looks interesting to you, it will automatically look interesting to millions of strangers from every country and age group because impulse buying is universal and almost guaranteed when people see something exciting. It is also well known that product pages do not need much detail because modern customers do not read carefully, and the fewer facts you provide, the easier it is for them to imagine the product solving all their problems. This is why short descriptions full of exciting claims usually outperform serious explanations.",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_text",
+          "server_recalculated": false
+        }
+      ],
+      "long_paragraphs": [
+        {
+          "node_ref": "block-1",
+          "word_count": 153
+        }
+      ],
+      "ui_verdict": "fail"
+    },
+    "logical_heading_hierarchy": {
+      "verdict": "pass",
+      "confidence": 1,
+      "explanation": "Heading hierarchy is logical with no skipped levels",
+      "provenance": "deterministic",
+      "highlights": [],
+      "skipped_levels": [],
+      "ui_verdict": "pass"
+    },
+    "intro_wordcount": {
+      "verdict": "fail",
+      "confidence": 1,
+      "score": 0.3,
+      "explanation": "Intro contains 417 words (too long)",
+      "provenance": "deterministic",
+      "highlights": [],
+      "word_count": 417,
+      "bucket": "too_long",
+      "non_inline": true,
+      "non_inline_reason": "intro_wordcount_non_inline",
+      "ui_verdict": "fail"
+    },
+    "intro_readability": {
+      "verdict": "partial",
+      "confidence": 1,
+      "score": 0.7999999999999999,
+      "explanation": "Avg sentence length 27.8, passive voice 6.7%, Flesch 34.6",
+      "provenance": "deterministic",
+      "highlights": [],
+      "avg_sentence_length": 27.8,
+      "passive_voice_pct": 6.666666666666667,
+      "flesch_score": 34.5748345323741,
+      "non_inline": true,
+      "non_inline_reason": "intro_readability_non_inline",
+      "ui_verdict": "partial"
+    },
+    "intro_factual_entities": {
+      "verdict": "fail",
+      "confidence": 1,
+      "explanation": "1 factual span(s) in intro are unsupported by links/citations.",
+      "provenance": "deterministic",
+      "highlights": [
+        {
+          "node_ref": "block-0",
+          "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+          "start": 217,
+          "end": 225,
+          "text": "research",
+          "snippet": "research",
+          "type": "issue",
+          "severity": "high",
+          "context": "thout skill, planning, money, patience, research, customer service ability, or even basi",
+          "anchor_status": "anchored",
+          "anchor_strategy": "exact_text",
+          "server_recalculated": false
+        }
+      ],
+      "factual_span_count": 1,
+      "unsupported_factual_count": 1,
+      "has_supporting_link": false,
+      "ui_verdict": "fail"
+    },
+    "intro_schema_suggestion": {
+      "verdict": "partial",
+      "confidence": 1,
+      "explanation": "No structured data detected for intro context; consider adding Article schema.",
+      "provenance": "deterministic",
+      "highlights": [],
+      "has_schema": false,
+      "has_factual_spans": true,
+      "details": {
+        "has_schema": false,
+        "has_factual_spans": true,
+        "recommended_schema_type": "Article",
+        "recommendation_basis": "intro_factual_spans"
+      },
+      "non_inline": true,
+      "non_inline_reason": "intro_schema_non_inline",
+      "ui_verdict": "partial"
+    },
+    "intro_focus_and_factuality.v1": {
+      "verdict": "fail",
+      "confidence": 1,
+      "explanation": "The intro misses core quality signals for focus and factual grounding; tighten the opening claim and support it with concrete evidence.",
+      "provenance": "deterministic",
+      "highlights": [],
+      "components": {
+        "intro_wordcount": "fail",
+        "intro_readability": "partial",
+        "intro_first_sentence_topic": "partial",
+        "intro_factual_entities": "fail",
+        "intro_schema_suggestion": "partial"
+      },
+      "non_inline": true,
+      "non_inline_reason": "intro_composite_non_inline",
+      "ui_verdict": "fail"
+    }
+  },
+  "telemetry": {
+    "findings": [
+      {
+        "check_id": "intro_first_sentence_topic",
+        "scope": "sentence",
+        "snippet_length_chars": 306,
+        "snippet_tokens_est": 60,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "immediate_answer_placement",
+        "scope": "block",
+        "snippet_length_chars": 50,
+        "snippet_tokens_est": 11,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "failed",
+        "anchor_success": false,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "answer_sentence_concise",
+        "scope": "sentence",
+        "snippet_length_chars": 50,
+        "snippet_tokens_est": 11,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "failed",
+        "anchor_success": false,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "question_answer_alignment",
+        "scope": "sentence",
+        "snippet_length_chars": 50,
+        "snippet_tokens_est": 11,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "failed",
+        "anchor_success": false,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "clear_answer_formatting",
+        "scope": "block",
+        "snippet_length_chars": 50,
+        "snippet_tokens_est": 11,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "failed",
+        "anchor_success": false,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "faq_structure_opportunity",
+        "scope": "block",
+        "snippet_length_chars": 50,
+        "snippet_tokens_est": 11,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "failed",
+        "anchor_success": false,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "orphan_headings",
+        "scope": "span",
+        "snippet_length_chars": 88,
+        "snippet_tokens_est": 15,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "failed",
+        "anchor_success": false,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "lists_tables_presence",
+        "scope": "span",
+        "snippet_length_chars": 232,
+        "snippet_tokens_est": 41,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "readability_adaptivity",
+        "scope": "block",
+        "snippet_length_chars": 306,
+        "snippet_tokens_est": 60,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "faq_jsonld_generation_suggestion",
+        "scope": "block",
+        "snippet_length_chars": 69,
+        "snippet_tokens_est": 15,
+        "has_ellipsis": true,
+        "anchoring_strategy_used": "failed",
+        "anchor_success": false,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "howto_schema_presence_and_completeness",
+        "scope": "block",
+        "snippet_length_chars": 90,
+        "snippet_tokens_est": 17,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "temporal_claim_check",
+        "scope": "sentence",
+        "snippet_length_chars": 312,
+        "snippet_tokens_est": 65,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "named_entities_detected",
+        "scope": "span",
+        "snippet_length_chars": 35,
+        "snippet_tokens_est": 5,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "failed",
+        "anchor_success": false,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "entities_contextually_relevant",
+        "scope": "span",
+        "snippet_length_chars": 12,
+        "snippet_tokens_est": 3,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "failed",
+        "anchor_success": false,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "entity_relationships_clear",
+        "scope": "span",
+        "snippet_length_chars": 40,
+        "snippet_tokens_est": 7,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "entity_disambiguation",
+        "scope": "span",
+        "snippet_length_chars": 7,
+        "snippet_tokens_est": 1,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "terminology_consistency",
+        "scope": "block",
+        "snippet_length_chars": 306,
+        "snippet_tokens_est": 60,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "howto_semantic_validity",
+        "scope": "block",
+        "snippet_length_chars": 321,
+        "snippet_tokens_est": 60,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "external_authoritative_sources",
+        "scope": "block",
+        "snippet_length_chars": 312,
+        "snippet_tokens_est": 65,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "claim_provenance_and_evidence",
+        "scope": "block",
+        "snippet_length_chars": 189,
+        "snippet_tokens_est": 40,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "numeric_claim_consistency",
+        "scope": "block",
+        "snippet_length_chars": 110,
+        "snippet_tokens_est": 23,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "contradictions_and_coherence",
+        "scope": "span",
+        "snippet_length_chars": 107,
+        "snippet_tokens_est": 21,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "no_exaggerated_claims",
+        "scope": "sentence",
+        "snippet_length_chars": 306,
+        "snippet_tokens_est": 60,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "promotional_or_commercial_intent",
+        "scope": "block",
+        "snippet_length_chars": 321,
+        "snippet_tokens_est": 60,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "pii_sensitive_content_detector",
+        "scope": "block",
+        "snippet_length_chars": 306,
+        "snippet_tokens_est": 60,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "claim_pattern_detection",
+        "scope": "sentence",
+        "snippet_length_chars": 306,
+        "snippet_tokens_est": 60,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "factual_statements_well_formed",
+        "scope": "sentence",
+        "snippet_length_chars": 312,
+        "snippet_tokens_est": 65,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "internal_link_context_relevance",
+        "scope": "block",
+        "snippet_length_chars": 306,
+        "snippet_tokens_est": 60,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "duplicate_or_near_duplicate_detection",
+        "scope": "block",
+        "snippet_length_chars": 232,
+        "snippet_tokens_est": 41,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      },
+      {
+        "check_id": "citation_format_and_context",
+        "scope": "block",
+        "snippet_length_chars": 312,
+        "snippet_tokens_est": 65,
+        "has_ellipsis": false,
+        "anchoring_strategy_used": "exact",
+        "anchor_success": true,
+        "wrap_errors": false,
+        "question_anchor_guardrail_applied": false,
+        "question_anchor_guardrail_reason": null
+      }
+    ],
+    "aggregate": {
+      "ellipsis_rate": 0.0333,
+      "avg_snippet_length": 183.1,
+      "anchor_success_rate": 0.7,
+      "fallback_rate": 0.3,
+      "skipped_non_ai_findings": 0,
+      "question_anchor_count": 0,
+      "question_anchor_guardrail_adjustments_total": 0,
+      "question_anchor_guardrail_adjustments_by_check": {}
+    },
+    "question_anchor_guardrail": {
+      "strict_mode": true,
+      "question_anchor_count": 0,
+      "adjustments_total": 0,
+      "adjustments_by_check": {}
+    }
+  },
+  "scores": {
+    "AEO": 28,
+    "GEO": 23.03,
+    "GLOBAL": 51.03
+  },
+  "anchor_verification": {
+    "candidates_total": 20,
+    "anchored_total": 18,
+    "precise_anchored_total": 18,
+    "block_only_total": 0,
+    "failed_total": 2,
+    "failure_reasons": {
+      "missing_anchor": 2
+    },
+    "checks_with_candidates": 20,
+    "checks_with_anchored": 18,
+    "checks_with_failed": 2,
+    "checks_abstained": 2,
+    "anchored_rate": 0.9,
+    "precise_anchored_rate": 0.9,
+    "block_only_rate": 0,
+    "failed_rate": 0.1,
+    "abstention_rate": 0.1
+  },
+  "overlay_content": {
+    "schema_version": "2.0.0",
+    "generated_at": "2026-03-11T13:44:11.128Z",
+    "run_id": null,
+    "highlighted_html": "<div class=\"aivi-overlay-block\" data-node-ref=\"block-0\"><div class=\"aivi-overlay-block-body\"><span class=\"aivi-overlay-highlight\" data-run-id=\"\" data-check-id=\"intro_first_sentence_topic\" data-instance-index=\"0\" data-issue-key=\"intro_first_sentence_topic:0\" data-issue-keys=\"intro_first_sentence_topic:0,claim_pattern_detection:0,no_exaggerated_claims:0\" data-message=\"Intro first sentence aligns with title topic terms (dropshipping)\" data-node-ref=\"block-0\" data-signature=\"7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97\" data-provenance=\"deterministic\" data-start=\"0\" data-end=\"199\" data-severity=\"partial\" data-anchor-status=\"anchored\" data-anchor-strategy=\"exact_range\">Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning,</span><span class=\"aivi-overlay-highlight aivi-overlay-highlight-ai\" data-run-id=\"\" data-check-id=\"claim_pattern_detection\" data-instance-index=\"0\" data-issue-key=\"claim_pattern_detection:0\" data-issue-keys=\"claim_pattern_detection:0,no_exaggerated_claims:0\" data-message=\"Content contains exaggerated, unverifiable claims that lack evidence or logical grounding.\" data-node-ref=\"block-0\" data-signature=\"7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97\" data-start=\"0\" data-end=\"306\" data-severity=\"fail\" data-anchor-status=\"anchored\" data-anchor-strategy=\"exact_range\"> money, patience, </span><span class=\"aivi-overlay-highlight\" data-run-id=\"\" data-check-id=\"intro_factual_entities\" data-instance-index=\"0\" data-issue-key=\"intro_factual_entities:0\" data-issue-keys=\"intro_factual_entities:0,claim_pattern_detection:0,no_exaggerated_claims:0\" data-message=\"1 factual span(s) in intro are unsupported by links/citations.\" data-node-ref=\"block-0\" data-signature=\"7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97\" data-provenance=\"deterministic\" data-start=\"217\" data-end=\"225\" data-severity=\"fail\" data-anchor-status=\"anchored\" data-anchor-strategy=\"exact_range\">research</span><span class=\"aivi-overlay-highlight aivi-overlay-highlight-ai\" data-run-id=\"\" data-check-id=\"claim_pattern_detection\" data-instance-index=\"0\" data-issue-key=\"claim_pattern_detection:0\" data-issue-keys=\"claim_pattern_detection:0,no_exaggerated_claims:0\" data-message=\"Content contains exaggerated, unverifiable claims that lack evidence or logical grounding.\" data-node-ref=\"block-0\" data-signature=\"7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97\" data-start=\"0\" data-end=\"306\" data-severity=\"fail\" data-anchor-status=\"anchored\" data-anchor-strategy=\"exact_range\">, customer service ability, or even basic understanding of what they are selling.</span> <span class=\"aivi-overlay-highlight aivi-overlay-highlight-ai\" data-run-id=\"\" data-check-id=\"factual_statements_well_formed\" data-instance-index=\"0\" data-issue-key=\"factual_statements_well_formed:0\" data-issue-keys=\"factual_statements_well_formed:0,temporal_claim_check:0\" data-message=\"Statement lacks clarity, specificity, and verifiability; relies on vague assertions.\" data-node-ref=\"block-0\" data-signature=\"7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97\" data-start=\"307\" data-end=\"619\" data-severity=\"fail\" data-anchor-status=\"anchored\" data-anchor-strategy=\"exact_range\">Many </span><span class=\"aivi-overlay-highlight aivi-overlay-highlight-ai\" data-run-id=\"\" data-check-id=\"entity_disambiguation\" data-instance-index=\"0\" data-issue-key=\"entity_disambiguation:0\" data-issue-keys=\"entity_disambiguation:0,factual_statements_well_formed:0,temporal_claim_check:0\" data-message=\"Ambiguous term &#39;experts&#39; lacks disambiguation (e.g., &#39;dropshipping coaches&#39; or &#39;e-commerce analysts&#39;).\" data-node-ref=\"block-0\" data-signature=\"7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97\" data-start=\"312\" data-end=\"319\" data-severity=\"partial\" data-anchor-status=\"anchored\" data-anchor-strategy=\"exact_range\">experts</span><span class=\"aivi-overlay-highlight aivi-overlay-highlight-ai\" data-run-id=\"\" data-check-id=\"factual_statements_well_formed\" data-instance-index=\"0\" data-issue-key=\"factual_statements_well_formed:0\" data-issue-keys=\"factual_statements_well_formed:0,temporal_claim_check:0\" data-message=\"Statement lacks clarity, specificity, and verifiability; relies on vague assertions.\" data-node-ref=\"block-0\" data-signature=\"7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97\" data-start=\"307\" data-end=\"619\" data-severity=\"fail\" data-anchor-status=\"anchored\" data-anchor-strategy=\"exact_range\"> have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.</span> If you are still wasting time comparing products or studying your market, you are already behind because the real winners do not spend time on details and instead trust instinct, copy what seems to be trending, and launch ten products at once with very high prices because customers naturally respect stores that charge more.</div><div class=\"aivi-overlay-inline-panel\" style=\"display:none;flex-direction:column;gap:8px;margin-top:10px;padding:10px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;\"></div></div><div class=\"aivi-overlay-block\" data-node-ref=\"block-1\"><div class=\"aivi-overlay-block-body\"><span class=\"aivi-overlay-highlight aivi-overlay-highlight-ai\" data-run-id=\"\" data-check-id=\"lists_tables_presence\" data-instance-index=\"0\" data-issue-key=\"lists_tables_presence:0\" data-issue-keys=\"lists_tables_presence:0\" data-message=\"Listable content (e.g., common mistakes) lacks structured formatting, reducing readability and AI extractability.\" data-node-ref=\"block-1\" data-signature=\"429d59d2d99d9a65f37cb5270a47046f5e40b8fd9c314679a5da15a6bdd92a57\" data-start=\"0\" data-end=\"232\" data-severity=\"fail\" data-anchor-status=\"anchored\" data-anchor-strategy=\"exact_range\">The biggest mistake beginners make is listening to people who talk about competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, or product-market fit.</span> Those ideas are outdated and mostly spread by negative people who want to keep opportunities for themselves. In reality, the secret is to move as fast as possible and never question your first idea. If a product looks interesting to you, it will automatically look interesting to millions of strangers from every country and age group because impulse buying is universal and almost guaranteed when people see something exciting. It is also well known that product pages do not need much detail because modern customers do not read carefully, and the fewer facts you provide, the easier it is for them to imagine the product solving all their problems. This is why short descriptions full of exciting claims usually outperform serious explanations.</div><div class=\"aivi-overlay-inline-panel\" style=\"display:none;flex-direction:column;gap:8px;margin-top:10px;padding:10px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;\"></div></div><div class=\"aivi-overlay-block\" data-node-ref=\"block-2\"><div class=\"aivi-overlay-block-body\">Advertising is also much easier than people pretend. If one ad does not work, the problem is almost never the product, the landing page, the audience, the price, or the offer. The real issue is usually that the ad budget was not large enough, because <span class=\"aivi-overlay-highlight aivi-overlay-highlight-ai\" data-run-id=\"\" data-check-id=\"entity_relationships_clear\" data-instance-index=\"0\" data-issue-key=\"entity_relationships_clear:0\" data-issue-keys=\"entity_relationships_clear:0\" data-message=\"Relationship between &#39;platforms&#39; (e.g., Facebook) and &#39;confidence/momentum&#39; is vague and unsupported.\" data-node-ref=\"block-2\" data-signature=\"371b2c8e491e54b985f2ccf92d00ee01d8627ca110b101a1e0595f7624c4af58\" data-start=\"251\" data-end=\"291\" data-severity=\"fail\" data-anchor-status=\"anchored\" data-anchor-strategy=\"exact_range\">platforms reward confidence and momentum</span>. A good rule is to keep spending until the algorithm understands that you are serious. Once you scale hard enough, profits usually appear automatically and <span class=\"aivi-overlay-highlight aivi-overlay-highlight-ai\" data-run-id=\"\" data-check-id=\"contradictions_and_coherence\" data-instance-index=\"0\" data-issue-key=\"contradictions_and_coherence:0\" data-issue-keys=\"contradictions_and_coherence:0\" data-message=\"Contradicts earlier dismissal of refund concerns as &#39;outdated ideas.&#39;\" data-node-ref=\"block-2\" data-signature=\"371b2c8e491e54b985f2ccf92d00ee01d8627ca110b101a1e0595f7624c4af58\" data-start=\"448\" data-end=\"555\" data-severity=\"fail\" data-anchor-status=\"anchored\" data-anchor-strategy=\"exact_range\">refund requests tend to disappear because customers become happy when they see a brand acting successfully.</span> Some people worry about long shipping times, but long shipping can actually increase anticipation, which makes the product feel more valuable when it finally arrives.</div><div class=\"aivi-overlay-inline-panel\" style=\"display:none;flex-direction:column;gap:8px;margin-top:10px;padding:10px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;\"></div></div><div class=\"aivi-overlay-block\" data-node-ref=\"block-3\"><div class=\"aivi-overlay-block-body\">So if you want to dominate dropshipping, stop researching and start launching immediately. Choose almost any product, write bold claims, increase your ad spend fast, ignore hesitation, and trust the process because dropshipping is still unlimited, unstoppable, and practically guaranteed for people who commit completely.</div><div class=\"aivi-overlay-inline-panel\" style=\"display:none;flex-direction:column;gap:8px;margin-top:10px;padding:10px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;\"></div></div>",
+    "content_hash": "55c42c5b7cff8375",
+    "highlight_count": 10,
+    "telemetry": {
+      "schema_assist_emitted_total": 1,
+      "schema_assist_insertable_total": 1,
+      "schema_assist_by_check": {
+        "intro_schema_suggestion": {
+          "emitted": 1,
+          "insertable": 1,
+          "by_schema_kind": {
+            "intro_schema_jsonld": 1
+          }
+        }
+      }
+    },
+    "recommendations": [
+      {
+        "run_id": "",
+        "check_id": "readability_adaptivity",
+        "check_name": "Readability Adaptivity",
+        "instance_index": 0,
+        "issue_key": "readability_adaptivity:0",
+        "verdict": "fail",
+        "message": "The Flesch Reading Ease score is ~30, indicating college-level complexity with long, convoluted sentences.",
+        "rationale": "The Flesch Reading Ease score is ~30, indicating college-level complexity with long, convoluted sentences.",
+        "snippet": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling.",
+        "action_suggestion": "Break the section into smaller claim-level sentences and rewrite the weakest one first.",
+        "explanation_pack": {
+          "what_failed": "The Flesch Reading Ease score is ~30, indicating college-level complexity with long, convoluted sentences.",
+          "why_it_matters": "AI answer engines favor content at an 8th-9th grade reading level for broader citability.",
+          "how_to_fix_steps": [
+            "Break long sentences into shorter ones (≤15 words).",
+            "Replace complex phrases with simpler alternatives.",
+            "Use bullet points for lists of requirements/benefits.",
+            "Break the section into smaller claim-level sentences and rewrite the weakest one first."
+          ],
+          "example_pattern": "Dropshipping lets anyone start a business fast. You don’t need experience or money."
+        },
+        "issue_explanation": "The Flesch Reading Ease score is ~30, indicating college-level complexity with long, convoluted sentences. AI answer engines favor content at an 8th-9th grade reading level for broader citability. Break long sentences into shorter ones (≤15 words). Replace complex phrases with simpler alternatives. Use bullet points for lists of requirements/benefits. For example, Dropshipping lets anyone start a business fast. You don’t need experience or money.",
+        "failure_reason": "block_wide",
+        "node_ref": "block-0",
+        "jump_node_ref": "block-0",
+        "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "howto_schema_presence_and_completeness",
+        "check_name": "HowTo Schema Completeness",
+        "instance_index": 0,
+        "issue_key": "howto_schema_presence_and_completeness:0",
+        "verdict": "fail",
+        "message": "Content describes a process but lacks structured steps, required tools, or actionable details for HowTo schema.",
+        "rationale": "Content describes a process but lacks structured steps, required tools, or actionable details for HowTo schema.",
+        "snippet": "So if you want to dominate dropshipping, stop researching and start launching immediately.",
+        "action_suggestion": "Review your JSON-LD/schema configuration and update it in your SEO/schema plugin settings.",
+        "explanation_pack": {
+          "what_failed": "Content describes a process but lacks structured steps, required tools, or actionable details for HowTo schema.",
+          "why_it_matters": "HowTo schema increases visibility in AI-generated step-by-step answers and rich snippets.",
+          "how_to_fix_steps": [
+            "Outline clear steps with headings (e.g., 'Step 1: Choose a Product').",
+            "List required tools/supplies (e.g., 'Shopify account, Facebook Ads').",
+            "Add estimated time/cost for each step.",
+            "Review your JSON-LD/schema configuration and update it in your SEO/schema plugin settings."
+          ],
+          "example_pattern": "Lead with a direct claim, add one concrete support detail, then close with a clear takeaway."
+        },
+        "issue_explanation": "Content describes a process but lacks structured steps, required tools, or actionable details for HowTo schema. HowTo schema increases visibility in AI-generated step-by-step answers and rich snippets. Outline clear steps with headings (e.g., 'Step 1: Choose a Product'). List required tools/supplies (e.g., 'Shopify account, Facebook Ads'). Add estimated time/cost for each step. For example, Lead with a direct claim, add one concrete support detail, then close with a clear takeaway.",
+        "failure_reason": "howto_schema_non_inline",
+        "node_ref": "block-3",
+        "jump_node_ref": "block-3",
+        "signature": "f6882fc2bc6957f225f6ceb44cf0f7e9c7e0e454e4480224d953f9311c03614a",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "named_entities_detected",
+        "check_name": "Named Entities Detected",
+        "instance_index": 0,
+        "issue_key": "named_entities_detected:0",
+        "verdict": "partial",
+        "message": "Detected entities (Dropshipping, Shopify, Facebook Ads) but lacks depth or contextual links.",
+        "rationale": "Detected entities (Dropshipping, Shopify, Facebook Ads) but lacks depth or contextual links.",
+        "snippet": "Dropshipping, Shopify, Facebook Ads",
+        "action_suggestion": "Rewrite the weakest sentence in this section: keep key terms together, state one clear claim, and add one concrete supporting detail.",
+        "explanation_pack": {
+          "what_failed": "Detected entities (Dropshipping, Shopify, Facebook Ads) but lacks depth or contextual links.",
+          "why_it_matters": "Explicit entity linking improves AI understanding and citability in knowledge graphs.",
+          "how_to_fix_steps": [
+            "Rewrite the weakest sentence in this section: keep key terms together, state one clear claim, and add one concrete supporting detail.",
+            "Start from the quoted passage and rewrite one clear claim with no filler language.",
+            "Add one concrete supporting detail (fact, number, condition, or source cue) near the revised claim.",
+            "Rewrite the weakest sentence in this section: keep key terms together, state one clear claim, and add one concrete supporting detail."
+          ],
+          "example_pattern": "Lead with a direct claim, add one concrete support detail, then close with a clear takeaway."
+        },
+        "issue_explanation": "Detected entities (Dropshipping, Shopify, Facebook Ads) but lacks depth or contextual links. Explicit entity linking improves AI understanding and citability in knowledge graphs. Rewrite the weakest sentence in this section: keep key terms together, state one clear claim, and add one concrete supporting detail. Start from the quoted passage and rewrite one clear claim with no filler language. Add one concrete supporting detail (fact, number, condition, or source cue) near the revised claim. For example, Lead with a direct claim, add one concrete support detail, then close with a clear takeaway.",
+        "failure_reason": "missing_anchor",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "entities_contextually_relevant",
+        "check_name": "Entities Contextually Relevant",
+        "instance_index": 0,
+        "issue_key": "entities_contextually_relevant:0",
+        "verdict": "partial",
+        "message": "Entity 'Facebook Ads' is relevant but lacks explanation of its role in dropshipping.",
+        "rationale": "Entity 'Facebook Ads' is relevant but lacks explanation of its role in dropshipping.",
+        "snippet": "Facebook Ads",
+        "action_suggestion": "Rewrite the weakest sentence in this section: keep key terms together, state one clear claim, and add one concrete supporting detail.",
+        "explanation_pack": {
+          "what_failed": "Entity 'Facebook Ads' is relevant but lacks explanation of its role in dropshipping.",
+          "why_it_matters": "AI engines favor content that clarifies entity relationships for accurate citations.",
+          "how_to_fix_steps": [
+            "Rewrite the weakest sentence in this section: keep key terms together, state one clear claim, and add one concrete supporting detail.",
+            "Start from the quoted passage and rewrite one clear claim with no filler language.",
+            "Add one concrete supporting detail (fact, number, condition, or source cue) near the revised claim.",
+            "Rewrite the weakest sentence in this section: keep key terms together, state one clear claim, and add one concrete supporting detail."
+          ],
+          "example_pattern": "Lead with a direct claim, add one concrete support detail, then close with a clear takeaway."
+        },
+        "issue_explanation": "Entity 'Facebook Ads' is relevant but lacks explanation of its role in dropshipping. AI engines favor content that clarifies entity relationships for accurate citations. Rewrite the weakest sentence in this section: keep key terms together, state one clear claim, and add one concrete supporting detail. Start from the quoted passage and rewrite one clear claim with no filler language. Add one concrete supporting detail (fact, number, condition, or source cue) near the revised claim. For example, Lead with a direct claim, add one concrete support detail, then close with a clear takeaway.",
+        "failure_reason": "missing_anchor",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "howto_semantic_validity",
+        "check_name": "HowTo Semantic Validity",
+        "instance_index": 0,
+        "issue_key": "howto_semantic_validity:0",
+        "verdict": "fail",
+        "message": "Content lacks logical, step-by-step guidance expected for HowTo intent.",
+        "rationale": "Content lacks logical, step-by-step guidance expected for HowTo intent.",
+        "snippet": "So if you want to dominate dropshipping, stop researching and start launching immediately. Choose almost any product, write bold claims, increase your ad spend fast, ignore hesitation, and trust the process because dropshipping is still unlimited, unstoppable, and practically guaranteed for people who commit completely.",
+        "action_suggestion": "Break the section into smaller claim-level sentences and rewrite the weakest one first.",
+        "explanation_pack": {
+          "what_failed": "Content lacks logical, step-by-step guidance expected for HowTo intent.",
+          "why_it_matters": "AI engines prioritize structured, actionable guides for citability.",
+          "how_to_fix_steps": [
+            "Restructure content into clear, numbered steps.",
+            "Include prerequisites, tools, and expected outcomes.",
+            "Break the section into smaller claim-level sentences and rewrite the weakest one first."
+          ],
+          "example_pattern": "Step 1: Choose a trending product with low competition."
+        },
+        "issue_explanation": "Content lacks logical, step-by-step guidance expected for HowTo intent. AI engines prioritize structured, actionable guides for citability. Restructure content into clear, numbered steps. Include prerequisites, tools, and expected outcomes. Break the section into smaller claim-level sentences and rewrite the weakest one first. For example, Step 1: Choose a trending product with low competition.",
+        "failure_reason": "block_wide",
+        "node_ref": "block-3",
+        "jump_node_ref": "block-3",
+        "signature": "f6882fc2bc6957f225f6ceb44cf0f7e9c7e0e454e4480224d953f9311c03614a",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "external_authoritative_sources",
+        "check_name": "External Authoritative Sources",
+        "instance_index": 0,
+        "issue_key": "external_authoritative_sources:0",
+        "verdict": "fail",
+        "message": "No outbound links or citations to authoritative sources are provided.",
+        "rationale": "No outbound links or citations to authoritative sources are provided.",
+        "snippet": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+        "action_suggestion": "Add at least one authoritative external citation to support key claims in this article.",
+        "explanation_pack": {
+          "what_failed": "No outbound links or citations to authoritative sources are provided.",
+          "why_it_matters": "Lack of external validation reduces trust and AI citability.",
+          "how_to_fix_steps": [
+            "Link to reputable studies or industry reports.",
+            "Cite expert opinions from recognized authorities.",
+            "Add at least one authoritative external citation to support key claims in this article."
+          ],
+          "example_pattern": "State the claim directly, add a verifiable source nearby, and include one concrete number/date."
+        },
+        "issue_explanation": "No outbound links or citations to authoritative sources are provided. Lack of external validation reduces trust and AI citability. Link to reputable studies or industry reports. Cite expert opinions from recognized authorities. Add at least one authoritative external citation to support key claims in this article. For example, State the claim directly, add a verifiable source nearby, and include one concrete number/date.",
+        "failure_reason": "external_sources_document_scope",
+        "node_ref": "block-0",
+        "jump_node_ref": "block-0",
+        "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "claim_provenance_and_evidence",
+        "check_name": "Claim Provenance & Evidence",
+        "instance_index": 0,
+        "issue_key": "claim_provenance_and_evidence:0",
+        "verdict": "fail",
+        "message": "Claims lack verifiable evidence or citations.",
+        "rationale": "Claims lack verifiable evidence or citations.",
+        "snippet": "recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+        "action_suggestion": "Strengthen this section with concrete evidence or citations for the claim being made.",
+        "explanation_pack": {
+          "what_failed": "Claims lack verifiable evidence or citations.",
+          "why_it_matters": "Unverified claims reduce credibility and AI trust signals.",
+          "how_to_fix_steps": [
+            "Provide links to studies or data supporting claims.",
+            "Use specific examples or case studies.",
+            "Strengthen this section with concrete evidence or citations for the claim being made."
+          ],
+          "example_pattern": "State the claim directly, add a verifiable source nearby, and include one concrete number/date."
+        },
+        "issue_explanation": "Claims lack verifiable evidence or citations. Unverified claims reduce credibility and AI trust signals. Provide links to studies or data supporting claims. Use specific examples or case studies. Strengthen this section with concrete evidence or citations for the claim being made. For example, State the claim directly, add a verifiable source nearby, and include one concrete number/date.",
+        "failure_reason": "claim_evidence_section_scope",
+        "node_ref": "block-0",
+        "jump_node_ref": "block-0",
+        "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "promotional_or_commercial_intent",
+        "check_name": "Promotional Intent",
+        "instance_index": 0,
+        "issue_key": "promotional_or_commercial_intent:0",
+        "verdict": "fail",
+        "message": "Content exhibits strong promotional tone and commercial intent.",
+        "rationale": "Content exhibits strong promotional tone and commercial intent.",
+        "snippet": "So if you want to dominate dropshipping, stop researching and start launching immediately. Choose almost any product, write bold claims, increase your ad spend fast, ignore hesitation, and trust the process because dropshipping is still unlimited, unstoppable, and practically guaranteed for people who commit completely.",
+        "action_suggestion": "Break the section into smaller claim-level sentences and rewrite the weakest one first.",
+        "explanation_pack": {
+          "what_failed": "Content exhibits strong promotional tone and commercial intent.",
+          "why_it_matters": "Promotional content is deprioritized by AI engines for citability.",
+          "how_to_fix_steps": [
+            "Adopt a neutral, educational tone.",
+            "Focus on providing value over selling.",
+            "Break the section into smaller claim-level sentences and rewrite the weakest one first."
+          ],
+          "example_pattern": "Lead with a direct claim, add one concrete support detail, then close with a clear takeaway."
+        },
+        "issue_explanation": "Content exhibits strong promotional tone and commercial intent. Promotional content is deprioritized by AI engines for citability. Adopt a neutral, educational tone. Focus on providing value over selling. Break the section into smaller claim-level sentences and rewrite the weakest one first. For example, Lead with a direct claim, add one concrete support detail, then close with a clear takeaway.",
+        "failure_reason": "block_wide",
+        "node_ref": "block-3",
+        "jump_node_ref": "block-3",
+        "signature": "f6882fc2bc6957f225f6ceb44cf0f7e9c7e0e454e4480224d953f9311c03614a",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "citation_format_and_context",
+        "check_name": "Citation Format and Context",
+        "instance_index": 0,
+        "issue_key": "citation_format_and_context:0",
+        "verdict": "fail",
+        "message": "Claims lack citations or contextual support; assertions are presented as facts without evidence.",
+        "rationale": "Claims lack citations or contextual support; assertions are presented as facts without evidence.",
+        "snippet": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+        "action_suggestion": "Add explicit source citations for key factual claims and place them close to those statements.",
+        "explanation_pack": {
+          "what_failed": "Claims lack citations or contextual support; assertions are presented as facts without evidence.",
+          "why_it_matters": "AI engines favor content with verifiable citations, improving ranking and user trust.",
+          "how_to_fix_steps": [
+            "Add inline citations for claims (e.g., 'According to a 2023 industry report...').",
+            "Link to authoritative sources or case studies.",
+            "Clarify the basis of assertions (e.g., 'Some entrepreneurs report...').",
+            "Add explicit source citations for key factual claims and place them close to those statements."
+          ],
+          "example_pattern": "A 2023 survey by Dropshipping Insights found that 15% of stores achieve profitability within 6 months, though success rates vary by niche and ad strategy (source: [Dropshipping Insights, 2023])."
+        },
+        "issue_explanation": "Claims lack citations or contextual support; assertions are presented as facts without evidence. AI engines favor content with verifiable citations, improving ranking and user trust. Add inline citations for claims (e.g., 'According to a 2023 industry report...'). Link to authoritative sources or case studies. Clarify the basis of assertions (e.g., 'Some entrepreneurs report...'). For example, A 2023 survey by Dropshipping Insights found that 15% of stores achieve profitability within 6 months, though success rates vary by niche and ad strategy (source: [Dropshipping Insights, 2023]).",
+        "failure_reason": "citation_support_document_scope",
+        "node_ref": "block-0",
+        "jump_node_ref": "block-0",
+        "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "single_h1",
+        "check_name": "Single H1",
+        "instance_index": 0,
+        "issue_key": "single_h1:0",
+        "verdict": "fail",
+        "message": "No H1 tag found",
+        "rationale": "No H1 tag found",
+        "snippet": "",
+        "action_suggestion": "Add one primary H1 that states the page topic. Use H2 for major sections and H3/H4 only for nested subsections.",
+        "explanation_pack": {
+          "what_failed": "No primary H1 was found for this article.",
+          "why_it_matters": "Answer engines use the H1 as the strongest page-intent cue; when it is missing, topical focus and citation confidence can drop.",
+          "how_to_fix_steps": [
+            "Add one H1 that states the main topic in plain language.",
+            "Keep major sections as H2 and use H3/H4 only for nested subsections.",
+            "Re-run analysis and confirm exactly one H1 is detected.",
+            "Add one primary H1 that states the page topic. Use H2 for major sections and H3/H4 only for nested subsections."
+          ],
+          "example_pattern": "One clear H1 for the article promise, followed by H2 sections for main subtopics."
+        },
+        "issue_explanation": "No primary H1 was found for this article. Answer engines use the H1 as the strongest page-intent cue; when it is missing, topical focus and citation confidence can drop. Add one H1 that states the main topic in plain language. Keep major sections as H2 and use H3/H4 only for nested subsections. Re-run analysis and confirm exactly one H1 is detected. For example, One clear H1 for the article promise, followed by H2 sections for main subtopics.",
+        "failure_reason": "missing_required_h1",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "metadata_checks",
+        "check_name": "Metadata Checks",
+        "instance_index": 0,
+        "issue_key": "metadata_checks:0",
+        "verdict": "partial",
+        "message": "Missing metadata: meta_description, canonical, lang",
+        "rationale": "Missing metadata: meta_description, canonical, lang",
+        "snippet": "",
+        "action_suggestion": "Update title, meta description, canonical URL, and language metadata at the document level.",
+        "explanation_pack": {
+          "what_failed": "Critical metadata fields are missing or incomplete.",
+          "why_it_matters": "Metadata helps retrieval systems classify page intent and relevance before deep parsing.",
+          "how_to_fix_steps": [
+            "Complete title and meta description with topic-aligned wording.",
+            "Ensure metadata accurately reflects the main claim in content.",
+            "Re-run analysis to confirm metadata checks pass.",
+            "Update title, meta description, canonical URL, and language metadata at the document level."
+          ],
+          "example_pattern": "Title and meta description that mirror the article promise."
+        },
+        "issue_explanation": "Critical metadata fields are missing or incomplete. Metadata helps retrieval systems classify page intent and relevance before deep parsing. Complete title and meta description with topic-aligned wording. Ensure metadata accurately reflects the main claim in content. Re-run analysis to confirm metadata checks pass. For example, Title and meta description that mirror the article promise.",
+        "failure_reason": "metadata_document_scope",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "author_identified",
+        "check_name": "Author Identified",
+        "instance_index": 0,
+        "issue_key": "author_identified:0",
+        "verdict": "fail",
+        "message": "No author identification detected",
+        "rationale": "No author identification detected",
+        "snippet": "",
+        "action_suggestion": "Add a clear author byline and an author bio section near the article header or footer.",
+        "explanation_pack": {
+          "what_failed": "The article does not clearly identify an author byline.",
+          "why_it_matters": "Missing authorship weakens trust signals used by LLM-based answer engines when ranking citation candidates.",
+          "how_to_fix_steps": [
+            "Add a visible author name near the title or intro.",
+            "Keep author identity consistent with site-level profile details.",
+            "Re-run analysis to verify author attribution is detected.",
+            "Add a clear author byline and an author bio section near the article header or footer."
+          ],
+          "example_pattern": "By Jane Smith, Technical Editor."
+        },
+        "issue_explanation": "The article does not clearly identify an author byline. Missing authorship weakens trust signals used by LLM-based answer engines when ranking citation candidates. Add a visible author name near the title or intro. Keep author identity consistent with site-level profile details. Re-run analysis to verify author attribution is detected. For example, By Jane Smith, Technical Editor.",
+        "failure_reason": "missing_author_byline",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "author_bio_present",
+        "check_name": "Author Bio Present",
+        "instance_index": 0,
+        "issue_key": "author_bio_present:0",
+        "verdict": "fail",
+        "message": "No author bio section detected",
+        "rationale": "No author bio section detected",
+        "snippet": "",
+        "action_suggestion": "Add a clear author byline and an author bio section near the article header or footer.",
+        "explanation_pack": {
+          "what_failed": "Author profile context is missing from the article body or metadata surface.",
+          "why_it_matters": "Expertise context improves citation confidence for factual and advisory content.",
+          "how_to_fix_steps": [
+            "Publish a concise bio tied to the article author.",
+            "Reference specific expertise relevant to this topic.",
+            "Validate the page after updating author information.",
+            "Add a clear author byline and an author bio section near the article header or footer."
+          ],
+          "example_pattern": "Author expertise statement aligned with article theme."
+        },
+        "issue_explanation": "Author profile context is missing from the article body or metadata surface. Expertise context improves citation confidence for factual and advisory content. Publish a concise bio tied to the article author. Reference specific expertise relevant to this topic. Validate the page after updating author information. For example, Author expertise statement aligned with article theme.",
+        "failure_reason": "missing_author_bio",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "semantic_html_usage",
+        "check_name": "Semantic HTML Usage",
+        "instance_index": 0,
+        "issue_key": "semantic_html_usage:0",
+        "verdict": "fail",
+        "message": "No semantic HTML tags detected",
+        "rationale": "No semantic HTML tags detected",
+        "snippet": "",
+        "action_suggestion": "Add semantic HTML elements (article, section, nav, main) to improve structural clarity.",
+        "explanation_pack": {
+          "what_failed": "Content relies on non-semantic structure where semantic tags are expected.",
+          "why_it_matters": "Semantic markup improves parse quality for retrieval and citation extraction pipelines.",
+          "how_to_fix_steps": [
+            "Refactor flagged blocks to semantic section and heading elements.",
+            "Ensure list-like content uses list markup, not plain paragraphs.",
+            "Validate semantic usage in the next run.",
+            "Add semantic HTML elements (article, section, nav, main) to improve structural clarity."
+          ],
+          "example_pattern": "Use semantic tags to express structure, not just visual styling."
+        },
+        "issue_explanation": "Content relies on non-semantic structure where semantic tags are expected. Semantic markup improves parse quality for retrieval and citation extraction pipelines. Refactor flagged blocks to semantic section and heading elements. Ensure list-like content uses list markup, not plain paragraphs. Validate semantic usage in the next run. For example, Use semantic tags to express structure, not just visual styling.",
+        "failure_reason": "semantic_structure_non_inline",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "schema_matches_content",
+        "check_name": "Schema Matches Content",
+        "instance_index": 0,
+        "issue_key": "schema_matches_content:0",
+        "verdict": "partial",
+        "message": "No schema types available for comparison",
+        "rationale": "No schema types available for comparison",
+        "snippet": "",
+        "action_suggestion": "Review your JSON-LD/schema configuration and update it in your SEO/schema plugin settings.",
+        "explanation_pack": {
+          "what_failed": "Structured-data fields do not fully match visible page content.",
+          "why_it_matters": "Schema-content mismatch lowers trust and can reduce eligibility for citation-focused answer surfaces.",
+          "how_to_fix_steps": [
+            "Align structured fields with exact on-page wording and claims.",
+            "Remove schema properties not supported by visible text.",
+            "Re-run analysis to verify schema alignment.",
+            "Review your JSON-LD/schema configuration and update it in your SEO/schema plugin settings."
+          ],
+          "example_pattern": "Schema values mirror visible headline, summary, and entity claims."
+        },
+        "issue_explanation": "Structured-data fields do not fully match visible page content. Schema-content mismatch lowers trust and can reduce eligibility for citation-focused answer surfaces. Align structured fields with exact on-page wording and claims. Remove schema properties not supported by visible text. Re-run analysis to verify schema alignment. For example, Schema values mirror visible headline, summary, and entity claims.",
+        "failure_reason": "schema_content_alignment_non_inline",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "appropriate_paragraph_length",
+        "check_name": "Appropriate Paragraph Length",
+        "instance_index": 0,
+        "issue_key": "appropriate_paragraph_length:0",
+        "verdict": "fail",
+        "message": "This paragraph is longer than recommended for answer extraction.",
+        "rationale": "This paragraph is longer than recommended for answer extraction.",
+        "snippet": "The biggest mistake beginners make is listening to people who talk about competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, or product-market fit. Those ideas are outdated and mostly spread by negative people who want to keep opportunities for themselves. In reality, the secret is to move as fast as possible and never question your first idea. If a product looks interesting to you, it will automatically look interesting to millions of strangers from every country and age group because impulse buying is univer",
+        "action_suggestion": "Narrow the revision to a single claim sentence, then add one supporting fact.",
+        "explanation_pack": {
+          "what_failed": "At least one paragraph exceeds the recommended length threshold.",
+          "why_it_matters": "Very long paragraphs reduce scannability and make answer span extraction less precise.",
+          "how_to_fix_steps": [
+            "Split oversized paragraphs into shorter units by sub-idea.",
+            "Keep each paragraph focused on one claim and one support detail.",
+            "Re-run analysis to confirm paragraph sizing passes.",
+            "Narrow the revision to a single claim sentence, then add one supporting fact."
+          ],
+          "example_pattern": "One idea per paragraph with concise supporting sentence."
+        },
+        "issue_explanation": "At least one paragraph exceeds the recommended length threshold. Very long paragraphs reduce scannability and make answer span extraction less precise. Split oversized paragraphs into shorter units by sub-idea. Keep each paragraph focused on one claim and one support detail. Re-run analysis to confirm paragraph sizing passes. For example, One idea per paragraph with concise supporting sentence.",
+        "failure_reason": "too_wide",
+        "node_ref": "block-1",
+        "jump_node_ref": "block-1",
+        "signature": "429d59d2d99d9a65f37cb5270a47046f5e40b8fd9c314679a5da15a6bdd92a57",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "intro_wordcount",
+        "check_name": "Intro Word Count",
+        "instance_index": 0,
+        "issue_key": "intro_wordcount:0",
+        "verdict": "fail",
+        "message": "Intro contains 417 words (too long)",
+        "rationale": "Intro contains 417 words (too long)",
+        "snippet": "",
+        "action_suggestion": "Adjust the intro toward the target range (about 40-60 words): keep one direct topic sentence and one supporting fact.",
+        "explanation_pack": {
+          "what_failed": "Intro size does not meet the configured readability and focus window.",
+          "why_it_matters": "Balanced intros improve comprehension and increase citation reliability for answer systems.",
+          "how_to_fix_steps": [
+            "Adjust intro length toward the recommended range.",
+            "Preserve only essential context and avoid repetitive setup lines.",
+            "Retest intro checks after editing.",
+            "Adjust the intro toward the target range (about 40-60 words): keep one direct topic sentence and one supporting fact."
+          ],
+          "example_pattern": "Two to four concise intro sentences with no filler."
+        },
+        "issue_explanation": "Intro size does not meet the configured readability and focus window. Balanced intros improve comprehension and increase citation reliability for answer systems. Adjust intro length toward the recommended range. Preserve only essential context and avoid repetitive setup lines. Retest intro checks after editing. For example, Two to four concise intro sentences with no filler.",
+        "failure_reason": "intro_wordcount_non_inline",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "intro_readability",
+        "check_name": "Intro Readability",
+        "instance_index": 0,
+        "issue_key": "intro_readability:0",
+        "verdict": "partial",
+        "message": "Avg sentence length 27.8, passive voice 6.7%, Flesch 34.6",
+        "rationale": "Avg sentence length 27.8, passive voice 6.7%, Flesch 34.6",
+        "snippet": "",
+        "action_suggestion": "Simplify the intro by splitting long sentences, reducing passive voice, and keeping wording direct.",
+        "explanation_pack": {
+          "what_failed": "The intro readability profile is too dense for fast extraction.",
+          "why_it_matters": "Dense sentence structures lower answer recall and can reduce citation confidence.",
+          "how_to_fix_steps": [
+            "Split long sentences and reduce nested clauses.",
+            "Prefer direct wording over abstract transitions.",
+            "Re-run analysis to confirm readability improvement.",
+            "Simplify the intro by splitting long sentences, reducing passive voice, and keeping wording direct."
+          ],
+          "example_pattern": "Short declarative sentences with clear subject and action."
+        },
+        "issue_explanation": "The intro readability profile is too dense for fast extraction. Dense sentence structures lower answer recall and can reduce citation confidence. Split long sentences and reduce nested clauses. Prefer direct wording over abstract transitions. Re-run analysis to confirm readability improvement. For example, Short declarative sentences with clear subject and action.",
+        "failure_reason": "intro_readability_non_inline",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "intro_schema_suggestion",
+        "check_name": "Intro Schema Suggestion",
+        "instance_index": 0,
+        "issue_key": "intro_schema_suggestion:0",
+        "verdict": "partial",
+        "message": "No structured data detected for intro context; consider adding Article schema.",
+        "rationale": "No structured data detected for intro context; consider adding Article schema.",
+        "snippet": "",
+        "action_suggestion": "Review your JSON-LD/schema configuration and update it in your SEO/schema plugin settings.",
+        "explanation_pack": {
+          "what_failed": "The intro suggests structured answer intent but schema support is missing.",
+          "why_it_matters": "Schema alignment improves machine understanding of intent and boosts retrieval precision.",
+          "how_to_fix_steps": [
+            "Add schema type that best matches intro intent and page structure.",
+            "Keep structured fields consistent with visible intro content.",
+            "Re-run analysis and validate structured-data checks.",
+            "Review your JSON-LD/schema configuration and update it in your SEO/schema plugin settings."
+          ],
+          "example_pattern": "Visible intro claim mirrored by matching schema fields."
+        },
+        "issue_explanation": "The intro suggests structured answer intent but schema support is missing. Schema alignment improves machine understanding of intent and boosts retrieval precision. Add schema type that best matches intro intent and page structure. Keep structured fields consistent with visible intro content. Re-run analysis and validate structured-data checks. For example, Visible intro claim mirrored by matching schema fields.",
+        "failure_reason": "intro_schema_non_inline",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable",
+        "schema_assist": {
+          "check_id": "intro_schema_suggestion",
+          "generator": "deterministic_schema_builder_v1",
+          "schema_kind": "intro_schema_jsonld",
+          "draft_jsonld": {
+            "@context": "https://schema.org",
+            "@type": "Article",
+            "headline": "The Secret Dropshipping Method That Makes Everyone Rich Instantly",
+            "description": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience,..."
+          },
+          "can_copy": true,
+          "can_insert": true,
+          "generation_mode": "template_seed",
+          "generation_notes": [
+            "Generated Article draft from intro deterministic signals.",
+            "Review placeholders before publishing."
+          ]
+        }
+      },
+      {
+        "run_id": "",
+        "check_id": "intro_focus_and_factuality.v1",
+        "check_name": "Intro Focus & Factuality Composite",
+        "instance_index": 0,
+        "issue_key": "intro_focus_and_factuality.v1:0",
+        "verdict": "fail",
+        "message": "The intro misses core quality signals for focus and factual grounding; tighten the opening claim and support it with concrete evidence.",
+        "rationale": "The intro misses core quality signals for focus and factual grounding; tighten the opening claim and support it with concrete evidence.",
+        "snippet": "",
+        "action_suggestion": "Refocus the intro on one explicit topic sentence, add one concrete supporting fact, and remove filler.",
+        "explanation_pack": {
+          "what_failed": "The intro does not meet the combined focus and factual-support threshold.",
+          "why_it_matters": "Weak opening focus or unsupported facts reduce first-pass trust for answer engines.",
+          "how_to_fix_steps": [
+            "Lead with a direct topic statement in the first sentence.",
+            "Add one concrete support detail tied to the opening claim.",
+            "Re-run analysis to verify composite intro quality passes.",
+            "Refocus the intro on one explicit topic sentence, add one concrete supporting fact, and remove filler."
+          ],
+          "example_pattern": "Direct intro claim, supporting fact, and clear scope line."
+        },
+        "issue_explanation": "The intro does not meet the combined focus and factual-support threshold. Weak opening focus or unsupported facts reduce first-pass trust for answer engines. Lead with a direct topic statement in the first sentence. Add one concrete support detail tied to the opening claim. Re-run analysis to verify composite intro quality passes. For example, Direct intro claim, supporting fact, and clear scope line.",
+        "failure_reason": "intro_composite_non_inline",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      }
+    ],
+    "unhighlightable_issues": [
+      {
+        "run_id": "",
+        "check_id": "readability_adaptivity",
+        "check_name": "Readability Adaptivity",
+        "instance_index": 0,
+        "issue_key": "readability_adaptivity:0",
+        "verdict": "fail",
+        "message": "The Flesch Reading Ease score is ~30, indicating college-level complexity with long, convoluted sentences.",
+        "rationale": "The Flesch Reading Ease score is ~30, indicating college-level complexity with long, convoluted sentences.",
+        "snippet": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling.",
+        "action_suggestion": "Break the section into smaller claim-level sentences and rewrite the weakest one first.",
+        "explanation_pack": {
+          "what_failed": "The Flesch Reading Ease score is ~30, indicating college-level complexity with long, convoluted sentences.",
+          "why_it_matters": "AI answer engines favor content at an 8th-9th grade reading level for broader citability.",
+          "how_to_fix_steps": [
+            "Break long sentences into shorter ones (≤15 words).",
+            "Replace complex phrases with simpler alternatives.",
+            "Use bullet points for lists of requirements/benefits.",
+            "Break the section into smaller claim-level sentences and rewrite the weakest one first."
+          ],
+          "example_pattern": "Dropshipping lets anyone start a business fast. You don’t need experience or money."
+        },
+        "issue_explanation": "The Flesch Reading Ease score is ~30, indicating college-level complexity with long, convoluted sentences. AI answer engines favor content at an 8th-9th grade reading level for broader citability. Break long sentences into shorter ones (≤15 words). Replace complex phrases with simpler alternatives. Use bullet points for lists of requirements/benefits. For example, Dropshipping lets anyone start a business fast. You don’t need experience or money.",
+        "failure_reason": "block_wide",
+        "node_ref": "block-0",
+        "jump_node_ref": "block-0",
+        "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "howto_schema_presence_and_completeness",
+        "check_name": "HowTo Schema Completeness",
+        "instance_index": 0,
+        "issue_key": "howto_schema_presence_and_completeness:0",
+        "verdict": "fail",
+        "message": "Content describes a process but lacks structured steps, required tools, or actionable details for HowTo schema.",
+        "rationale": "Content describes a process but lacks structured steps, required tools, or actionable details for HowTo schema.",
+        "snippet": "So if you want to dominate dropshipping, stop researching and start launching immediately.",
+        "action_suggestion": "Review your JSON-LD/schema configuration and update it in your SEO/schema plugin settings.",
+        "explanation_pack": {
+          "what_failed": "Content describes a process but lacks structured steps, required tools, or actionable details for HowTo schema.",
+          "why_it_matters": "HowTo schema increases visibility in AI-generated step-by-step answers and rich snippets.",
+          "how_to_fix_steps": [
+            "Outline clear steps with headings (e.g., 'Step 1: Choose a Product').",
+            "List required tools/supplies (e.g., 'Shopify account, Facebook Ads').",
+            "Add estimated time/cost for each step.",
+            "Review your JSON-LD/schema configuration and update it in your SEO/schema plugin settings."
+          ],
+          "example_pattern": "Lead with a direct claim, add one concrete support detail, then close with a clear takeaway."
+        },
+        "issue_explanation": "Content describes a process but lacks structured steps, required tools, or actionable details for HowTo schema. HowTo schema increases visibility in AI-generated step-by-step answers and rich snippets. Outline clear steps with headings (e.g., 'Step 1: Choose a Product'). List required tools/supplies (e.g., 'Shopify account, Facebook Ads'). Add estimated time/cost for each step. For example, Lead with a direct claim, add one concrete support detail, then close with a clear takeaway.",
+        "failure_reason": "howto_schema_non_inline",
+        "node_ref": "block-3",
+        "jump_node_ref": "block-3",
+        "signature": "f6882fc2bc6957f225f6ceb44cf0f7e9c7e0e454e4480224d953f9311c03614a",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "named_entities_detected",
+        "check_name": "Named Entities Detected",
+        "instance_index": 0,
+        "issue_key": "named_entities_detected:0",
+        "verdict": "partial",
+        "message": "Detected entities (Dropshipping, Shopify, Facebook Ads) but lacks depth or contextual links.",
+        "rationale": "Detected entities (Dropshipping, Shopify, Facebook Ads) but lacks depth or contextual links.",
+        "snippet": "Dropshipping, Shopify, Facebook Ads",
+        "action_suggestion": "Rewrite the weakest sentence in this section: keep key terms together, state one clear claim, and add one concrete supporting detail.",
+        "explanation_pack": {
+          "what_failed": "Detected entities (Dropshipping, Shopify, Facebook Ads) but lacks depth or contextual links.",
+          "why_it_matters": "Explicit entity linking improves AI understanding and citability in knowledge graphs.",
+          "how_to_fix_steps": [
+            "Rewrite the weakest sentence in this section: keep key terms together, state one clear claim, and add one concrete supporting detail.",
+            "Start from the quoted passage and rewrite one clear claim with no filler language.",
+            "Add one concrete supporting detail (fact, number, condition, or source cue) near the revised claim.",
+            "Rewrite the weakest sentence in this section: keep key terms together, state one clear claim, and add one concrete supporting detail."
+          ],
+          "example_pattern": "Lead with a direct claim, add one concrete support detail, then close with a clear takeaway."
+        },
+        "issue_explanation": "Detected entities (Dropshipping, Shopify, Facebook Ads) but lacks depth or contextual links. Explicit entity linking improves AI understanding and citability in knowledge graphs. Rewrite the weakest sentence in this section: keep key terms together, state one clear claim, and add one concrete supporting detail. Start from the quoted passage and rewrite one clear claim with no filler language. Add one concrete supporting detail (fact, number, condition, or source cue) near the revised claim. For example, Lead with a direct claim, add one concrete support detail, then close with a clear takeaway.",
+        "failure_reason": "missing_anchor",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "entities_contextually_relevant",
+        "check_name": "Entities Contextually Relevant",
+        "instance_index": 0,
+        "issue_key": "entities_contextually_relevant:0",
+        "verdict": "partial",
+        "message": "Entity 'Facebook Ads' is relevant but lacks explanation of its role in dropshipping.",
+        "rationale": "Entity 'Facebook Ads' is relevant but lacks explanation of its role in dropshipping.",
+        "snippet": "Facebook Ads",
+        "action_suggestion": "Rewrite the weakest sentence in this section: keep key terms together, state one clear claim, and add one concrete supporting detail.",
+        "explanation_pack": {
+          "what_failed": "Entity 'Facebook Ads' is relevant but lacks explanation of its role in dropshipping.",
+          "why_it_matters": "AI engines favor content that clarifies entity relationships for accurate citations.",
+          "how_to_fix_steps": [
+            "Rewrite the weakest sentence in this section: keep key terms together, state one clear claim, and add one concrete supporting detail.",
+            "Start from the quoted passage and rewrite one clear claim with no filler language.",
+            "Add one concrete supporting detail (fact, number, condition, or source cue) near the revised claim.",
+            "Rewrite the weakest sentence in this section: keep key terms together, state one clear claim, and add one concrete supporting detail."
+          ],
+          "example_pattern": "Lead with a direct claim, add one concrete support detail, then close with a clear takeaway."
+        },
+        "issue_explanation": "Entity 'Facebook Ads' is relevant but lacks explanation of its role in dropshipping. AI engines favor content that clarifies entity relationships for accurate citations. Rewrite the weakest sentence in this section: keep key terms together, state one clear claim, and add one concrete supporting detail. Start from the quoted passage and rewrite one clear claim with no filler language. Add one concrete supporting detail (fact, number, condition, or source cue) near the revised claim. For example, Lead with a direct claim, add one concrete support detail, then close with a clear takeaway.",
+        "failure_reason": "missing_anchor",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "howto_semantic_validity",
+        "check_name": "HowTo Semantic Validity",
+        "instance_index": 0,
+        "issue_key": "howto_semantic_validity:0",
+        "verdict": "fail",
+        "message": "Content lacks logical, step-by-step guidance expected for HowTo intent.",
+        "rationale": "Content lacks logical, step-by-step guidance expected for HowTo intent.",
+        "snippet": "So if you want to dominate dropshipping, stop researching and start launching immediately. Choose almost any product, write bold claims, increase your ad spend fast, ignore hesitation, and trust the process because dropshipping is still unlimited, unstoppable, and practically guaranteed for people who commit completely.",
+        "action_suggestion": "Break the section into smaller claim-level sentences and rewrite the weakest one first.",
+        "explanation_pack": {
+          "what_failed": "Content lacks logical, step-by-step guidance expected for HowTo intent.",
+          "why_it_matters": "AI engines prioritize structured, actionable guides for citability.",
+          "how_to_fix_steps": [
+            "Restructure content into clear, numbered steps.",
+            "Include prerequisites, tools, and expected outcomes.",
+            "Break the section into smaller claim-level sentences and rewrite the weakest one first."
+          ],
+          "example_pattern": "Step 1: Choose a trending product with low competition."
+        },
+        "issue_explanation": "Content lacks logical, step-by-step guidance expected for HowTo intent. AI engines prioritize structured, actionable guides for citability. Restructure content into clear, numbered steps. Include prerequisites, tools, and expected outcomes. Break the section into smaller claim-level sentences and rewrite the weakest one first. For example, Step 1: Choose a trending product with low competition.",
+        "failure_reason": "block_wide",
+        "node_ref": "block-3",
+        "jump_node_ref": "block-3",
+        "signature": "f6882fc2bc6957f225f6ceb44cf0f7e9c7e0e454e4480224d953f9311c03614a",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "external_authoritative_sources",
+        "check_name": "External Authoritative Sources",
+        "instance_index": 0,
+        "issue_key": "external_authoritative_sources:0",
+        "verdict": "fail",
+        "message": "No outbound links or citations to authoritative sources are provided.",
+        "rationale": "No outbound links or citations to authoritative sources are provided.",
+        "snippet": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+        "action_suggestion": "Add at least one authoritative external citation to support key claims in this article.",
+        "explanation_pack": {
+          "what_failed": "No outbound links or citations to authoritative sources are provided.",
+          "why_it_matters": "Lack of external validation reduces trust and AI citability.",
+          "how_to_fix_steps": [
+            "Link to reputable studies or industry reports.",
+            "Cite expert opinions from recognized authorities.",
+            "Add at least one authoritative external citation to support key claims in this article."
+          ],
+          "example_pattern": "State the claim directly, add a verifiable source nearby, and include one concrete number/date."
+        },
+        "issue_explanation": "No outbound links or citations to authoritative sources are provided. Lack of external validation reduces trust and AI citability. Link to reputable studies or industry reports. Cite expert opinions from recognized authorities. Add at least one authoritative external citation to support key claims in this article. For example, State the claim directly, add a verifiable source nearby, and include one concrete number/date.",
+        "failure_reason": "external_sources_document_scope",
+        "node_ref": "block-0",
+        "jump_node_ref": "block-0",
+        "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "claim_provenance_and_evidence",
+        "check_name": "Claim Provenance & Evidence",
+        "instance_index": 0,
+        "issue_key": "claim_provenance_and_evidence:0",
+        "verdict": "fail",
+        "message": "Claims lack verifiable evidence or citations.",
+        "rationale": "Claims lack verifiable evidence or citations.",
+        "snippet": "recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+        "action_suggestion": "Strengthen this section with concrete evidence or citations for the claim being made.",
+        "explanation_pack": {
+          "what_failed": "Claims lack verifiable evidence or citations.",
+          "why_it_matters": "Unverified claims reduce credibility and AI trust signals.",
+          "how_to_fix_steps": [
+            "Provide links to studies or data supporting claims.",
+            "Use specific examples or case studies.",
+            "Strengthen this section with concrete evidence or citations for the claim being made."
+          ],
+          "example_pattern": "State the claim directly, add a verifiable source nearby, and include one concrete number/date."
+        },
+        "issue_explanation": "Claims lack verifiable evidence or citations. Unverified claims reduce credibility and AI trust signals. Provide links to studies or data supporting claims. Use specific examples or case studies. Strengthen this section with concrete evidence or citations for the claim being made. For example, State the claim directly, add a verifiable source nearby, and include one concrete number/date.",
+        "failure_reason": "claim_evidence_section_scope",
+        "node_ref": "block-0",
+        "jump_node_ref": "block-0",
+        "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "promotional_or_commercial_intent",
+        "check_name": "Promotional Intent",
+        "instance_index": 0,
+        "issue_key": "promotional_or_commercial_intent:0",
+        "verdict": "fail",
+        "message": "Content exhibits strong promotional tone and commercial intent.",
+        "rationale": "Content exhibits strong promotional tone and commercial intent.",
+        "snippet": "So if you want to dominate dropshipping, stop researching and start launching immediately. Choose almost any product, write bold claims, increase your ad spend fast, ignore hesitation, and trust the process because dropshipping is still unlimited, unstoppable, and practically guaranteed for people who commit completely.",
+        "action_suggestion": "Break the section into smaller claim-level sentences and rewrite the weakest one first.",
+        "explanation_pack": {
+          "what_failed": "Content exhibits strong promotional tone and commercial intent.",
+          "why_it_matters": "Promotional content is deprioritized by AI engines for citability.",
+          "how_to_fix_steps": [
+            "Adopt a neutral, educational tone.",
+            "Focus on providing value over selling.",
+            "Break the section into smaller claim-level sentences and rewrite the weakest one first."
+          ],
+          "example_pattern": "Lead with a direct claim, add one concrete support detail, then close with a clear takeaway."
+        },
+        "issue_explanation": "Content exhibits strong promotional tone and commercial intent. Promotional content is deprioritized by AI engines for citability. Adopt a neutral, educational tone. Focus on providing value over selling. Break the section into smaller claim-level sentences and rewrite the weakest one first. For example, Lead with a direct claim, add one concrete support detail, then close with a clear takeaway.",
+        "failure_reason": "block_wide",
+        "node_ref": "block-3",
+        "jump_node_ref": "block-3",
+        "signature": "f6882fc2bc6957f225f6ceb44cf0f7e9c7e0e454e4480224d953f9311c03614a",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "citation_format_and_context",
+        "check_name": "Citation Format and Context",
+        "instance_index": 0,
+        "issue_key": "citation_format_and_context:0",
+        "verdict": "fail",
+        "message": "Claims lack citations or contextual support; assertions are presented as facts without evidence.",
+        "rationale": "Claims lack citations or contextual support; assertions are presented as facts without evidence.",
+        "snippet": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+        "action_suggestion": "Add explicit source citations for key factual claims and place them close to those statements.",
+        "explanation_pack": {
+          "what_failed": "Claims lack citations or contextual support; assertions are presented as facts without evidence.",
+          "why_it_matters": "AI engines favor content with verifiable citations, improving ranking and user trust.",
+          "how_to_fix_steps": [
+            "Add inline citations for claims (e.g., 'According to a 2023 industry report...').",
+            "Link to authoritative sources or case studies.",
+            "Clarify the basis of assertions (e.g., 'Some entrepreneurs report...').",
+            "Add explicit source citations for key factual claims and place them close to those statements."
+          ],
+          "example_pattern": "A 2023 survey by Dropshipping Insights found that 15% of stores achieve profitability within 6 months, though success rates vary by niche and ad strategy (source: [Dropshipping Insights, 2023])."
+        },
+        "issue_explanation": "Claims lack citations or contextual support; assertions are presented as facts without evidence. AI engines favor content with verifiable citations, improving ranking and user trust. Add inline citations for claims (e.g., 'According to a 2023 industry report...'). Link to authoritative sources or case studies. Clarify the basis of assertions (e.g., 'Some entrepreneurs report...'). For example, A 2023 survey by Dropshipping Insights found that 15% of stores achieve profitability within 6 months, though success rates vary by niche and ad strategy (source: [Dropshipping Insights, 2023]).",
+        "failure_reason": "citation_support_document_scope",
+        "node_ref": "block-0",
+        "jump_node_ref": "block-0",
+        "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "single_h1",
+        "check_name": "Single H1",
+        "instance_index": 0,
+        "issue_key": "single_h1:0",
+        "verdict": "fail",
+        "message": "No H1 tag found",
+        "rationale": "No H1 tag found",
+        "snippet": "",
+        "action_suggestion": "Add one primary H1 that states the page topic. Use H2 for major sections and H3/H4 only for nested subsections.",
+        "explanation_pack": {
+          "what_failed": "No primary H1 was found for this article.",
+          "why_it_matters": "Answer engines use the H1 as the strongest page-intent cue; when it is missing, topical focus and citation confidence can drop.",
+          "how_to_fix_steps": [
+            "Add one H1 that states the main topic in plain language.",
+            "Keep major sections as H2 and use H3/H4 only for nested subsections.",
+            "Re-run analysis and confirm exactly one H1 is detected.",
+            "Add one primary H1 that states the page topic. Use H2 for major sections and H3/H4 only for nested subsections."
+          ],
+          "example_pattern": "One clear H1 for the article promise, followed by H2 sections for main subtopics."
+        },
+        "issue_explanation": "No primary H1 was found for this article. Answer engines use the H1 as the strongest page-intent cue; when it is missing, topical focus and citation confidence can drop. Add one H1 that states the main topic in plain language. Keep major sections as H2 and use H3/H4 only for nested subsections. Re-run analysis and confirm exactly one H1 is detected. For example, One clear H1 for the article promise, followed by H2 sections for main subtopics.",
+        "failure_reason": "missing_required_h1",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "metadata_checks",
+        "check_name": "Metadata Checks",
+        "instance_index": 0,
+        "issue_key": "metadata_checks:0",
+        "verdict": "partial",
+        "message": "Missing metadata: meta_description, canonical, lang",
+        "rationale": "Missing metadata: meta_description, canonical, lang",
+        "snippet": "",
+        "action_suggestion": "Update title, meta description, canonical URL, and language metadata at the document level.",
+        "explanation_pack": {
+          "what_failed": "Critical metadata fields are missing or incomplete.",
+          "why_it_matters": "Metadata helps retrieval systems classify page intent and relevance before deep parsing.",
+          "how_to_fix_steps": [
+            "Complete title and meta description with topic-aligned wording.",
+            "Ensure metadata accurately reflects the main claim in content.",
+            "Re-run analysis to confirm metadata checks pass.",
+            "Update title, meta description, canonical URL, and language metadata at the document level."
+          ],
+          "example_pattern": "Title and meta description that mirror the article promise."
+        },
+        "issue_explanation": "Critical metadata fields are missing or incomplete. Metadata helps retrieval systems classify page intent and relevance before deep parsing. Complete title and meta description with topic-aligned wording. Ensure metadata accurately reflects the main claim in content. Re-run analysis to confirm metadata checks pass. For example, Title and meta description that mirror the article promise.",
+        "failure_reason": "metadata_document_scope",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "author_identified",
+        "check_name": "Author Identified",
+        "instance_index": 0,
+        "issue_key": "author_identified:0",
+        "verdict": "fail",
+        "message": "No author identification detected",
+        "rationale": "No author identification detected",
+        "snippet": "",
+        "action_suggestion": "Add a clear author byline and an author bio section near the article header or footer.",
+        "explanation_pack": {
+          "what_failed": "The article does not clearly identify an author byline.",
+          "why_it_matters": "Missing authorship weakens trust signals used by LLM-based answer engines when ranking citation candidates.",
+          "how_to_fix_steps": [
+            "Add a visible author name near the title or intro.",
+            "Keep author identity consistent with site-level profile details.",
+            "Re-run analysis to verify author attribution is detected.",
+            "Add a clear author byline and an author bio section near the article header or footer."
+          ],
+          "example_pattern": "By Jane Smith, Technical Editor."
+        },
+        "issue_explanation": "The article does not clearly identify an author byline. Missing authorship weakens trust signals used by LLM-based answer engines when ranking citation candidates. Add a visible author name near the title or intro. Keep author identity consistent with site-level profile details. Re-run analysis to verify author attribution is detected. For example, By Jane Smith, Technical Editor.",
+        "failure_reason": "missing_author_byline",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "author_bio_present",
+        "check_name": "Author Bio Present",
+        "instance_index": 0,
+        "issue_key": "author_bio_present:0",
+        "verdict": "fail",
+        "message": "No author bio section detected",
+        "rationale": "No author bio section detected",
+        "snippet": "",
+        "action_suggestion": "Add a clear author byline and an author bio section near the article header or footer.",
+        "explanation_pack": {
+          "what_failed": "Author profile context is missing from the article body or metadata surface.",
+          "why_it_matters": "Expertise context improves citation confidence for factual and advisory content.",
+          "how_to_fix_steps": [
+            "Publish a concise bio tied to the article author.",
+            "Reference specific expertise relevant to this topic.",
+            "Validate the page after updating author information.",
+            "Add a clear author byline and an author bio section near the article header or footer."
+          ],
+          "example_pattern": "Author expertise statement aligned with article theme."
+        },
+        "issue_explanation": "Author profile context is missing from the article body or metadata surface. Expertise context improves citation confidence for factual and advisory content. Publish a concise bio tied to the article author. Reference specific expertise relevant to this topic. Validate the page after updating author information. For example, Author expertise statement aligned with article theme.",
+        "failure_reason": "missing_author_bio",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "semantic_html_usage",
+        "check_name": "Semantic HTML Usage",
+        "instance_index": 0,
+        "issue_key": "semantic_html_usage:0",
+        "verdict": "fail",
+        "message": "No semantic HTML tags detected",
+        "rationale": "No semantic HTML tags detected",
+        "snippet": "",
+        "action_suggestion": "Add semantic HTML elements (article, section, nav, main) to improve structural clarity.",
+        "explanation_pack": {
+          "what_failed": "Content relies on non-semantic structure where semantic tags are expected.",
+          "why_it_matters": "Semantic markup improves parse quality for retrieval and citation extraction pipelines.",
+          "how_to_fix_steps": [
+            "Refactor flagged blocks to semantic section and heading elements.",
+            "Ensure list-like content uses list markup, not plain paragraphs.",
+            "Validate semantic usage in the next run.",
+            "Add semantic HTML elements (article, section, nav, main) to improve structural clarity."
+          ],
+          "example_pattern": "Use semantic tags to express structure, not just visual styling."
+        },
+        "issue_explanation": "Content relies on non-semantic structure where semantic tags are expected. Semantic markup improves parse quality for retrieval and citation extraction pipelines. Refactor flagged blocks to semantic section and heading elements. Ensure list-like content uses list markup, not plain paragraphs. Validate semantic usage in the next run. For example, Use semantic tags to express structure, not just visual styling.",
+        "failure_reason": "semantic_structure_non_inline",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "schema_matches_content",
+        "check_name": "Schema Matches Content",
+        "instance_index": 0,
+        "issue_key": "schema_matches_content:0",
+        "verdict": "partial",
+        "message": "No schema types available for comparison",
+        "rationale": "No schema types available for comparison",
+        "snippet": "",
+        "action_suggestion": "Review your JSON-LD/schema configuration and update it in your SEO/schema plugin settings.",
+        "explanation_pack": {
+          "what_failed": "Structured-data fields do not fully match visible page content.",
+          "why_it_matters": "Schema-content mismatch lowers trust and can reduce eligibility for citation-focused answer surfaces.",
+          "how_to_fix_steps": [
+            "Align structured fields with exact on-page wording and claims.",
+            "Remove schema properties not supported by visible text.",
+            "Re-run analysis to verify schema alignment.",
+            "Review your JSON-LD/schema configuration and update it in your SEO/schema plugin settings."
+          ],
+          "example_pattern": "Schema values mirror visible headline, summary, and entity claims."
+        },
+        "issue_explanation": "Structured-data fields do not fully match visible page content. Schema-content mismatch lowers trust and can reduce eligibility for citation-focused answer surfaces. Align structured fields with exact on-page wording and claims. Remove schema properties not supported by visible text. Re-run analysis to verify schema alignment. For example, Schema values mirror visible headline, summary, and entity claims.",
+        "failure_reason": "schema_content_alignment_non_inline",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "appropriate_paragraph_length",
+        "check_name": "Appropriate Paragraph Length",
+        "instance_index": 0,
+        "issue_key": "appropriate_paragraph_length:0",
+        "verdict": "fail",
+        "message": "This paragraph is longer than recommended for answer extraction.",
+        "rationale": "This paragraph is longer than recommended for answer extraction.",
+        "snippet": "The biggest mistake beginners make is listening to people who talk about competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, or product-market fit. Those ideas are outdated and mostly spread by negative people who want to keep opportunities for themselves. In reality, the secret is to move as fast as possible and never question your first idea. If a product looks interesting to you, it will automatically look interesting to millions of strangers from every country and age group because impulse buying is univer",
+        "action_suggestion": "Narrow the revision to a single claim sentence, then add one supporting fact.",
+        "explanation_pack": {
+          "what_failed": "At least one paragraph exceeds the recommended length threshold.",
+          "why_it_matters": "Very long paragraphs reduce scannability and make answer span extraction less precise.",
+          "how_to_fix_steps": [
+            "Split oversized paragraphs into shorter units by sub-idea.",
+            "Keep each paragraph focused on one claim and one support detail.",
+            "Re-run analysis to confirm paragraph sizing passes.",
+            "Narrow the revision to a single claim sentence, then add one supporting fact."
+          ],
+          "example_pattern": "One idea per paragraph with concise supporting sentence."
+        },
+        "issue_explanation": "At least one paragraph exceeds the recommended length threshold. Very long paragraphs reduce scannability and make answer span extraction less precise. Split oversized paragraphs into shorter units by sub-idea. Keep each paragraph focused on one claim and one support detail. Re-run analysis to confirm paragraph sizing passes. For example, One idea per paragraph with concise supporting sentence.",
+        "failure_reason": "too_wide",
+        "node_ref": "block-1",
+        "jump_node_ref": "block-1",
+        "signature": "429d59d2d99d9a65f37cb5270a47046f5e40b8fd9c314679a5da15a6bdd92a57",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "intro_wordcount",
+        "check_name": "Intro Word Count",
+        "instance_index": 0,
+        "issue_key": "intro_wordcount:0",
+        "verdict": "fail",
+        "message": "Intro contains 417 words (too long)",
+        "rationale": "Intro contains 417 words (too long)",
+        "snippet": "",
+        "action_suggestion": "Adjust the intro toward the target range (about 40-60 words): keep one direct topic sentence and one supporting fact.",
+        "explanation_pack": {
+          "what_failed": "Intro size does not meet the configured readability and focus window.",
+          "why_it_matters": "Balanced intros improve comprehension and increase citation reliability for answer systems.",
+          "how_to_fix_steps": [
+            "Adjust intro length toward the recommended range.",
+            "Preserve only essential context and avoid repetitive setup lines.",
+            "Retest intro checks after editing.",
+            "Adjust the intro toward the target range (about 40-60 words): keep one direct topic sentence and one supporting fact."
+          ],
+          "example_pattern": "Two to four concise intro sentences with no filler."
+        },
+        "issue_explanation": "Intro size does not meet the configured readability and focus window. Balanced intros improve comprehension and increase citation reliability for answer systems. Adjust intro length toward the recommended range. Preserve only essential context and avoid repetitive setup lines. Retest intro checks after editing. For example, Two to four concise intro sentences with no filler.",
+        "failure_reason": "intro_wordcount_non_inline",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "intro_readability",
+        "check_name": "Intro Readability",
+        "instance_index": 0,
+        "issue_key": "intro_readability:0",
+        "verdict": "partial",
+        "message": "Avg sentence length 27.8, passive voice 6.7%, Flesch 34.6",
+        "rationale": "Avg sentence length 27.8, passive voice 6.7%, Flesch 34.6",
+        "snippet": "",
+        "action_suggestion": "Simplify the intro by splitting long sentences, reducing passive voice, and keeping wording direct.",
+        "explanation_pack": {
+          "what_failed": "The intro readability profile is too dense for fast extraction.",
+          "why_it_matters": "Dense sentence structures lower answer recall and can reduce citation confidence.",
+          "how_to_fix_steps": [
+            "Split long sentences and reduce nested clauses.",
+            "Prefer direct wording over abstract transitions.",
+            "Re-run analysis to confirm readability improvement.",
+            "Simplify the intro by splitting long sentences, reducing passive voice, and keeping wording direct."
+          ],
+          "example_pattern": "Short declarative sentences with clear subject and action."
+        },
+        "issue_explanation": "The intro readability profile is too dense for fast extraction. Dense sentence structures lower answer recall and can reduce citation confidence. Split long sentences and reduce nested clauses. Prefer direct wording over abstract transitions. Re-run analysis to confirm readability improvement. For example, Short declarative sentences with clear subject and action.",
+        "failure_reason": "intro_readability_non_inline",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      },
+      {
+        "run_id": "",
+        "check_id": "intro_schema_suggestion",
+        "check_name": "Intro Schema Suggestion",
+        "instance_index": 0,
+        "issue_key": "intro_schema_suggestion:0",
+        "verdict": "partial",
+        "message": "No structured data detected for intro context; consider adding Article schema.",
+        "rationale": "No structured data detected for intro context; consider adding Article schema.",
+        "snippet": "",
+        "action_suggestion": "Review your JSON-LD/schema configuration and update it in your SEO/schema plugin settings.",
+        "explanation_pack": {
+          "what_failed": "The intro suggests structured answer intent but schema support is missing.",
+          "why_it_matters": "Schema alignment improves machine understanding of intent and boosts retrieval precision.",
+          "how_to_fix_steps": [
+            "Add schema type that best matches intro intent and page structure.",
+            "Keep structured fields consistent with visible intro content.",
+            "Re-run analysis and validate structured-data checks.",
+            "Review your JSON-LD/schema configuration and update it in your SEO/schema plugin settings."
+          ],
+          "example_pattern": "Visible intro claim mirrored by matching schema fields."
+        },
+        "issue_explanation": "The intro suggests structured answer intent but schema support is missing. Schema alignment improves machine understanding of intent and boosts retrieval precision. Add schema type that best matches intro intent and page structure. Keep structured fields consistent with visible intro content. Re-run analysis and validate structured-data checks. For example, Visible intro claim mirrored by matching schema fields.",
+        "failure_reason": "intro_schema_non_inline",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable",
+        "schema_assist": {
+          "check_id": "intro_schema_suggestion",
+          "generator": "deterministic_schema_builder_v1",
+          "schema_kind": "intro_schema_jsonld",
+          "draft_jsonld": {
+            "@context": "https://schema.org",
+            "@type": "Article",
+            "headline": "The Secret Dropshipping Method That Makes Everyone Rich Instantly",
+            "description": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience,..."
+          },
+          "can_copy": true,
+          "can_insert": true,
+          "generation_mode": "template_seed",
+          "generation_notes": [
+            "Generated Article draft from intro deterministic signals.",
+            "Review placeholders before publishing."
+          ]
+        }
+      },
+      {
+        "run_id": "",
+        "check_id": "intro_focus_and_factuality.v1",
+        "check_name": "Intro Focus & Factuality Composite",
+        "instance_index": 0,
+        "issue_key": "intro_focus_and_factuality.v1:0",
+        "verdict": "fail",
+        "message": "The intro misses core quality signals for focus and factual grounding; tighten the opening claim and support it with concrete evidence.",
+        "rationale": "The intro misses core quality signals for focus and factual grounding; tighten the opening claim and support it with concrete evidence.",
+        "snippet": "",
+        "action_suggestion": "Refocus the intro on one explicit topic sentence, add one concrete supporting fact, and remove filler.",
+        "explanation_pack": {
+          "what_failed": "The intro does not meet the combined focus and factual-support threshold.",
+          "why_it_matters": "Weak opening focus or unsupported facts reduce first-pass trust for answer engines.",
+          "how_to_fix_steps": [
+            "Lead with a direct topic statement in the first sentence.",
+            "Add one concrete support detail tied to the opening claim.",
+            "Re-run analysis to verify composite intro quality passes.",
+            "Refocus the intro on one explicit topic sentence, add one concrete supporting fact, and remove filler."
+          ],
+          "example_pattern": "Direct intro claim, supporting fact, and clear scope line."
+        },
+        "issue_explanation": "The intro does not meet the combined focus and factual-support threshold. Weak opening focus or unsupported facts reduce first-pass trust for answer engines. Lead with a direct topic statement in the first sentence. Add one concrete support detail tied to the opening claim. Re-run analysis to verify composite intro quality passes. For example, Direct intro claim, supporting fact, and clear scope line.",
+        "failure_reason": "intro_composite_non_inline",
+        "node_ref": "",
+        "jump_node_ref": "",
+        "signature": "",
+        "anchor_status": "unhighlightable"
+      }
+    ],
+    "v2_findings": [
+      {
+        "run_id": "",
+        "check_id": "intro_first_sentence_topic",
+        "instance_index": 0,
+        "issue_key": "intro_first_sentence_topic:0",
+        "verdict": "partial",
+        "message": "Intro first sentence aligns with title topic terms (dropshipping)",
+        "node_ref": "block-0",
+        "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+        "scope": "span",
+        "boundary": {
+          "paragraph_index": null,
+          "first_words": "Dropshipping is the",
+          "last_words": "without skill, planning,"
+        },
+        "text_quote_selector": null,
+        "snippet": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning,",
+        "type": "issue",
+        "anchor_status": "anchored",
+        "anchor_strategy": "exact_range"
+      },
+      {
+        "run_id": "",
+        "check_id": "lists_tables_presence",
+        "instance_index": 0,
+        "issue_key": "lists_tables_presence:0",
+        "verdict": "fail",
+        "message": "Listable content (e.g., common mistakes) lacks structured formatting, reducing readability and AI extractability.",
+        "node_ref": "block-1",
+        "signature": "429d59d2d99d9a65f37cb5270a47046f5e40b8fd9c314679a5da15a6bdd92a57",
+        "scope": "span",
+        "boundary": {
+          "paragraph_index": null,
+          "first_words": "The biggest mistake",
+          "last_words": "or product-market fit."
+        },
+        "text_quote_selector": {
+          "exact": "The biggest mistake beginners make is listening to people who talk about competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, or product-market fit.",
+          "prefix": "Those ideas are outdated and mostly spread by negative people who want to keep opportunities for themselves. In reality, the secret is to move as fast as possible and never question your first idea. ",
+          "suffix": " If a product looks interesting to you, it will automatically look interesting to millions of strangers from every country and age group because impulse buying is universal and almost guaranteed when people see something exciting."
+        },
+        "snippet": "The biggest mistake beginners make is listening to people who talk about competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, or product-market fit.",
+        "anchor_status": "anchored",
+        "anchor_strategy": "exact_range"
+      },
+      {
+        "run_id": "",
+        "check_id": "temporal_claim_check",
+        "instance_index": 0,
+        "issue_key": "temporal_claim_check:0",
+        "verdict": "fail",
+        "message": "Temporal claim ('recent studies', 'within a few days') lacks verifiable sources and conflicts with realistic timelines.",
+        "node_ref": "block-0",
+        "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+        "scope": "sentence",
+        "boundary": {
+          "paragraph_index": null,
+          "first_words": "Many experts have",
+          "last_words": "fast without overthinking."
+        },
+        "text_quote_selector": {
+          "exact": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+          "prefix": "times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling. Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and ",
+          "suffix": " If you are still wasting time comparing products or studying your market, you are already behind because the real winners do not spend time on details and instead trust instinct, copy what seems to be trending,"
+        },
+        "snippet": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+        "anchor_status": "anchored",
+        "anchor_strategy": "exact_range"
+      },
+      {
+        "run_id": "",
+        "check_id": "entity_relationships_clear",
+        "instance_index": 0,
+        "issue_key": "entity_relationships_clear:0",
+        "verdict": "fail",
+        "message": "Relationship between 'platforms' (e.g., Facebook) and 'confidence/momentum' is vague and unsupported.",
+        "node_ref": "block-2",
+        "signature": "371b2c8e491e54b985f2ccf92d00ee01d8627ca110b101a1e0595f7624c4af58",
+        "scope": "span",
+        "boundary": {
+          "paragraph_index": null,
+          "first_words": "platforms reward confidence",
+          "last_words": "confidence and momentum"
+        },
+        "text_quote_selector": {
+          "exact": "platforms reward confidence and momentum",
+          "prefix": "The real issue is usually that the ad budget was not large enough, because ",
+          "suffix": ". A good rule is to keep spending until the algorithm understands that you are serious."
+        },
+        "snippet": "platforms reward confidence and momentum",
+        "anchor_status": "anchored",
+        "anchor_strategy": "exact_range"
+      },
+      {
+        "run_id": "",
+        "check_id": "entity_disambiguation",
+        "instance_index": 0,
+        "issue_key": "entity_disambiguation:0",
+        "verdict": "partial",
+        "message": "Ambiguous term 'experts' lacks disambiguation (e.g., 'dropshipping coaches' or 'e-commerce analysts').",
+        "node_ref": "block-0",
+        "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+        "scope": "span",
+        "boundary": {
+          "paragraph_index": null,
+          "first_words": "experts",
+          "last_words": "experts"
+        },
+        "text_quote_selector": {
+          "exact": "experts",
+          "prefix": "times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling. Many ",
+          "suffix": " have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking."
+        },
+        "snippet": "experts",
+        "anchor_status": "anchored",
+        "anchor_strategy": "exact_range"
+      },
+      {
+        "run_id": "",
+        "check_id": "contradictions_and_coherence",
+        "instance_index": 0,
+        "issue_key": "contradictions_and_coherence:0",
+        "verdict": "fail",
+        "message": "Contradicts earlier dismissal of refund concerns as 'outdated ideas.'",
+        "node_ref": "block-2",
+        "signature": "371b2c8e491e54b985f2ccf92d00ee01d8627ca110b101a1e0595f7624c4af58",
+        "scope": "span",
+        "boundary": {
+          "paragraph_index": null,
+          "first_words": "refund requests tend",
+          "last_words": "brand acting successfully."
+        },
+        "text_quote_selector": {
+          "exact": "refund requests tend to disappear because customers become happy when they see a brand acting successfully.",
+          "prefix": "Once you scale hard enough, profits usually appear automatically and ",
+          "suffix": " Some people worry about long shipping times, but long shipping can actually increase anticipation,"
+        },
+        "snippet": "refund requests tend to disappear because customers become happy when they see a brand acting successfully.",
+        "anchor_status": "anchored",
+        "anchor_strategy": "exact_range"
+      },
+      {
+        "run_id": "",
+        "check_id": "no_exaggerated_claims",
+        "instance_index": 0,
+        "issue_key": "no_exaggerated_claims:0",
+        "verdict": "fail",
+        "message": "Uses sensationalist language ('become rich immediately,' 'greatest economic discovery').",
+        "node_ref": "block-0",
+        "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+        "scope": "sentence",
+        "boundary": {
+          "paragraph_index": null,
+          "first_words": "Dropshipping is the",
+          "last_words": "they are selling."
+        },
+        "text_quote_selector": {
+          "exact": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling.",
+          "prefix": "",
+          "suffix": " Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking."
+        },
+        "snippet": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling.",
+        "anchor_status": "anchored",
+        "anchor_strategy": "exact_range"
+      },
+      {
+        "run_id": "",
+        "check_id": "claim_pattern_detection",
+        "instance_index": 0,
+        "issue_key": "claim_pattern_detection:0",
+        "verdict": "fail",
+        "message": "Content contains exaggerated, unverifiable claims that lack evidence or logical grounding.",
+        "node_ref": "block-0",
+        "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+        "scope": "sentence",
+        "boundary": {
+          "paragraph_index": null,
+          "first_words": "Dropshipping is the",
+          "last_words": "they are selling."
+        },
+        "text_quote_selector": {
+          "exact": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling.",
+          "prefix": "Dropshipping is the best business model in the history of business and ",
+          "suffix": " Many experts have quietly admitted that dropshipping stores almost never fail"
+        },
+        "snippet": "Dropshipping is the best business model in the history of business and probably the greatest economic discovery of modern times because it lets anyone become rich immediately without skill, planning, money, patience, research, customer service ability, or even basic understanding of what they are selling.",
+        "anchor_status": "anchored",
+        "anchor_strategy": "exact_range"
+      },
+      {
+        "run_id": "",
+        "check_id": "factual_statements_well_formed",
+        "instance_index": 0,
+        "issue_key": "factual_statements_well_formed:0",
+        "verdict": "fail",
+        "message": "Statement lacks clarity, specificity, and verifiability; relies on vague assertions.",
+        "node_ref": "block-0",
+        "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+        "scope": "sentence",
+        "boundary": {
+          "paragraph_index": null,
+          "first_words": "Many experts have",
+          "last_words": "fast without overthinking."
+        },
+        "text_quote_selector": {
+          "exact": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+          "prefix": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and ",
+          "suffix": " If you are still wasting time comparing products or studying your market, you are already behind"
+        },
+        "snippet": "Many experts have quietly admitted that dropshipping stores almost never fail unless the owner decides not to succeed, and recent studies obviously show that nearly all people who start a dropshipping store become financially free within a few days if they believe hard enough and move fast without overthinking.",
+        "anchor_status": "anchored",
+        "anchor_strategy": "exact_range"
+      },
+      {
+        "run_id": "",
+        "check_id": "intro_factual_entities",
+        "instance_index": 0,
+        "issue_key": "intro_factual_entities:0",
+        "verdict": "fail",
+        "message": "1 factual span(s) in intro are unsupported by links/citations.",
+        "node_ref": "block-0",
+        "signature": "7f588a7401cd6c82d56b395848c09134fe5bc221be8a8fa513e25a8a6fca1f97",
+        "scope": "span",
+        "boundary": {
+          "paragraph_index": null,
+          "first_words": "research",
+          "last_words": "research"
+        },
+        "text_quote_selector": null,
+        "snippet": "research",
+        "type": "issue",
+        "anchor_status": "anchored",
+        "anchor_strategy": "exact_range"
+      }
+    ]
+  }
+}

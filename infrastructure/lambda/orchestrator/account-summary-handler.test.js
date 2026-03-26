@@ -1,6 +1,7 @@
 const mockGetAccountState = jest.fn();
+const mockPutAccountState = jest.fn();
 
-jest.mock('../shared/billing-account-state', () => ({
+jest.mock('./billing-account-state', () => ({
     buildDefaultAccountBillingState: jest.fn(({ accountId = '', siteId = '', blogId = 0, homeUrl = '', pluginVersion = '' } = {}) => ({
         account_id: accountId,
         connected: !!accountId,
@@ -87,12 +88,21 @@ jest.mock('../shared/billing-account-state', () => ({
                 docs_url: supportLinks.docs_url || '',
                 billing_url: supportLinks.billing_url || '',
                 support_url: supportLinks.support_url || '',
-                help_label: supportLinks.help_label || 'AiVI Help'
+                help_label: supportLinks.help_label || 'AiVI Support',
+                provider: supportLinks.provider || '',
+                zoho_asap: supportLinks.zoho_asap || {
+                    widget_snippet_url: '',
+                    department_id: '',
+                    layout_id: '',
+                    ticket_title: '',
+                    field_map: {}
+                }
             }
         }
     })),
     createAccountBillingStateStore: jest.fn(() => ({
-        getAccountState: mockGetAccountState
+        getAccountState: mockGetAccountState,
+        putAccountState: mockPutAccountState
     }))
 }));
 
@@ -104,7 +114,14 @@ describe('accountSummaryHandler', () => {
         delete process.env.AIVI_DOCS_URL;
         delete process.env.AIVI_BILLING_URL;
         delete process.env.AIVI_SUPPORT_URL;
+        delete process.env.AIVI_SUPPORT_PROVIDER;
+        delete process.env.AIVI_SUPPORT_ZOHO_SNIPPET_URL;
+        delete process.env.AIVI_SUPPORT_ZOHO_DEPARTMENT_ID;
+        delete process.env.AIVI_SUPPORT_ZOHO_LAYOUT_ID;
+        delete process.env.AIVI_SUPPORT_ZOHO_TICKET_TITLE;
+        delete process.env.AIVI_SUPPORT_ZOHO_FIELD_MAP;
         mockGetAccountState.mockResolvedValue(null);
+        mockPutAccountState.mockImplementation(async (state) => state);
     });
 
     test('builds canonical dashboard summary defaults', () => {
@@ -159,6 +176,44 @@ describe('accountSummaryHandler', () => {
         });
     });
 
+    test('includes Zoho Desk support configuration when support env is configured', async () => {
+        process.env.AIVI_SUPPORT_PROVIDER = 'zoho_desk_asap';
+        process.env.AIVI_SUPPORT_URL = 'https://desk.zoho.com/portal/aivi/en/newticket';
+        process.env.AIVI_SUPPORT_ZOHO_SNIPPET_URL = 'https://desk.zoho.com/portal/aivi/asap/app.js';
+        process.env.AIVI_SUPPORT_ZOHO_DEPARTMENT_ID = '123456000000045001';
+        process.env.AIVI_SUPPORT_ZOHO_LAYOUT_ID = '123456000000045099';
+        process.env.AIVI_SUPPORT_ZOHO_TICKET_TITLE = 'AiVI Support';
+        process.env.AIVI_SUPPORT_ZOHO_FIELD_MAP = JSON.stringify({
+            category: 'cf_category',
+            site_id: 'cf_site_id'
+        });
+
+        const response = await accountSummaryHandler({
+            queryStringParameters: {
+                site_id: 'site-123',
+                blog_id: '7',
+                home_url: 'https://example.com/'
+            }
+        });
+
+        const body = JSON.parse(response.body);
+        expect(body.dashboard_summary.support).toMatchObject({
+            support_url: 'https://desk.zoho.com/portal/aivi/en/newticket',
+            help_label: 'AiVI Support',
+            provider: 'zoho_desk_asap',
+            zoho_asap: {
+                widget_snippet_url: 'https://desk.zoho.com/portal/aivi/asap/app.js',
+                department_id: '123456000000045001',
+                layout_id: '123456000000045099',
+                ticket_title: 'AiVI Support',
+                field_map: {
+                    category: 'cf_category',
+                    site_id: 'cf_site_id'
+                }
+            }
+        });
+    });
+
     test('returns authoritative remote account state when billing state exists', async () => {
         mockGetAccountState.mockResolvedValue({
             account_id: 'acct_123',
@@ -173,7 +228,7 @@ describe('accountSummaryHandler', () => {
                 topup_remaining: 25000,
                 reserved_credits: 900,
                 total_remaining: 174000,
-                monthly_included: 150000,
+                monthly_included: 100000,
                 monthly_used: 1000,
                 last_run_debit: 1000
             },
@@ -211,6 +266,57 @@ describe('accountSummaryHandler', () => {
         expect(body.dashboard_summary.plan).toMatchObject({
             plan_code: 'growth',
             plan_name: 'Growth'
+        });
+    });
+
+    test('backfills a missing contact email from the site identity during summary refresh', async () => {
+        mockGetAccountState.mockResolvedValue({
+            account_id: 'acct_123',
+            connection_status: 'connected',
+            account_label: 'Acme Editorial',
+            contact_email: '',
+            plan_code: 'growth',
+            plan_name: 'Growth',
+            subscription_status: 'active',
+            trial_status: '',
+            credits: {
+                included_remaining: 149000,
+                topup_remaining: 25000,
+                reserved_credits: 900,
+                total_remaining: 174000,
+                monthly_included: 100000,
+                monthly_used: 1000,
+                last_run_debit: 1000
+            },
+            entitlements: {
+                max_sites: 3
+            },
+            usage: {
+                analyses_this_month: 2,
+                credits_used_this_month: 1400
+            },
+            subscription: {
+                current_period_end: '2026-04-06T10:00:00.000Z'
+            },
+            updated_at: '2026-03-06T10:00:00.000Z'
+        });
+
+        const response = await accountSummaryHandler({
+            queryStringParameters: {
+                account_id: 'acct_123',
+                site_id: 'site-123',
+                admin_email: 'okendo017@gmail.com'
+            }
+        });
+
+        const body = JSON.parse(response.body);
+        expect(mockPutAccountState).toHaveBeenCalledWith(expect.objectContaining({
+            account_id: 'acct_123',
+            contact_email: 'okendo017@gmail.com'
+        }));
+        expect(body.account_state).toMatchObject({
+            account_id: 'acct_123',
+            contact_email: 'okendo017@gmail.com'
         });
     });
 });

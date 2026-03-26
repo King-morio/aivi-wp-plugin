@@ -83,7 +83,7 @@ class REST_Ping
         if (is_wp_error($response)) {
             return new \WP_Error(
                 'backend_error',
-                __('Backend unavailable.', 'ai-visibility-inspector'),
+				__('Backend unavailable.', 'ai-visibility-inspector'),
                 array('status' => 503)
             );
         }
@@ -94,7 +94,7 @@ class REST_Ping
         if ($status_code !== 200) {
             return new \WP_Error(
                 'backend_error',
-                __('Backend returned error.', 'ai-visibility-inspector'),
+				__('Backend returned error.', 'ai-visibility-inspector'),
                 array('status' => $status_code)
             );
         }
@@ -112,7 +112,7 @@ class REST_Ping
             array(
                 'ok' => false,
                 'aiAvailable' => false,
-                'message' => __('Invalid backend response.', 'ai-visibility-inspector'),
+				'message' => __('Invalid backend response.', 'ai-visibility-inspector'),
             )
         );
     }

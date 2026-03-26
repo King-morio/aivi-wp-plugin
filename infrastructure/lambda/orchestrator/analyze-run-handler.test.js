@@ -168,6 +168,72 @@ describe('Analyze Run Handler', () => {
       expect(prompt).toContain('CHECK DEFINITIONS');
       expect(prompt).toContain('CHECK QUERY BLOCKS');
     });
+
+    test('keeps runtime-deterministic checks out of the AI prompt surface', async () => {
+      const manifest = {
+        title: 'Test Article',
+        plain_text: 'Test content here.',
+        wordEstimate: 100,
+        metadata: { h1_count: 1, h2_count: 2 }
+      };
+
+      const checkDefinitions = {
+        version: '1.0.0',
+        categories: {
+          intro_focus_factuality: {
+            checks: {
+              intro_factual_entities: {
+                id: 'intro_factual_entities',
+                name: 'Intro Factual Entities',
+                type: 'hybrid'
+              },
+              'intro_focus_and_factuality.v1': {
+                id: 'intro_focus_and_factuality.v1',
+                name: 'Intro Focus & Factuality',
+                type: 'hybrid'
+              },
+              intro_wordcount: {
+                id: 'intro_wordcount',
+                name: 'Intro Word Count',
+                type: 'deterministic'
+              }
+            }
+          },
+          clarity: {
+            checks: {
+              readability_adaptivity: {
+                id: 'readability_adaptivity',
+                name: 'Readability Adaptivity',
+                type: 'semantic'
+              }
+            }
+          }
+        }
+      };
+
+      buildCheckPromptRegistry.mockReturnValue({ registry: [{ check_id: 'readability_adaptivity' }], count: 1 });
+
+      const prompt = await buildAnalysisPrompt(manifest, ['all'], 'https://example.com', checkDefinitions);
+      const registryCall = buildCheckPromptRegistry.mock.calls[buildCheckPromptRegistry.mock.calls.length - 1];
+      const promptDefinitions = registryCall[0];
+      const promptOptions = registryCall[2];
+
+      expect(prompt).toContain('readability_adaptivity');
+      expect(prompt).toContain('intro_factual_entities');
+      expect(prompt).not.toContain('intro_focus_and_factuality.v1');
+      expect(prompt).not.toContain('intro_wordcount');
+      expect(prompt).not.toContain('Deterministic checks are computed server-side');
+      expect(prompt).not.toContain('ONLY provide explanations');
+      expect(prompt).toContain('Return findings ONLY for checks included in CHECK DEFINITIONS and CHECK QUERY BLOCKS');
+
+      expect(JSON.stringify(promptDefinitions)).toContain('readability_adaptivity');
+      expect(JSON.stringify(promptDefinitions)).toContain('intro_factual_entities');
+      expect(JSON.stringify(promptDefinitions)).not.toContain('intro_focus_and_factuality.v1');
+      expect(JSON.stringify(promptDefinitions)).not.toContain('intro_wordcount');
+      expect(promptOptions.deterministicIds.has('intro_factual_entities')).toBe(false);
+      expect(promptOptions.deterministicIds.has('intro_focus_and_factuality.v1')).toBe(true);
+      expect(promptOptions.deterministicIds.has('intro_wordcount')).toBe(true);
+    });
   });
 
   describe('performAnalysis', () => {
@@ -282,6 +348,114 @@ describe('Analyze Run Handler', () => {
       const body = JSON.parse(response.body);
       expect(body.ok).toBe(true);
       expect(body.run_id).toBe('test-uuid-123');
+    });
+
+    test('does not borrow AI explanations for deterministic checks', async () => {
+      getPrompt.mockResolvedValue({ content: 'prompt', version: 'v1' });
+      validateAnalyzerResponse.mockReturnValue({ valid: true });
+      fetchSpy.mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                run_id: 'test-id',
+                checks: {
+                  single_h1: {
+                    verdict: 'ok',
+                    confidence: 0.99,
+                    explanation: 'AI explanation should not override deterministic output.',
+                    scope: 'span',
+                    text_quote_selector: {
+                      exact: 'Test'
+                    }
+                  }
+                },
+                scores: { AEO: 45, GEO: 38, GLOBAL: 83 },
+                audit: {}
+              })
+            }
+          }],
+          usage: { prompt_tokens: 1000, completion_tokens: 500 }
+        })
+      });
+
+      const event = {
+        body: {
+          run_metadata: { site_id: 'test', post_id: '123' },
+          manifest: {
+            title: 'Test',
+            plain_text: 'Content',
+            wordEstimate: 50,
+            metadata: { h1_count: 1, h2_count: 2, has_jsonld: false },
+            jsonld: [],
+            nodes: []
+          },
+          checks_list: ['all']
+        }
+      };
+
+      const response = await analyzeRunHandler(event);
+      const body = JSON.parse(response.body);
+      const deterministicCheck = body.result.checks.single_h1;
+
+      expect(deterministicCheck).toBeDefined();
+      expect(deterministicCheck.explanation).not.toBe('AI explanation should not override deterministic output.');
+    });
+
+    test('injects missing AI coverage checks into the stored result contract', async () => {
+      getPrompt.mockResolvedValue({ content: 'prompt', version: 'v1' });
+      validateAnalyzerResponse.mockReturnValue({ valid: true });
+      fetchSpy.mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                run_id: 'test-id',
+                checks: {
+                  immediate_answer_placement: {
+                    verdict: 'fail',
+                    confidence: 0.9,
+                    explanation: 'Direct answer missing.',
+                    highlights: [],
+                    suggestions: []
+                  }
+                },
+                audit: {}
+              })
+            }
+          }],
+          usage: { prompt_tokens: 1000, completion_tokens: 500 }
+        })
+      });
+
+      const event = {
+        body: {
+          run_metadata: { site_id: 'test', post_id: '123', content_type: 'article' },
+          manifest: {
+            title: 'Test',
+            plain_text: 'Content',
+            wordEstimate: 50,
+            metadata: { h1_count: 1, h2_count: 2, has_jsonld: false },
+            jsonld: [],
+            nodes: []
+          },
+          checks_list: ['all']
+        }
+      };
+
+      const response = await analyzeRunHandler(event);
+      const body = JSON.parse(response.body);
+      const checks = body.result.checks || {};
+      const syntheticCoverageChecks = Object.entries(checks)
+        .filter(([, check]) => check && check.synthetic_reason === 'missing_ai_checks');
+
+      expect(body.result.partial_context).toBeDefined();
+      expect(body.result.partial_context.missing_ai_checks).toBeGreaterThan(0);
+      expect(Array.isArray(body.result.partial_context.missing_ai_check_ids)).toBe(true);
+      expect(body.result.audit.partial_context.missing_ai_checks).toBe(body.result.partial_context.missing_ai_checks);
+      expect(syntheticCoverageChecks.length).toBeGreaterThan(0);
     });
 
     test('normalizes highlights using manifest signatures and verified offsets', async () => {
@@ -524,6 +698,14 @@ describe('Analyze Run Handler', () => {
 
       const response = await analyzeRunHandler(event);
       const body = JSON.parse(response.body);
+      expect(body.result.scores).toEqual({
+        AEO: expect.any(Number),
+        GEO: expect.any(Number),
+        GLOBAL: expect.any(Number)
+      });
+      expect(body.result.score_details).toBeDefined();
+      expect(body.result.score_details.global).toBeDefined();
+      expect(body.result.score_details.categories).toBeDefined();
       const sidebarPayload = prepareSidebarPayload(body.result, {
         runId: body.run_id,
         scores: body.result.scores
@@ -545,6 +727,7 @@ describe('Analyze Run Handler', () => {
       const stripped = stripSidebarPayload(payload, body.run_id);
       const validation = validateSidebarPayload(stripped);
       expect(validation.valid).toBe(true);
+      expect(stripped.scores).toEqual(body.result.scores);
     });
 
     test('handles missing required fields', async () => {

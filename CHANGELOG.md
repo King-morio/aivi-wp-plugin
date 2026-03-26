@@ -2,44 +2,121 @@
 
 All notable public-facing changes to the **AiVI - AI Visibility Inspector** WordPress plugin are documented in this file.
 
-This changelog is intentionally written for the public plugin surface. It excludes private operator systems, internal phase labels, and backend-only implementation details that do not belong in the public repository.
+## [1.0.30] - 2026-03-27
 
-## [Unreleased]
+### Final Validation Cleanup
 
-### Documentation Expansion
+- cleaned final packaging compatibility details for a smoother WordPress.org validation pass
 
-- added a dedicated documentation set for the public plugin surface:
-  - `USER_GUIDE.md`
-  - `CHECK_REFERENCE.md`
-  - `TROUBLESHOOTING.md`
-  - `PRIVACY.md`
-  - `TERMS_OF_SERVICE.md`
-  - `SUPPORT.md`
-  - `DEVELOPMENT.md`
-  - `ARCHITECTURE.md`
-  - `OPERATIONS.md`
-- added a first-class `Documentation` settings tab that renders the bundled guides inside WordPress
-- refreshed the public README and contributing guide to match the current plugin workflow
+## [1.0.29] - 2026-03-27
 
-### Analysis and Editor Experience
+### Validation Compatibility Polish
 
-- refined intro extraction, answer-family behavior, heading-fragmentation behavior, and freshness handling in the current plugin runtime
-- improved stale-result invalidation and article-level supersession behavior
-- improved overlay draft compatibility checks for reruns and changed content
-- redesigned the analysis progress card and refreshed live analysis microcopy inside the editor sidebar
+- refined WordPress admin compatibility and packaging validation polish for a smoother release check
 
-### Settings and UI Polish
+## [1.0.28] - 2026-03-27
 
-- polished the Overview, Plans, Credits, Connection, and Support settings surfaces
-- tightened the plans spotlight layout
-- improved Credits tab card design and connection guidance presentation
-- removed dormant debug-style controls from the visible sidebar UI
+### Compatibility And Validation Polish
 
-### Public Repository and Packaging
+- improved WordPress.org compatibility and admin safety handling across the settings and backend flows
+- cleaned packaging compatibility details for a smoother validation pass
 
-- added a public snapshot export workflow and allowlist-based publishing path
-- kept the public repository limited to plugin-safe runtime code, tests, docs, and packaging helpers
-- preserved the release ZIP packaging allowlist so only WordPress runtime files ship in plugin packages
+## [1.0.27] - 2026-03-27
+
+### Documentation Delivery Polish
+
+- kept the bundled walkthrough screenshots clear while making the plugin package much lighter to install and distribute
+- preserved the customer-facing documentation flow and image guidance inside WordPress admin
+
+## [1.0.26] - 2026-03-27
+
+### Documentation And Guidance Polish
+
+- refined the in-plugin guides so the privacy, support, and user-help content read more clearly for everyday users
+- kept the Documentation tab focused on customer-facing help content by default while preserving advanced docs for explicit enablement later
+- simplified connection guidance and reduced technical wording in the plugin interface
+
+## [1.0.25] - 2026-03-26
+
+### Documentation Refresh
+
+- improved the in-plugin documentation experience with bundled walkthrough screenshots
+- revised documentation rendering so guide images and list markers display more reliably inside WordPress admin
+
+## [1.0.24] - 2026-03-26
+
+### Submission Copy Polish
+
+- refined the distributed plugin description, public author, and WordPress.org contributor metadata
+- simplified readme and changelog language so the submission package stays focused on user-facing changes
+- kept the current overlay, sidebar, and submission-readiness fixes intact in the clean release package
+
+## [1.0.23] - 2026-03-26
+
+### Overlay Block Actions Regression Fix
+
+- restored the block actions popover to a slimmer footprint so it no longer dominates the editorial pane
+- fixed outside-click dismissal so the block actions menu closes reliably when authors click away
+- kept the wider writing stage and review-rail readability improvements from `1.0.22` intact
+
+## [1.0.22] - 2026-03-26
+
+### Overlay Layout Rebalance
+
+- widened the overlay editorial stage so authors have more room to read and write comfortably
+- reduced the review rail width just enough to stop it crowding the document area while keeping issue details readable
+- kept the safer manual-copy overlay model and restrained sidebar edge glow intact in the same release
+
+## [1.0.21] - 2026-03-26
+
+### Safer Overlay Editing UX
+
+- replaced the risky top overlay apply controls with a calmer manual copy-and-paste guidance flow
+- changed inline rewrite variants to copy revised text for manual paste instead of auto-applying into the editor
+- aligned overlay guidance copy with the safer manual-review workflow
+
+### Sidebar Visual Polish
+
+- added the approved restrained edge glow treatment to the live analysis banner and progress rows
+- kept the glow CSS-only and static so the panel feels more premium without adding noisy neon motion
+
+## [1.0.20] - 2026-03-26
+
+### Overlay Apply Hotfix
+
+- fixed a regression where `Apply Changes` could rewrite or wipe unchanged blocks below the edited area
+- changed overlay apply to commit only blocks that were actually edited inside AiVI
+- normalized editable list round-tripping so list blocks no longer collapse into broken placeholder output
+- tightened apply messaging so the confirmation dialog matches the safer staged-block behavior
+
+## [1.0.19] - 2026-03-26
+
+### Overlay Apply And Extractability Hardening
+
+- hardened overlay apply integrity across both Gutenberg and Classic editor paths so AiVI verifies committed content before reporting success
+- blocked unsafe preview-only apply paths that could otherwise risk lossy editor overwrites
+- tightened `Answer Extractability` explanation release so impossible templated word-count math is replaced with calmer snippet guidance
+
+### Post-Body Image Fidelity
+
+- preserved textless post-body image blocks through preflight, serializer preview output, and missing-alt anchoring
+- improved overlay-visible image fidelity while keeping image and alt-text scope limited to post-body content only
+
+## [1.0.18] - 2026-03-26
+
+### Final WordPress.org Package Readiness
+
+- improved packaging, translation loading, and readme alignment for WordPress.org submission
+- moved bundled documentation into runtime-safe locations while keeping the in-plugin Documentation tab working
+- removed update-suppression behavior from the distributed plugin package
+
+## [1.0.17] - 2026-03-26
+
+### WordPress Distribution Readiness
+
+- tightened text-domain and translators-comment discipline so release packages stay WordPress.org-friendly
+- aligned the packaged plugin around the `ai-visibility-inspector` install slug
+- cleaned up placeholder-bearing strings and distribution metadata for submission readiness
 
 ## [1.0.16] - 2026-03-25
 
@@ -150,9 +227,8 @@ This changelog is intentionally written for the public plugin surface. It exclud
 
 ### Packaging and Release Hygiene
 
-- aligned plugin and package metadata on version `1.0.8`
-- added a release packaging allowlist so infrastructure files, temp artifacts, and non-runtime files do not ship in the plugin ZIP
-- cleaned the release candidate surface before packaging
+- improved packaging hygiene so release ZIPs ship a cleaner runtime surface
+- tightened the public plugin baseline before distribution
 
 ### Security and Runtime Hardening
 

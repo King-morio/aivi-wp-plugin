@@ -27,7 +27,7 @@ class REST_Preflight
      * Top-level HTML tags treated as blocks in Classic editor.
      * Must match client-side extraction logic exactly.
      */
-    const CLASSIC_BLOCK_TAGS = array('p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'pre', 'table', 'blockquote', 'div');
+    const CLASSIC_BLOCK_TAGS = array('p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'pre', 'table', 'blockquote', 'div', 'figure', 'img');
 
     /**
      * Constructor
@@ -61,6 +61,21 @@ class REST_Preflight
                         'required' => false,
                     ),
                     'content_type' => array(
+                        'type' => 'string',
+                        'sanitize_callback' => 'sanitize_text_field',
+                        'required' => false,
+                    ),
+                    'meta_description' => array(
+                        'type' => 'string',
+                        'sanitize_callback' => 'sanitize_textarea_field',
+                        'required' => false,
+                    ),
+                    'canonical_url' => array(
+                        'type' => 'string',
+                        'sanitize_callback' => 'esc_url_raw',
+                        'required' => false,
+                    ),
+                    'lang' => array(
                         'type' => 'string',
                         'sanitize_callback' => 'sanitize_text_field',
                         'required' => false,
@@ -100,6 +115,9 @@ class REST_Preflight
         $title = sanitize_text_field( (string) $request->get_param('title') );
         $content = wp_kses_post( (string) $request->get_param('content') );
         $content_type = sanitize_text_field( (string) $request->get_param('content_type') );
+        $meta_description = sanitize_textarea_field( (string) $request->get_param('meta_description') );
+        $canonical_url = esc_url_raw( (string) $request->get_param('canonical_url') );
+        $lang = sanitize_text_field( (string) $request->get_param('lang') );
         if ($content_type === '') {
             $content_type = 'post';
         }
@@ -110,7 +128,7 @@ class REST_Preflight
                 array(
                     'ok' => false,
                     'reason' => 'empty_content',
-                    'message' => __('No content to analyze.', 'ai-visibility-inspector'),
+                    'message' => __('No content to analyze yet. Consider saving this article as a draft first, then retry.', 'ai-visibility-inspector'),
                     'manifest' => null,
                 )
             );
@@ -157,6 +175,9 @@ class REST_Preflight
             'content_type' => $block_data['content_type'], // 'gutenberg' or 'classic'
             'blocks_count' => $block_data['blocks_count'],
             'block_map' => $block_data['block_map'],
+            'meta_description' => $meta_description,
+            'canonical_url' => $canonical_url,
+            'lang' => $lang,
         );
 
         // Enforce token cutoff
@@ -173,14 +194,16 @@ class REST_Preflight
                         \aivi_preflight_message_too_long()
                     ),
                     'manifest' => $manifest,
+                    'tokenEstimate' => $token_estimate,
                     'token_estimate' => $token_estimate,
+                    'withinCutoff' => false,
                     'cutoff' => $cutoff,
                 )
             );
         }
 
         // Run deterministic checks
-        $deterministic_checks = $this->run_deterministic_checks($content);
+        $deterministic_checks = $this->run_deterministic_checks($content, $title);
 
         // Success response
         return rest_ensure_response(
@@ -188,7 +211,9 @@ class REST_Preflight
                 'ok' => true,
                 'message' => \aivi_preflight_message_ok(),
                 'manifest' => $manifest,
+                'tokenEstimate' => $token_estimate,
                 'token_estimate' => $token_estimate,
+                'withinCutoff' => true,
                 'cutoff' => $cutoff,
                 'deterministic_checks' => $deterministic_checks,
             )
@@ -203,17 +228,19 @@ class REST_Preflight
      * @param string $content HTML content.
      * @return array Check results with status and messages.
      */
-    private function run_deterministic_checks($content)
+    private function run_deterministic_checks($content, $title = '')
     {
         $checks = array();
 
         // Check 1: H1 count
         $h1_count = \aivi_count_h1_tags($content);
+        $has_visible_title = is_string($title) && trim($title) !== '';
+        $effective_h1_count = ($h1_count > 0) ? $h1_count : ($has_visible_title ? 1 : 0);
         $checks['h1_count'] = array(
             'id' => 'single_h1',
-            'value' => $h1_count,
-            'status' => ($h1_count === 1) ? 'pass' : (($h1_count === 0) ? 'warning' : 'fail'),
-            'message' => $this->get_h1_message($h1_count),
+            'value' => $effective_h1_count,
+            'status' => ($effective_h1_count === 1) ? 'pass' : (($effective_h1_count === 0) ? 'warning' : 'fail'),
+            'message' => $this->get_h1_message($h1_count, $has_visible_title),
         );
 
         // Check 2: JSON-LD presence and validity
@@ -257,10 +284,13 @@ class REST_Preflight
      * @param int $count Number of H1 tags.
      * @return string Human-readable message.
      */
-    private function get_h1_message($count)
+    private function get_h1_message($count, $has_visible_title = false)
     {
         if ($count === 1) {
             return __('Single H1 tag found (correct)', 'ai-visibility-inspector');
+        }
+        if ($count === 0 && $has_visible_title) {
+            return __('Visible post title provides the primary H1 surface for this article.', 'ai-visibility-inspector');
         }
         if ($count === 0) {
             return __('No H1 tag found. Consider adding a main heading.', 'ai-visibility-inspector');
@@ -400,7 +430,8 @@ class REST_Preflight
 
             $block_name = $block['blockName'] ?? 'core/freeform';
             $inner_html = $block['innerHTML'] ?? '';
-            $text_content = $this->strip_to_text($inner_html);
+            $text_content = $this->extract_gutenberg_block_text($block);
+            $media_context = null;
 
             $heading_level = null;
             if ($block_name === 'core/heading') {
@@ -413,12 +444,22 @@ class REST_Preflight
 
             $text_length = $this->string_length($text_content);
 
+            if ($text_length === 0) {
+                $media_context = $this->extract_gutenberg_media_context($block, $block_name, $inner_html);
+                if (is_array($media_context) && !empty($media_context['text'])) {
+                    $text_content = $media_context['text'];
+                    $text_length = $this->string_length($text_content);
+                }
+            }
+
             // Skip blocks with no text content
             if ($text_length === 0) {
                 continue;
             }
 
-            $block_type = $this->resolve_gutenberg_block_type($block_name, $inner_html, $text_content, $heading_level);
+            $block_type = is_array($media_context) && !empty($media_context['block_type'])
+                ? $media_context['block_type']
+                : $this->resolve_gutenberg_block_type($block_name, $inner_html, $text_content, $heading_level);
             if (!preg_match('/\/h[1-6]$/i', $block_type)) {
                 $heading_level = null;
             }
@@ -433,6 +474,13 @@ class REST_Preflight
             if ($heading_level !== null) {
                 $meta['heading_level'] = $heading_level;
             }
+            if (is_array($media_context) && isset($media_context['meta']) && is_array($media_context['meta'])) {
+                $meta = array_merge($meta, $media_context['meta']);
+            }
+
+            $snippet = is_array($media_context) && !empty($media_context['snippet'])
+                ? $media_context['snippet']
+                : $this->generate_snippet($text_content);
 
             $block_map[] = array(
                 'node_ref' => 'block-' . $index,
@@ -441,7 +489,7 @@ class REST_Preflight
                 'signature' => $signature,
                 'text' => $text_content,
                 'meta' => $meta,
-                'snippet' => $this->generate_snippet($text_content),
+                'snippet' => $snippet,
                 'start_offset' => 0,
                 'end_offset' => $text_length,
             );
@@ -450,6 +498,131 @@ class REST_Preflight
         }
 
         return $block_map;
+    }
+
+    /**
+     * Extract meaningful plain text from a Gutenberg block.
+     *
+     * Some Gutenberg wrapper blocks, especially `core/list`, can render
+     * nearly-empty `innerHTML` while storing meaningful text in descendant
+     * `innerBlocks`. We keep the existing top-level block_map contract, but
+     * recover text from descendants when the wrapper itself has no usable text.
+     *
+     * @param array $block Parsed Gutenberg block.
+     * @return string Plain text content for the block.
+     */
+    private function extract_gutenberg_block_text($block)
+    {
+        if (!is_array($block)) {
+            return '';
+        }
+
+        $inner_html = isset($block['innerHTML']) && is_string($block['innerHTML'])
+            ? $block['innerHTML']
+            : '';
+        $text_content = $this->strip_to_text($inner_html);
+
+        if ($text_content !== '') {
+            return $text_content;
+        }
+
+        $inner_blocks = isset($block['innerBlocks']) && is_array($block['innerBlocks'])
+            ? $block['innerBlocks']
+            : array();
+        if (empty($inner_blocks)) {
+            return '';
+        }
+
+        $parts = array();
+        foreach ($inner_blocks as $child_block) {
+            $child_text = $this->extract_gutenberg_block_text($child_block);
+            if ($child_text === '') {
+                continue;
+            }
+            $parts[] = $child_text;
+        }
+
+        return trim(implode("\n", $parts));
+    }
+
+    private function extract_gutenberg_media_context($block, $block_name, $inner_html)
+    {
+        if (!is_array($block)) {
+            return null;
+        }
+
+        $attrs = isset($block['attrs']) && is_array($block['attrs'])
+            ? $block['attrs']
+            : array();
+        $sources = array();
+        $alt = '';
+        $caption = '';
+
+        if (isset($attrs['url']) && is_string($attrs['url']) && trim($attrs['url']) !== '') {
+            $sources[] = trim($attrs['url']);
+        }
+        if (isset($attrs['alt']) && is_string($attrs['alt'])) {
+            $alt = trim($attrs['alt']);
+        }
+        if (isset($attrs['caption']) && is_string($attrs['caption'])) {
+            $caption = $this->strip_to_text($attrs['caption']);
+        }
+        if (isset($attrs['images']) && is_array($attrs['images'])) {
+            foreach ($attrs['images'] as $image) {
+                if (!is_array($image)) {
+                    continue;
+                }
+                if (isset($image['url']) && is_string($image['url']) && trim($image['url']) !== '') {
+                    $sources[] = trim($image['url']);
+                }
+                if ($alt === '' && isset($image['alt']) && is_string($image['alt'])) {
+                    $alt = trim($image['alt']);
+                }
+                if ($caption === '' && isset($image['caption']) && is_string($image['caption'])) {
+                    $caption = $this->strip_to_text($image['caption']);
+                }
+            }
+        }
+
+        $html_media = $this->extract_image_context_from_html($inner_html);
+        if (is_array($html_media)) {
+            if (isset($html_media['sources']) && is_array($html_media['sources'])) {
+                $sources = array_merge($sources, $html_media['sources']);
+            }
+            if ($alt === '' && !empty($html_media['alt'])) {
+                $alt = $html_media['alt'];
+            }
+            if ($caption === '' && !empty($html_media['caption'])) {
+                $caption = $html_media['caption'];
+            }
+        }
+
+        $sources = array_values(array_unique(array_filter($sources, function ($value) {
+            return is_string($value) && trim($value) !== '';
+        })));
+        if (empty($sources)) {
+            return null;
+        }
+
+        $primary_src = $sources[0];
+        $label = $this->build_image_fallback_text($primary_src, $alt, $caption, count($sources));
+        $meta = array(
+            'media_kind' => 'image',
+            'image_src' => $primary_src,
+            'image_alt' => $alt,
+            'image_caption' => $caption,
+            'image_label' => $label,
+        );
+        if (count($sources) > 1) {
+            $meta['image_sources'] = $sources;
+        }
+
+        return array(
+            'text' => $label,
+            'snippet' => $label,
+            'block_type' => is_string($block_name) && $block_name !== '' ? $block_name : 'core/image',
+            'meta' => $meta,
+        );
     }
 
     /**
@@ -505,6 +678,15 @@ class REST_Preflight
 
             $text_content = $this->get_node_text($node);
             $text_length = $this->string_length($text_content);
+            $media_context = null;
+
+            if ($text_length === 0) {
+                $media_context = $this->extract_classic_media_context($node, $tag_name);
+                if (is_array($media_context) && !empty($media_context['text'])) {
+                    $text_content = $media_context['text'];
+                    $text_length = $this->string_length($text_content);
+                }
+            }
 
             // Skip empty elements
             if ($text_length === 0) {
@@ -513,18 +695,29 @@ class REST_Preflight
 
             $normalized = $this->canonicalize_php($text_content);
             $signature = hash('sha256', $normalized); // Reuse normalized text
+            $meta = array(
+                'length' => $text_length,
+                'prefix' => $this->string_substr($normalized, 0, 24)
+            );
+            if (is_array($media_context) && isset($media_context['meta']) && is_array($media_context['meta'])) {
+                $meta = array_merge($meta, $media_context['meta']);
+            }
+
+            $snippet = is_array($media_context) && !empty($media_context['snippet'])
+                ? $media_context['snippet']
+                : $this->generate_snippet($text_content);
+            $block_type = is_array($media_context) && !empty($media_context['block_type'])
+                ? $media_context['block_type']
+                : 'classic/' . $tag_name;
 
             $block_map[] = array(
                 'node_ref' => 'block-' . $index,
-                'block_type' => 'classic/' . $tag_name,
+                'block_type' => $block_type,
                 'text_length' => $text_length,
                 'signature' => $signature,
                 'text' => $text_content,
-                'meta' => array(
-                    'length' => $text_length,
-                    'prefix' => $this->string_substr($normalized, 0, 24)
-                ),
-                'snippet' => $this->generate_snippet($text_content),
+                'meta' => $meta,
+                'snippet' => $snippet,
                 'start_offset' => 0,
                 'end_offset' => $text_length,
             );
@@ -555,6 +748,60 @@ class REST_Preflight
         return trim($text);
     }
 
+    private function extract_classic_media_context($node, $tag_name)
+    {
+        if (!$node instanceof \DOMElement) {
+            return null;
+        }
+
+        $image_node = null;
+        if (strtolower($node->tagName) === 'img') {
+            $image_node = $node;
+        } else {
+            $image_nodes = $node->getElementsByTagName('img');
+            if ($image_nodes instanceof \DOMNodeList && $image_nodes->length > 0) {
+                $candidate = $image_nodes->item(0);
+                if ($candidate instanceof \DOMElement) {
+                    $image_node = $candidate;
+                }
+            }
+        }
+
+        if (!$image_node instanceof \DOMElement) {
+            return null;
+        }
+
+        $src = trim($image_node->getAttribute('src'));
+        if ($src === '') {
+            return null;
+        }
+
+        $alt = trim($image_node->getAttribute('alt'));
+        $caption = '';
+        $captions = $node->getElementsByTagName('figcaption');
+        if ($captions instanceof \DOMNodeList && $captions->length > 0) {
+            $caption_node = $captions->item(0);
+            if ($caption_node instanceof \DOMNode) {
+                $caption = $this->get_node_text($caption_node);
+            }
+        }
+
+        $label = $this->build_image_fallback_text($src, $alt, $caption, 1);
+        return array(
+            'text' => $label,
+            'snippet' => $label,
+            'block_type' => 'classic/image',
+            'meta' => array(
+                'media_kind' => 'image',
+                'image_src' => $src,
+                'image_alt' => $alt,
+                'image_caption' => $caption,
+                'image_label' => $label,
+                'source_tag' => $tag_name,
+            ),
+        );
+    }
+
     /**
      * Get text content from DOM node.
      *
@@ -569,6 +816,102 @@ class REST_Preflight
         $text = preg_replace('/\s+/', ' ', $text);
 
         return trim($text);
+    }
+
+    private function extract_image_context_from_html($html)
+    {
+        if (!is_string($html) || trim($html) === '') {
+            return null;
+        }
+
+        $sources = array();
+        $alt = '';
+        if (preg_match_all('/<img\b[^>]*>/i', $html, $matches) >= 1 && !empty($matches[0])) {
+            foreach ($matches[0] as $image_tag) {
+                $src = $this->extract_html_attribute($image_tag, 'src');
+                if ($src !== '') {
+                    $sources[] = $src;
+                }
+                if ($alt === '') {
+                    $alt = $this->extract_html_attribute($image_tag, 'alt');
+                }
+            }
+        }
+
+        $caption = '';
+        if (preg_match('/<figcaption\b[^>]*>([\s\S]*?)<\/figcaption>/i', $html, $caption_matches) === 1) {
+            $caption = $this->strip_to_text($caption_matches[1]);
+        }
+
+        $sources = array_values(array_unique(array_filter($sources, function ($value) {
+            return is_string($value) && trim($value) !== '';
+        })));
+        if (empty($sources) && $alt === '' && $caption === '') {
+            return null;
+        }
+
+        return array(
+            'sources' => $sources,
+            'alt' => $alt,
+            'caption' => $caption,
+        );
+    }
+
+    private function extract_html_attribute($tag_html, $attribute_name)
+    {
+        if (!is_string($tag_html) || !is_string($attribute_name) || $attribute_name === '') {
+            return '';
+        }
+        $pattern = "/\b" . preg_quote($attribute_name, '/') . '\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i';
+        if (preg_match($pattern, $tag_html, $matches) !== 1) {
+            return '';
+        }
+        $value = '';
+        if (isset($matches[1]) && $matches[1] !== '') {
+            $value = $matches[1];
+        } elseif (isset($matches[2]) && $matches[2] !== '') {
+            $value = $matches[2];
+        } elseif (isset($matches[3])) {
+            $value = $matches[3];
+        }
+        return trim(html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    }
+
+    private function build_image_fallback_text($src, $alt = '', $caption = '', $count = 1)
+    {
+        $label = '';
+        if (is_string($alt) && trim($alt) !== '') {
+            $label = trim($alt);
+        } elseif (is_string($caption) && trim($caption) !== '') {
+            $label = trim($caption);
+        } else {
+            $label = $this->build_media_source_label($src);
+        }
+
+        $prefix = intval($count) > 1 ? 'Image gallery' : 'Image';
+        return $label !== '' ? $prefix . ': ' . $label : $prefix;
+    }
+
+    private function build_media_source_label($src)
+    {
+        if (!is_string($src) || trim($src) === '') {
+            return '';
+        }
+
+        $path = wp_parse_url($src, PHP_URL_PATH);
+        if (!is_string($path) || $path === '') {
+            $path = $src;
+        }
+        $basename = basename($path);
+        if (!is_string($basename) || $basename === '') {
+            return '';
+        }
+
+        $stem = preg_replace('/\.[a-z0-9]+$/i', '', $basename);
+        $stem = preg_replace('/[-_]+/', ' ', $stem);
+        $stem = preg_replace('/\s+/', ' ', $stem);
+
+        return trim($stem);
     }
 
     private function extract_heading_text($html)

@@ -1,0 +1,170 @@
+{
+  "snapshotName": "AiVI-WP-Plugin-public",
+  "items": [
+    {
+      "path": "ai-visibility-inspector.php",
+      "type": "file",
+      "reason": "Plugin bootstrap file"
+    },
+    {
+      "path": "LICENSE",
+      "type": "file",
+      "reason": "Public license file"
+    },
+    {
+      "path": "readme.txt",
+      "type": "file",
+      "reason": "WordPress.org distribution readme"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "type": "file",
+      "reason": "Contributor onboarding guide"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "type": "file",
+      "reason": "Public release notes"
+    },
+    {
+      "path": "includes/data/docs/USER_GUIDE.md",
+      "type": "file",
+      "reason": "User-facing guide for plugin usage"
+    },
+    {
+      "path": "includes/data/docs/CHECK_REFERENCE.md",
+      "type": "file",
+      "reason": "Public reference for analysis check families"
+    },
+    {
+      "path": "includes/data/docs/TROUBLESHOOTING.md",
+      "type": "file",
+      "reason": "Public troubleshooting guide"
+    },
+    {
+      "path": "includes/data/docs/PRIVACY.md",
+      "type": "file",
+      "reason": "Public privacy overview"
+    },
+    {
+      "path": "includes/data/docs/TERMS_OF_SERVICE.md",
+      "type": "file",
+      "reason": "Public terms of service"
+    },
+    {
+      "path": "includes/data/docs/SUPPORT.md",
+      "type": "file",
+      "reason": "Public support guide"
+    },
+    {
+      "path": "includes/data/docs/DEVELOPMENT.md",
+      "type": "file",
+      "reason": "Contributor development workflow guide"
+    },
+    {
+      "path": "includes/data/docs/ARCHITECTURE.md",
+      "type": "file",
+      "reason": "Public architecture overview"
+    },
+    {
+      "path": "includes/data/docs/OPERATIONS.md",
+      "type": "file",
+      "reason": "Public-safe release and operations guide"
+    },
+    {
+      "path": "composer.json",
+      "type": "file",
+      "reason": "PHP dependency manifest"
+    },
+    {
+      "path": "composer.lock",
+      "type": "file",
+      "reason": "Reproducible PHP dependency lockfile"
+    },
+    {
+      "path": "package.json",
+      "type": "file",
+      "reason": "Frontend/test dependency manifest"
+    },
+    {
+      "path": "package-lock.json",
+      "type": "file",
+      "reason": "Reproducible frontend dependency lockfile"
+    },
+    {
+      "path": "phpunit.xml",
+      "type": "file",
+      "reason": "PHPUnit configuration"
+    },
+    {
+      "path": ".gitattributes",
+      "type": "file",
+      "reason": "Line-ending and archive metadata"
+    },
+    {
+      "path": ".gitignore",
+      "type": "file",
+      "reason": "Contributor-safe ignore rules"
+    },
+    {
+      "path": "assets",
+      "type": "directory",
+      "reason": "Plugin runtime assets"
+    },
+    {
+      "path": "includes",
+      "type": "directory",
+      "reason": "Plugin runtime PHP classes and helpers"
+    },
+    {
+      "path": "languages",
+      "type": "directory",
+      "reason": "Translation directory required by plugin header metadata"
+    },
+    {
+      "path": "bin/install-wp-tests.sh",
+      "type": "file",
+      "reason": "WordPress PHPUnit bootstrap helper"
+    },
+    {
+      "path": "tests/bootstrap.php",
+      "type": "file",
+      "reason": "PHP test bootstrap"
+    },
+    {
+      "path": "tests/includes",
+      "type": "directory",
+      "reason": "Shared PHP test helpers"
+    },
+    {
+      "path": "tests/js",
+      "type": "directory",
+      "reason": "Plugin frontend regression tests"
+    },
+    {
+      "path": "tests/unit",
+      "type": "directory",
+      "reason": "Plugin-safe unit tests"
+    },
+    {
+      "path": "tests/test-json-serialization.php",
+      "type": "file",
+      "reason": "Serialization sanity check"
+    },
+    {
+      "path": "tools/package-plugin-release.ps1",
+      "type": "file",
+      "reason": "Package build helper for contributors"
+    }
+  ],
+  "excludedLanes": [
+    "control-plane/admin-console",
+    "infrastructure/lambda",
+    "infrastructure/deploy-rcl-7z.ps1",
+    "internal billing, PayPal, Cognito, and super-admin documentation",
+    "temporary debug, replay, and local artifact files"
+  ],
+  "excludePaths": [
+    "tests/js/execution-failure-states.test.js"
+  ]
+}

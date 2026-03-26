@@ -97,7 +97,9 @@ debug.log
 /tools/archive/
 # Local AI/dev tooling
 /.trae/
+/.cursor/
 /.windsurf/
+/antigravity/
 
 # Local temp and replay artifacts
 /_tmp_*

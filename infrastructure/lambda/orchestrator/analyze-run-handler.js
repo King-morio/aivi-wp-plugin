@@ -30,13 +30,13 @@ const getEnvFloat = (key) => {
 };
 
 const INTRO_DETERMINISTIC_CHECK_IDS = new Set([
-  'intro_first_sentence_topic',
   'intro_wordcount',
   'intro_readability',
-  'intro_factual_entities',
-  'intro_schema_suggestion',
-  'intro_focus_and_factuality.v1'
+  'intro_schema_suggestion'
 ]);
+const AI_CHECK_TYPE_FALLBACK = new Set(['semantic']);
+let cachedRuntimeContract = null;
+
 const resolveDefinitionsPath = () => {
   const candidates = [
     path.join(__dirname, 'shared', 'schemas', 'checks-definitions-v1.json'),
@@ -45,6 +45,158 @@ const resolveDefinitionsPath = () => {
   ];
   const existing = candidates.find((candidate) => fs.existsSync(candidate));
   return existing || candidates[0];
+};
+
+const readJsonFile = (filePath) => {
+  const raw = fs.readFileSync(filePath, 'utf8');
+  return JSON.parse(String(raw).replace(/^\uFEFF/, ''));
+};
+
+const resolveRuntimeContractPath = () => {
+  const candidates = [
+    path.join(__dirname, 'shared', 'schemas', 'check-runtime-contract-v1.json'),
+    path.join(__dirname, 'schemas', 'check-runtime-contract-v1.json'),
+    path.join(__dirname, '..', 'shared', 'schemas', 'check-runtime-contract-v1.json')
+  ];
+  const existing = candidates.find((candidate) => fs.existsSync(candidate));
+  return existing || null;
+};
+
+const loadRuntimeContract = () => {
+  if (cachedRuntimeContract) return cachedRuntimeContract;
+  const contractPath = resolveRuntimeContractPath();
+  if (!contractPath) {
+    cachedRuntimeContract = { checks: {} };
+    return cachedRuntimeContract;
+  }
+  try {
+    cachedRuntimeContract = readJsonFile(contractPath);
+  } catch (error) {
+    console.error('Failed to load runtime contract:', error.message);
+    cachedRuntimeContract = { checks: {} };
+  }
+  return cachedRuntimeContract;
+};
+
+const normalizeCheckType = (value) => {
+  if (typeof value !== 'string') return '';
+  return value.trim().toLowerCase();
+};
+
+const getRuntimeContractEntry = (checkId, runtimeContract = loadRuntimeContract()) => {
+  if (!runtimeContract || typeof runtimeContract !== 'object') return null;
+  const checks = runtimeContract.checks;
+  if (!checks || typeof checks !== 'object') return null;
+  const key = typeof checkId === 'string' ? checkId.trim() : '';
+  if (!key || !Object.prototype.hasOwnProperty.call(checks, key)) {
+    return null;
+  }
+  const entry = checks[key];
+  return entry && typeof entry === 'object' ? entry : null;
+};
+
+const getAnalysisEngineForCheck = (checkId, checkDef, runtimeContract = loadRuntimeContract()) => {
+  const contractEntry = getRuntimeContractEntry(checkId, runtimeContract);
+  if (contractEntry && typeof contractEntry.analysis_engine === 'string') {
+    return contractEntry.analysis_engine.toLowerCase().trim();
+  }
+  const fallbackType = checkDef && typeof checkDef.type === 'string'
+    ? normalizeCheckType(checkDef.type)
+    : '';
+  return AI_CHECK_TYPE_FALLBACK.has(fallbackType) ? 'ai' : 'deterministic';
+};
+
+const getAiEligibleCheckIds = (definitions, runtimeContract = loadRuntimeContract()) => {
+  const ids = new Set();
+  if (!definitions || typeof definitions !== 'object' || !definitions.categories) {
+    return ids;
+  }
+  Object.values(definitions.categories).forEach((category) => {
+    if (!category || !category.checks) return;
+    Object.entries(category.checks).forEach(([checkId, checkDef]) => {
+      if (getAnalysisEngineForCheck(checkId, checkDef, runtimeContract) === 'ai') {
+        ids.add(checkId);
+      }
+    });
+  });
+  return ids;
+};
+
+const getCheckDefinitionById = (definitions, targetCheckId) => {
+  if (!definitions || !definitions.categories || !targetCheckId) return null;
+  const normalizedTarget = String(targetCheckId).trim();
+  if (!normalizedTarget) return null;
+  const categories = definitions.categories;
+  for (const category of Object.values(categories)) {
+    if (!category || !category.checks) continue;
+    if (Object.prototype.hasOwnProperty.call(category.checks, normalizedTarget)) {
+      return category.checks[normalizedTarget] || null;
+    }
+  }
+  return null;
+};
+
+const buildMissingAiCoverageCheck = (checkId, definitions) => {
+  const checkDef = getCheckDefinitionById(definitions, checkId) || {};
+  const checkName = typeof checkDef.name === 'string' && checkDef.name.trim()
+    ? checkDef.name.trim()
+    : checkId;
+
+  return {
+    verdict: 'fail',
+    confidence: 0.01,
+    explanation: `AI coverage gap: analyzer did not complete "${checkName}" in this run.`,
+    highlights: [],
+    suggestions: [],
+    provenance: 'synthetic',
+    synthetic_generated: true,
+    synthetic_reason: 'missing_ai_checks',
+    non_inline: true,
+    non_inline_reason: 'missing_ai_checks',
+    id: checkDef.id || checkId,
+    name: checkName,
+    type: checkDef.type || 'semantic'
+  };
+};
+
+const injectMissingAiCoverageChecks = (analysisResult, definitions, options = {}) => {
+  const result = analysisResult && typeof analysisResult === 'object'
+    ? analysisResult
+    : {};
+  const checks = result.checks && typeof result.checks === 'object'
+    ? { ...result.checks }
+    : {};
+  const runtimeContract = options.runtimeContract || loadRuntimeContract();
+  const excludedCheckIds = options.excludedCheckIds instanceof Set
+    ? options.excludedCheckIds
+    : new Set();
+  const aiEligibleCheckIds = Array.from(getAiEligibleCheckIds(definitions, runtimeContract))
+    .filter((checkId) => !excludedCheckIds.has(checkId));
+  const missingCheckIds = aiEligibleCheckIds.filter(
+    (checkId) => !Object.prototype.hasOwnProperty.call(checks, checkId)
+  );
+
+  missingCheckIds.forEach((checkId) => {
+    checks[checkId] = buildMissingAiCoverageCheck(checkId, definitions);
+  });
+
+  const partialContext = {
+    ...(result.partial_context && typeof result.partial_context === 'object' ? result.partial_context : {}),
+    expected_ai_checks: aiEligibleCheckIds.length,
+    returned_ai_checks: aiEligibleCheckIds.length - missingCheckIds.length,
+    missing_ai_checks: missingCheckIds.length,
+    missing_ai_check_ids: missingCheckIds
+  };
+
+  return {
+    ...result,
+    checks,
+    partial_context: partialContext,
+    audit: {
+      ...(result.audit || {}),
+      partial_context: partialContext
+    }
+  };
 };
 
 const parseEventBody = (event) => {
@@ -266,7 +418,8 @@ async function analyzeRunHandler(event) {
     }
 
     const checkDefinitions = require(resolveDefinitionsPath());
-    const deterministicCheckIds = getDeterministicCheckIds(checkDefinitions);
+    const runtimeContract = loadRuntimeContract();
+    const deterministicCheckIds = getDeterministicCheckIds(checkDefinitions, runtimeContract);
 
     const deterministicChecks = await performDeterministicChecks(manifest, run_metadata, {
       enableWebLookups: body.enable_web_lookups,
@@ -275,9 +428,21 @@ async function analyzeRunHandler(event) {
     });
 
     // Perform AI analysis
-    const analysisResult = await performAnalysis(manifest, checks_list, prompt_version, site_url, runId, checkDefinitions);
+    const analysisResult = await performAnalysis(
+      manifest,
+      checks_list,
+      prompt_version,
+      site_url,
+      runId,
+      checkDefinitions,
+      runtimeContract
+    );
     const normalizedResult = normalizeHighlightsWithManifest(analysisResult, manifest);
     const filteredResult = stripChecksById(normalizedResult, deterministicCheckIds);
+    const aiCoverageResult = injectMissingAiCoverageChecks(filteredResult, checkDefinitions, {
+      runtimeContract,
+      excludedCheckIds: new Set([...deterministicCheckIds, ...INTRO_DETERMINISTIC_CHECK_IDS])
+    });
     if (normalizedResult.anchor_verification) {
       emitAnchorVerificationStats(runId, normalizedResult.anchor_verification, {
         prompt_version: analysisResult.audit?.prompt_version || prompt_version || 'latest',
@@ -319,7 +484,7 @@ async function analyzeRunHandler(event) {
     // Get deterministic checks from preflight
     // Merge deterministic checks with AI analysis results
     let mergedResults = mergeDeterministicExplanations(
-      filteredResult,
+      aiCoverageResult,
       normalizedResult,
       deterministicChecks,
       deterministicCheckIds
@@ -431,19 +596,31 @@ async function storeManifest(runId, manifest) {
 /**
  * Performs AI analysis
  */
-async function performAnalysis(manifest, checksList, promptVersion, siteUrl, runId, definitionsOverride = null) {
+async function performAnalysis(
+  manifest,
+  checksList,
+  promptVersion,
+  siteUrl,
+  runId,
+  definitionsOverride = null,
+  runtimeContractOverride = null
+) {
   // Get the analysis prompt
   const promptOptions = promptVersion ? { versionOverride: promptVersion } : {};
   const promptInfo = await getPrompt('analyzer', {}, runId || null, promptOptions);
 
   // Get check definitions
   const checkDefinitions = definitionsOverride || require(resolveDefinitionsPath());
-  const promptDefinitions = sanitizeCheckDefinitionsForPrompt(
-    filterCheckDefinitionsForPrompt(checkDefinitions)
-  );
+  const runtimeContract = runtimeContractOverride || loadRuntimeContract();
 
   // Build the analysis request
-  const analysisPrompt = await buildAnalysisPrompt(manifest, checksList, siteUrl, promptDefinitions);
+  const analysisPrompt = await buildAnalysisPrompt(
+    manifest,
+    checksList,
+    siteUrl,
+    checkDefinitions,
+    runtimeContract
+  );
 
   const apiKey = await getMistralKey();
   const model = getEnv('MISTRAL_MODEL', 'mistral-large-latest');
@@ -900,10 +1077,8 @@ function normalizeHighlightsWithManifest(result, manifest) {
           cannot_anchor: true,
           non_inline: true,
           non_inline_reason: 'missing_candidates',
-          verdict: 'not_applicable',
-          confidence: 0,
           explanation: explanation
-            ? `${explanation} Evidence could not be anchored.`
+            ? `${explanation} (Highlight evidence could not be anchored to specific text.)`
             : 'Evidence could not be anchored.'
         };
         return;
@@ -920,10 +1095,8 @@ function normalizeHighlightsWithManifest(result, manifest) {
         cannot_anchor: true,
         non_inline: true,
         non_inline_reason: 'no_candidates',
-        verdict: 'not_applicable',
-        confidence: 0,
         explanation: explanation
-          ? `${explanation} Evidence could not be anchored.`
+          ? `${explanation} (Highlight evidence could not be anchored to specific text.)`
           : 'Evidence could not be anchored.'
       };
       return;
@@ -1002,10 +1175,13 @@ function normalizeHighlightsWithManifest(result, manifest) {
   return { ...result, checks: normalizedChecks, anchor_verification: anchorStats };
 }
 
-async function buildAnalysisPrompt(manifest, checksList, siteUrl, checkDefinitions) {
-  const deterministicCheckIds = Array.from(getDeterministicCheckIds(checkDefinitions));
-  const checkPromptRegistry = await buildCheckPromptRegistry(checkDefinitions, checksList, {
-    deterministicIds: new Set(deterministicCheckIds)
+async function buildAnalysisPrompt(manifest, checksList, siteUrl, checkDefinitions, runtimeContract = loadRuntimeContract()) {
+  const deterministicCheckIds = getDeterministicCheckIds(checkDefinitions, runtimeContract);
+  const promptDefinitions = sanitizeCheckDefinitionsForPrompt(
+    filterCheckDefinitionsForPrompt(checkDefinitions, runtimeContract)
+  );
+  const checkPromptRegistry = await buildCheckPromptRegistry(promptDefinitions, checksList, {
+    deterministicIds: deterministicCheckIds
   });
   const checkQueryBlocks = JSON.stringify(checkPromptRegistry.registry, null, 2);
   const wordEstimate = Number.isFinite(manifest.wordEstimate) ? manifest.wordEstimate :
@@ -1025,17 +1201,13 @@ MANIFEST (Sanitized HTML Structure):
 ${JSON.stringify(manifest, null, 2)}
 
 CHECK DEFINITIONS:
-${JSON.stringify(checkDefinitions, null, 2)}
+${JSON.stringify(promptDefinitions, null, 2)}
 
 CHECK QUERY BLOCKS:
 ${checkQueryBlocks}
 
 ANALYSIS INSTRUCTIONS:
-1. Deterministic checks are computed server-side. You must ONLY provide explanations for these checks.
-Deterministic check IDs:
-${JSON.stringify(deterministicCheckIds, null, 2)}
-
-2. Use the check query blocks to evaluate each semantic or hybrid check
+1. Use the check query blocks to evaluate each check included in CHECK DEFINITIONS
     - verdict ("issue" or "ok")
     - confidence (0.0-1.0)
     - explanation (1-3 sentences, mention LLM extractability where relevant)
@@ -1047,9 +1219,9 @@ ${JSON.stringify(deterministicCheckIds, null, 2)}
       - exact, prefix, and suffix must appear in order within the same block text
     - text_position_selector is optional
 
-3. For deterministic checks, return verdict "ok", confidence 0.0, scope "span", and an explanation stating that the verdict is computed server-side. Still provide text_quote_selector.
+2. Return findings ONLY for checks included in CHECK DEFINITIONS and CHECK QUERY BLOCKS. Do not invent extra checks or placeholder responses for checks that are not shown here.
 
-4. Return ONLY valid JSON following this exact structure. Do NOT wrap the JSON in markdown code blocks or any other formatting. Output raw JSON only:
+3. Return ONLY valid JSON following this exact structure. Do NOT wrap the JSON in markdown code blocks or any other formatting. Output raw JSON only:
 {
   "findings": [
     {
@@ -1076,14 +1248,13 @@ Begin analysis now:`;
   return prompt;
 }
 
-function getDeterministicCheckIds(checkDefinitions) {
+function getDeterministicCheckIds(checkDefinitions, runtimeContract = loadRuntimeContract()) {
   const deterministic = new Set();
   const categories = checkDefinitions?.categories || {};
   Object.values(categories).forEach((category) => {
     const checks = category?.checks || {};
     Object.entries(checks).forEach(([checkId, checkDef]) => {
-      const type = typeof checkDef?.type === 'string' ? checkDef.type.toLowerCase() : '';
-      if (type === 'deterministic') {
+      if (getAnalysisEngineForCheck(checkId, checkDef, runtimeContract) !== 'ai') {
         deterministic.add(checkId);
       }
     });
@@ -1091,8 +1262,7 @@ function getDeterministicCheckIds(checkDefinitions) {
   return deterministic;
 }
 
-function filterCheckDefinitionsForPrompt(checkDefinitions) {
-  const allowed = new Set(['semantic', 'hybrid', 'deterministic']);
+function filterCheckDefinitionsForPrompt(checkDefinitions, runtimeContract = loadRuntimeContract()) {
   const categories = checkDefinitions?.categories || {};
   const filteredCategories = {};
   let totalChecks = 0;
@@ -1100,8 +1270,7 @@ function filterCheckDefinitionsForPrompt(checkDefinitions) {
     const checks = categoryDef?.checks || {};
     const filteredChecks = {};
     Object.entries(checks).forEach(([checkId, checkDef]) => {
-      const type = typeof checkDef?.type === 'string' ? checkDef.type.toLowerCase() : '';
-      if (allowed.has(type)) {
+      if (getAnalysisEngineForCheck(checkId, checkDef, runtimeContract) === 'ai') {
         filteredChecks[checkId] = checkDef;
       }
     });
@@ -1173,23 +1342,9 @@ function stripChecksById(result, idsToRemove) {
 
 function mergeDeterministicExplanations(semanticResult, aiResult, deterministicChecks, deterministicIds) {
   const mergedChecks = { ...(semanticResult?.checks || {}) };
-  const aiChecks = aiResult?.checks || {};
   deterministicIds.forEach((checkId) => {
     const deterministicCheck = deterministicChecks?.[checkId];
     if (!deterministicCheck) {
-      return;
-    }
-    const aiCheck = aiChecks?.[checkId];
-    if (
-      !INTRO_DETERMINISTIC_CHECK_IDS.has(checkId)
-      && aiCheck
-      && typeof aiCheck.explanation === 'string'
-      && aiCheck.explanation.trim()
-    ) {
-      mergedChecks[checkId] = {
-        ...deterministicCheck,
-        explanation: aiCheck.explanation
-      };
       return;
     }
     mergedChecks[checkId] = deterministicCheck;
@@ -1213,13 +1368,6 @@ function mergeIntroFocusChecks(mergedResult, aiResult, deterministicChecks, mani
     }
     checks[checkId] = deterministicCheck;
   });
-
-  if (manifest?.preflight_intro && checks['intro_focus_and_factuality.v1']?.provenance === undefined) {
-    checks['intro_focus_and_factuality.v1'] = {
-      ...checks['intro_focus_and_factuality.v1'],
-      provenance: checks['intro_focus_and_factuality.v1']?.provenance || 'deterministic'
-    };
-  }
 
   return {
     ...mergedResult,
@@ -1350,5 +1498,7 @@ module.exports = {
   analyzeRunHandler,
   performAnalysis,
   buildAnalysisPrompt,
-  detectContentType
+  detectContentType,
+  injectMissingAiCoverageChecks,
+  getAiEligibleCheckIds
 };

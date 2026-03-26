@@ -75,8 +75,8 @@ const buildDeterministicInstanceMessage = (checkId, facts = {}, stableKey = '') 
     accessibility_basics: 'This image reference is missing alt text.',
     content_updated_12_months: 'This date indicates stale content for freshness-sensitive retrieval.',
     no_broken_internal_links: 'This internal link points to a broken destination.',
-    orphan_headings: 'This heading has thin supporting content.',
-    heading_fragmentation: 'This heading sits in a fragmented section with thin support.',
+    heading_topic_fulfillment: 'This heading does not fulfill its topical promise clearly.',
+    heading_fragmentation: 'This heading hands off to another heading before the section is framed.',
     appropriate_paragraph_length: 'This paragraph is longer than recommended for answer extraction.',
     logical_heading_hierarchy: 'This heading skips a level in the hierarchy.'
   };
@@ -405,31 +405,47 @@ async function performDeterministicChecks(manifest, runMetadata = {}, options = 
   const nodes = Array.isArray(manifest?.nodes) ? manifest.nodes : [];
   const blockMap = Array.isArray(manifest?.block_map) ? manifest.block_map : [];
   const contentHtml = typeof manifest?.content_html === 'string' ? manifest.content_html : '';
-  const h1Count = Number.isFinite(metadata.h1_count) ? metadata.h1_count : 0;
+  const bodyH1Count = Number.isFinite(metadata.h1_count) ? metadata.h1_count : 0;
+  const hasVisibleTitleSurface = typeof manifest?.title === 'string' && manifest.title.trim().length > 0;
+  const effectiveH1Count = bodyH1Count > 0 ? bodyH1Count : (hasVisibleTitleSurface ? 1 : 0);
   const h2Count = Number.isFinite(metadata.h2_count) ? metadata.h2_count : 0;
   const hasJsonld = !!metadata.has_jsonld;
-  const multiH1Highlights = h1Count > 1
-    ? buildMultipleH1Highlights(blockMap, contentHtml, h1Count)
+  const multiH1Highlights = bodyH1Count > 1
+    ? buildMultipleH1Highlights(blockMap, contentHtml, bodyH1Count)
     : [];
+  const structureInventory = buildStructuralSectionInventory(
+    blockMap,
+    nodes,
+    runMetadata,
+    manifest?.title || '',
+    contentHtml
+  );
+  if (manifest && typeof manifest === 'object') {
+    manifest.preflight_structure = structureInventory;
+  }
 
   // H1 count check
   checks.single_h1 = {
-    verdict: h1Count === 1 ? 'pass' :
-      h1Count === 0 ? 'fail' : 'partial',
+    verdict: effectiveH1Count === 1 ? 'pass' :
+      effectiveH1Count === 0 ? 'fail' : 'partial',
     confidence: 1.0,
-    explanation: h1Count === 1 ?
+    explanation: bodyH1Count === 1 ?
       'Content has exactly one H1 tag' :
-      h1Count === 0 ?
-        'No H1 tag found' :
-        `Found ${h1Count} H1 tags, expected exactly one`,
+      bodyH1Count === 0 && hasVisibleTitleSurface ?
+        'Visible article title provides the single H1 surface for this page' :
+        effectiveH1Count === 0 ?
+          'No H1 tag or visible article title found' :
+          `Found ${bodyH1Count} H1 tags, expected exactly one`,
     provenance: 'deterministic',
     highlights: multiH1Highlights,
     details: {
-      h1_count: h1Count
+      h1_count: bodyH1Count,
+      effective_h1_count: effectiveH1Count,
+      title_surface_used: bodyH1Count === 0 && hasVisibleTitleSurface
     }
   };
   if (checks.single_h1.verdict !== 'pass' && checks.single_h1.highlights.length === 0) {
-    markNonInline(checks.single_h1, h1Count === 0 ? 'missing_required_h1' : 'multiple_h1_anchor_unavailable');
+    markNonInline(checks.single_h1, effectiveH1Count === 0 ? 'missing_required_h1' : 'multiple_h1_anchor_unavailable');
   }
 
   const invalidJsonld = jsonld.filter(ld => ld && ld.valid === false);
@@ -473,13 +489,16 @@ async function performDeterministicChecks(manifest, runMetadata = {}, options = 
         .map((entry) => String(entry?.error || 'Invalid JSON-LD').replace(/\s+/g, ' ').trim())
     }
   };
+  if (jsonld.length === 0) {
+    markScoreNeutral(checks.valid_jsonld_schema, 'jsonld_absent');
+  }
   if (checks.valid_jsonld_schema.verdict !== 'pass' && checks.valid_jsonld_schema.highlights.length === 0) {
     markNonInline(checks.valid_jsonld_schema, 'jsonld_document_scope');
   }
 
   const metaDescription = getMetaDescription(contentHtml) || (typeof manifest?.meta_description === 'string' ? manifest.meta_description : '');
-  const canonicalUrl = getCanonicalUrl(contentHtml);
-  const htmlLang = getHtmlLang(contentHtml);
+  const canonicalUrl = getCanonicalUrl(contentHtml) || (typeof manifest?.canonical_url === 'string' ? manifest.canonical_url : '');
+  const htmlLang = getHtmlLang(contentHtml) || (typeof manifest?.lang === 'string' ? manifest.lang : '');
   const titleTag = getTitleTag(contentHtml);
   const hasTitle = !!manifest.title || !!titleTag;
   const hasMetaDescription = typeof metaDescription === 'string' && metaDescription.trim().length > 0;
@@ -514,6 +533,32 @@ async function performDeterministicChecks(manifest, runMetadata = {}, options = 
     markNonInline(checks.metadata_checks, 'metadata_document_scope');
   }
 
+  const canonicalCheck = evaluateCanonicalClarity(canonicalUrl, runMetadata, manifest);
+  checks.canonical_clarity = {
+    verdict: canonicalCheck.verdict,
+    confidence: 1.0,
+    explanation: canonicalCheck.explanation,
+    provenance: 'deterministic',
+    highlights: [],
+    details: canonicalCheck.details
+  };
+  if (checks.canonical_clarity.verdict !== 'pass') {
+    markNonInline(checks.canonical_clarity, 'canonical_document_scope');
+  }
+
+  const crawlerCheck = evaluateAiCrawlerAccessibility(contentHtml);
+  checks.ai_crawler_accessibility = {
+    verdict: crawlerCheck.verdict,
+    confidence: 1.0,
+    explanation: crawlerCheck.explanation,
+    provenance: 'deterministic',
+    highlights: [],
+    details: crawlerCheck.details
+  };
+  if (checks.ai_crawler_accessibility.verdict !== 'pass') {
+    markNonInline(checks.ai_crawler_accessibility, 'crawler_accessibility_non_inline');
+  }
+
   const accessibilityStats = getImageAltStats(nodes);
   const accessibilityHighlights = accessibilityStats.missing > 0
     ? buildMissingAltHighlights(blockMap, accessibilityStats)
@@ -530,6 +575,9 @@ async function performDeterministicChecks(manifest, runMetadata = {}, options = 
     highlights: accessibilityHighlights,
     details: accessibilityStats
   };
+  if (accessibilityStats.total === 0) {
+    markScoreNeutral(checks.accessibility_basics, 'no_images_detected');
+  }
   if (checks.accessibility_basics.verdict !== 'pass' && checks.accessibility_basics.highlights.length === 0) {
     markNonInline(checks.accessibility_basics, 'missing_alt_anchor_unavailable');
   }
@@ -634,6 +682,20 @@ async function performDeterministicChecks(manifest, runMetadata = {}, options = 
     markNonInline(checks.semantic_html_usage, 'semantic_structure_non_inline');
   }
 
+  const headingMarkupCheck = evaluateHeadingLikeTextUsesHeadingMarkup(structureInventory, blockMap);
+  checks.heading_like_text_uses_heading_markup = {
+    verdict: headingMarkupCheck.verdict,
+    confidence: 1.0,
+    explanation: headingMarkupCheck.explanation,
+    provenance: 'deterministic',
+    highlights: Array.isArray(headingMarkupCheck.highlights) ? headingMarkupCheck.highlights : [],
+    details: headingMarkupCheck.details
+  };
+  if (checks.heading_like_text_uses_heading_markup.verdict !== 'pass'
+    && checks.heading_like_text_uses_heading_markup.highlights.length === 0) {
+    markNonInline(checks.heading_like_text_uses_heading_markup, 'heading_like_markup_non_inline');
+  }
+
   const schemaTypeValidation = validateSupportedSchemaTypes(jsonld);
   checks.supported_schema_types_validation = {
     verdict: schemaTypeValidation.verdict,
@@ -643,6 +705,12 @@ async function performDeterministicChecks(manifest, runMetadata = {}, options = 
     highlights: [],
     details: schemaTypeValidation.details
   };
+  if (schemaTypeValidation.details?.score_neutral === true) {
+    markScoreNeutral(
+      checks.supported_schema_types_validation,
+      schemaTypeValidation.details?.score_neutral_reason || 'schema_scope_not_triggered'
+    );
+  }
   if (checks.supported_schema_types_validation.verdict !== 'pass') {
     markNonInline(checks.supported_schema_types_validation, 'schema_validation_non_inline');
   }
@@ -656,34 +724,100 @@ async function performDeterministicChecks(manifest, runMetadata = {}, options = 
     highlights: [],
     details: schemaMatch.details
   };
+  if (schemaMatch.details?.score_neutral === true) {
+    markScoreNeutral(
+      checks.schema_matches_content,
+      schemaMatch.details?.score_neutral_reason || 'schema_match_scope_not_triggered'
+    );
+  }
   if (checks.schema_matches_content.verdict !== 'pass') {
     markNonInline(checks.schema_matches_content, 'schema_content_alignment_non_inline');
   }
 
-  const faqSchemaCheck = evaluateFaqSchemaRequirement(blockMap, nodes, jsonld);
+  const itemListSchemaCheck = evaluateItemListSchemaRequirement(blockMap, jsonld, runMetadata, manifest?.title || '', structureInventory);
+  checks.itemlist_jsonld_presence_and_completeness = {
+    verdict: itemListSchemaCheck.verdict,
+    confidence: 1.0,
+    explanation: itemListSchemaCheck.explanation,
+    provenance: 'deterministic',
+    highlights: [],
+    details: itemListSchemaCheck.details
+  };
+  if (itemListSchemaCheck.details?.score_neutral === true) {
+    markScoreNeutral(
+      checks.itemlist_jsonld_presence_and_completeness,
+      itemListSchemaCheck.details?.score_neutral_reason || 'itemlist_intent_not_detected'
+    );
+  }
+  if (checks.itemlist_jsonld_presence_and_completeness.verdict !== 'pass') {
+    markNonInline(checks.itemlist_jsonld_presence_and_completeness, 'itemlist_schema_non_inline');
+  }
+
+  const articleSchemaCheck = evaluateArticleSchemaPresenceAndCompleteness(jsonld, runMetadata, canonicalUrl, blockMap);
+  checks.article_jsonld_presence_and_completeness = {
+    verdict: articleSchemaCheck.verdict,
+    confidence: 1.0,
+    explanation: articleSchemaCheck.explanation,
+    provenance: 'deterministic',
+    highlights: [],
+    details: articleSchemaCheck.details
+  };
+  if (articleSchemaCheck.details?.score_neutral === true) {
+    markScoreNeutral(
+      checks.article_jsonld_presence_and_completeness,
+      articleSchemaCheck.details?.score_neutral_reason || 'article_schema_not_applicable'
+    );
+  }
+  if (checks.article_jsonld_presence_and_completeness.verdict !== 'pass') {
+    markNonInline(checks.article_jsonld_presence_and_completeness, 'article_schema_non_inline');
+  }
+
+  const faqSchemaCheck = evaluateFaqSchemaRequirement(blockMap, nodes, jsonld, runMetadata, manifest?.title || '', structureInventory);
   checks.faq_jsonld_presence_and_completeness = {
     verdict: faqSchemaCheck.verdict,
     confidence: 1.0,
     explanation: faqSchemaCheck.explanation,
     provenance: 'deterministic',
     highlights: [],
-    details: faqSchemaCheck.details
+    details: cloneCheckDetails(faqSchemaCheck.details),
+    diagnostic_only: true
   };
-  if (checks.faq_jsonld_presence_and_completeness.verdict !== 'pass') {
-    markNonInline(checks.faq_jsonld_presence_and_completeness, 'faq_schema_non_inline');
+  markScoreNeutral(checks.faq_jsonld_presence_and_completeness, 'schema_bridge_internal');
+  markNonInline(checks.faq_jsonld_presence_and_completeness, 'faq_schema_non_inline');
+
+  checks.faq_jsonld_generation_suggestion = buildFaqJsonldGenerationSuggestionCheck(faqSchemaCheck);
+  if (faqSchemaCheck.details?.score_neutral === true) {
+    markScoreNeutral(
+      checks.faq_jsonld_generation_suggestion,
+      faqSchemaCheck.details?.score_neutral_reason || 'faq_scope_not_triggered'
+    );
+  }
+  if (checks.faq_jsonld_generation_suggestion.verdict !== 'pass') {
+    markNonInline(checks.faq_jsonld_generation_suggestion, 'faq_jsonld_generation_non_inline');
   }
 
-  const howtoSchemaCheck = evaluateHowtoSchemaRequirement(blockMap, nodes, jsonld);
+  const howtoSchemaCheck = evaluateHowtoSchemaRequirement(blockMap, nodes, jsonld, runMetadata, manifest?.title || '', contentHtml, structureInventory);
   checks.howto_jsonld_presence_and_completeness = {
     verdict: howtoSchemaCheck.verdict,
     confidence: 1.0,
     explanation: howtoSchemaCheck.explanation,
     provenance: 'deterministic',
     highlights: [],
-    details: howtoSchemaCheck.details
+    details: cloneCheckDetails(howtoSchemaCheck.details),
+    diagnostic_only: true
   };
-  if (checks.howto_jsonld_presence_and_completeness.verdict !== 'pass') {
-    markNonInline(checks.howto_jsonld_presence_and_completeness, 'howto_schema_non_inline');
+  markScoreNeutral(checks.howto_jsonld_presence_and_completeness, 'schema_bridge_internal');
+  markNonInline(checks.howto_jsonld_presence_and_completeness, 'howto_schema_non_inline');
+
+  checks.howto_schema_presence_and_completeness = buildHowtoSchemaPresenceBridgeCheck(howtoSchemaCheck);
+  if (howtoSchemaCheck.details?.score_neutral === true) {
+    markScoreNeutral(
+      checks.howto_schema_presence_and_completeness,
+      howtoSchemaCheck.details?.score_neutral_reason || 'howto_scope_not_triggered'
+    );
+  }
+  if (checks.howto_schema_presence_and_completeness.verdict !== 'pass') {
+    markNonInline(checks.howto_schema_presence_and_completeness, 'howto_schema_non_inline');
   }
 
   const updateCheck = evaluateContentFreshness(contentHtml, runMetadata, blockMap);
@@ -708,6 +842,12 @@ async function performDeterministicChecks(manifest, runMetadata = {}, options = 
       : [],
     details: updateCheck.details
   };
+  if (updateCheck.details?.score_neutral === true) {
+    markScoreNeutral(
+      checks.content_updated_12_months,
+      updateCheck.details?.score_neutral_reason || 'freshness_scope_not_triggered'
+    );
+  }
   if (checks.content_updated_12_months.verdict !== 'pass' && checks.content_updated_12_months.highlights.length === 0) {
     markNonInline(checks.content_updated_12_months, updateCheck.non_inline_reason || 'date_anchor_unavailable');
   }
@@ -721,25 +861,30 @@ async function performDeterministicChecks(manifest, runMetadata = {}, options = 
     highlights: Array.isArray(linkCheck.highlights) ? linkCheck.highlights : [],
     details: linkCheck.details
   };
+  if (linkCheck.details?.score_neutral === true) {
+    markScoreNeutral(
+      checks.no_broken_internal_links,
+      linkCheck.details?.score_neutral_reason || 'internal_links_scope_not_triggered'
+    );
+  }
   if (checks.no_broken_internal_links.verdict !== 'pass' && checks.no_broken_internal_links.highlights.length === 0) {
     markNonInline(checks.no_broken_internal_links, linkCheck.non_inline_reason || 'broken_link_anchor_unavailable');
   }
 
-  const headingSections = collectHeadingSections(blockMap);
-  const h2Sections = headingSections.filter(section => section.level === 2);
-  const h2TotalWords = h2Sections.reduce((sum, section) => sum + Number(section.wordCount || 0), 0);
-  const avgH2Words = h2Sections.length > 0 ? (h2TotalWords / h2Sections.length) : 0;
-  const shortH2Sections = h2Sections.filter(section => Number(section.wordCount || 0) < 50);
-  const isFragmented = h2Sections.length > 6 && avgH2Words < 50;
+  const h2Sections = collectTopLevelHeadingSections(blockMap, 2);
+  const topLevelSplitSections = h2Sections.filter((section) => Number(section.introSupportBlockCount || 0) === 0);
+  const nestedH2Sections = h2Sections.filter((section) => Number(section.descendantHeadingCount || 0) > 0);
+  const topLevelSplitRatio = h2Sections.length > 0 ? (topLevelSplitSections.length / h2Sections.length) : 0;
+  const isFragmented = h2Sections.length > 6 && topLevelSplitSections.length >= Math.max(3, Math.ceil(h2Sections.length * 0.4));
   const headingFragmentHighlights = isFragmented
-    ? shortH2Sections.map((section) => {
+    ? topLevelSplitSections.map((section) => {
       const headingText = section.headingText;
       if (!headingText) return null;
       const facts = {
         heading_text: headingText,
-        word_count: Number(section.wordCount || 0),
-        target_words: 50,
-        h2_section_count: h2Sections.length
+        h2_section_count: h2Sections.length,
+        intro_support_blocks: Number(section.introSupportBlockCount || 0),
+        descendant_heading_count: Number(section.descendantHeadingCount || 0)
       };
       const message = buildDeterministicInstanceMessage(
         'heading_fragmentation',
@@ -754,18 +899,23 @@ async function performDeterministicChecks(manifest, runMetadata = {}, options = 
     verdict: isFragmented ? 'fail' : 'pass',
     confidence: 1.0,
     explanation: isFragmented
-      ? `The content contains ${h2Sections.length} H2 sections with an average word count below 50, failing the threshold for heading fragmentation.`
-      : `Heading structure is healthy (${h2Sections.length} H2 sections, average ${Math.round(avgH2Words)} words per section).`,
+      ? `The outline splits into ${h2Sections.length} top-level H2 sections, and ${topLevelSplitSections.length} of them hand off immediately without framing content before the next heading.`
+      : `Heading structure avoids a flat over-split outline (${h2Sections.length} H2 sections, ${nestedH2Sections.length} with nested subheadings and framing content).`,
     provenance: 'deterministic',
     highlights: headingFragmentHighlights,
     details: {
       h2_section_count: h2Sections.length,
-      h2_avg_word_count: Number(avgH2Words.toFixed(2)),
-      short_h2_sections: shortH2Sections.map((section) => ({
+      top_level_split_section_count: topLevelSplitSections.length,
+      nested_h2_section_count: nestedH2Sections.length,
+      top_level_split_ratio: Number(topLevelSplitRatio.toFixed(4)),
+      top_level_split_sections: topLevelSplitSections.map((section) => ({
         node_ref: section.nodeRef,
         heading_text: section.headingText,
-        word_count: section.wordCount
-      }))
+        intro_support_block_count: section.introSupportBlockCount || 0,
+        content_block_count: section.contentBlockCount || 0,
+        descendant_heading_count: section.descendantHeadingCount || 0
+      })),
+      hierarchy_aware: true
     }
   };
   if (checks.heading_fragmentation.verdict !== 'pass' && checks.heading_fragmentation.highlights.length === 0) {
@@ -816,7 +966,7 @@ async function performDeterministicChecks(manifest, runMetadata = {}, options = 
     long_paragraphs: longParagraphs
   };
 
-  // NOTE: direct_answer_first_120 and answer_sentence_concise are SEMANTIC checks
+  // NOTE: immediate_answer_placement and answer_sentence_concise are SEMANTIC checks
   // They require AI to understand question-answer relationships and cannot be
   // reliably determined by code alone. Removed from deterministic engine.
 
@@ -891,17 +1041,8 @@ async function performDeterministicChecks(manifest, runMetadata = {}, options = 
     if (introData.readabilityCheck) {
       checks.intro_readability = introData.readabilityCheck;
     }
-    if (introData.firstSentenceTopicCheck) {
-      checks.intro_first_sentence_topic = introData.firstSentenceTopicCheck;
-    }
-    if (introData.factualEntitiesCheck) {
-      checks.intro_factual_entities = introData.factualEntitiesCheck;
-    }
     if (introData.schemaSuggestionCheck) {
       checks.intro_schema_suggestion = introData.schemaSuggestionCheck;
-    }
-    if (introData.compositeCheck) {
-      checks['intro_focus_and_factuality.v1'] = introData.compositeCheck;
     }
   }
 }
@@ -917,14 +1058,22 @@ function buildIntroPreflight(manifest, options = {}) {
   const contentHtml = typeof options.contentHtml === 'string' ? options.contentHtml : '';
   const blockMap = Array.isArray(options.blockMap) ? options.blockMap : [];
   const plainText = typeof options.plainText === 'string' ? options.plainText : '';
-  const introBlocks = extractIntroBlocks(blockMap, 3);
-  const htmlIntro = introBlocks ? null : extractIntroFromHtml(contentHtml, 3);
-  const fallbackIntro = !introBlocks && !htmlIntro ? extractIntroFallback(plainText, 200) : null;
-  const introText = introBlocks ? introBlocks.text : (htmlIntro ? htmlIntro.text : (fallbackIntro ? fallbackIntro.text : ''));
-  if (!introText || !introText.trim()) {
+  const introBlocks = extractIntroBlocks(blockMap);
+  const htmlIntro = extractIntroFromHtml(contentHtml);
+  const useBlockIntro = !!(introBlocks && (introBlocks.boundary_found || introBlocks.text || introBlocks.blocks.length > 0));
+  const useHtmlIntro = !useBlockIntro && !!(htmlIntro && (htmlIntro.boundary_found || htmlIntro.text));
+  const fallbackIntro = !useBlockIntro && !useHtmlIntro ? extractIntroFallback(plainText, 200) : null;
+  const introText = useBlockIntro
+    ? introBlocks.text
+    : (useHtmlIntro
+      ? htmlIntro.text
+      : (fallbackIntro ? fallbackIntro.text : ''));
+  if ((!introText || !introText.trim()) && !(useBlockIntro && introBlocks.boundary_found) && !(useHtmlIntro && htmlIntro.boundary_found)) {
     return null;
   }
-  const introHasLink = detectIntroLinkPresence(contentHtml, 3);
+  const introHasLink = useHtmlIntro
+    ? !!htmlIntro.has_link
+    : !!(htmlIntro && htmlIntro.has_link);
   const firstSentence = extractFirstSentence(introText, 200);
   const wordCount = countWords(introText);
   const bucket = classifyIntroWordcount(wordCount);
@@ -933,11 +1082,9 @@ function buildIntroPreflight(manifest, options = {}) {
   const readability = calculateReadability(introText);
   const readabilityVerdict = scoreToVerdict(readability.score);
   const spans = detectFactualSpans(introText);
-  const spansWithSupport = spans.map(span => ({
-    ...span,
-    has_supporting_link: introHasLink
-  }));
-  const unsupportedCount = introHasLink ? 0 : spansWithSupport.length;
+  const spansWithSupport = applyIntroLinkLocality(spans, htmlIntro);
+  const unsupportedCount = spansWithSupport.filter((span) => !span.has_supporting_link).length;
+  const supportedCount = spansWithSupport.length - unsupportedCount;
   const hasSchema = !!manifest?.metadata?.has_jsonld;
   const contentType = typeof options?.runMetadata?.content_type === 'string'
     ? options.runMetadata.content_type
@@ -945,20 +1092,36 @@ function buildIntroPreflight(manifest, options = {}) {
   const introBounds = {
     start: 0,
     end: introText.length,
-    source: introBlocks ? 'block_map' : (htmlIntro ? 'html_paragraphs' : 'plain_text'),
-    block_count: introBlocks ? introBlocks.blocks.length : (htmlIntro ? htmlIntro.paragraphs.length : 0),
+    source: useBlockIntro ? 'block_boundary' : (useHtmlIntro ? 'html_boundary' : 'plain_text'),
+    block_count: useBlockIntro ? introBlocks.blocks.length : 0,
+    boundary_found: useBlockIntro
+      ? !!introBlocks.boundary_found
+      : !!(useHtmlIntro && htmlIntro.boundary_found),
+    boundary_heading_level: useBlockIntro
+      ? introBlocks.boundary_heading_level
+      : (useHtmlIntro ? htmlIntro.boundary_heading_level : null),
     fallback_applied: !!fallbackIntro
   };
-  const highlights = introBlocks && introBlocks.blocks.length > 0
+  const highlights = useBlockIntro && introBlocks.blocks.length > 0
     ? [buildHighlight(introBlocks.blocks[0], { start: 0, end: getBlockText(introBlocks.blocks[0]).length }, 'low')]
     : [];
   const introTopicTerms = extractTopicTerms(String(manifest?.title || ''), 8);
+
+  const wordcountExplanation = bucket === 'snippet_optimal'
+    ? 'The opening gives the topic enough room to become clear without dragging into unnecessary setup.'
+    : bucket === 'acceptable'
+      ? (wordCount < 40
+        ? 'The opening is a little thin for a full intro. Add one more concrete sentence so the topic and its stakes are clear before the first section begins.'
+        : 'The opening is still workable, but it is starting to overstay its role. Trim setup or repetition so the main point lands sooner.')
+      : bucket === 'too_short'
+        ? 'The opening is too thin to establish the topic with confidence. Add one more concrete sentence so the intro carries both the main idea and a supporting detail.'
+        : 'The opening runs too long before it settles on the main point. Trim setup and repetition so the intro reaches the topic faster.';
 
   const wordcountCheck = {
     verdict: wordcountVerdict,
     confidence: 1.0,
     score: wordcountScore,
-    explanation: `Intro contains ${wordCount} words (${bucket.replace(/_/g, ' ')})`,
+    explanation: wordcountExplanation,
     provenance: 'deterministic',
     highlights: [],
     word_count: wordCount,
@@ -966,11 +1129,15 @@ function buildIntroPreflight(manifest, options = {}) {
   };
   markNonInline(wordcountCheck, 'intro_wordcount_non_inline');
 
+  const readabilityExplanation = readabilityVerdict === 'pass'
+    ? 'The opening reads cleanly and should be easy for both readers and retrieval systems to parse.'
+    : 'The opening is harder to scan than it needs to be. Shorter sentences and a cleaner sentence structure would make the main point easier to grasp quickly.';
+
   const readabilityCheck = {
     verdict: readabilityVerdict,
     confidence: 1.0,
     score: readability.score,
-    explanation: `Avg sentence length ${readability.avg_sentence_length.toFixed(1)}, passive voice ${readability.passive_voice_pct.toFixed(1)}%, Flesch ${readability.flesch_score.toFixed(1)}`,
+    explanation: readabilityExplanation,
     provenance: 'deterministic',
     highlights: [],
     avg_sentence_length: readability.avg_sentence_length,
@@ -979,32 +1146,10 @@ function buildIntroPreflight(manifest, options = {}) {
   };
   markNonInline(readabilityCheck, 'intro_readability_non_inline');
 
-  const firstSentenceTopicCheck = buildIntroFirstSentenceTopicCheck({
-    firstSentence,
-    introBlocks,
-    title: manifest?.title || '',
-    introTopicTerms
-  });
-
-  const factualEntitiesCheck = buildIntroFactualEntitiesCheck({
-    spansWithSupport,
-    unsupportedCount,
-    introBlocks,
-    introHasLink
-  });
-
   const schemaSuggestionCheck = buildIntroSchemaSuggestionCheck({
     hasSchema,
     hasFactualSpans: spansWithSupport.length > 0,
     contentType
-  });
-
-  const compositeCheck = buildIntroCompositeCheck({
-    wordcountVerdict: wordcountCheck.verdict,
-    readabilityVerdict: readabilityCheck.verdict,
-    firstSentenceVerdict: firstSentenceTopicCheck.verdict,
-    factualEntitiesVerdict: factualEntitiesCheck.verdict,
-    schemaVerdict: schemaSuggestionCheck.verdict
   });
 
   return {
@@ -1021,16 +1166,15 @@ function buildIntroPreflight(manifest, options = {}) {
       },
       factual_spans: spansWithSupport,
       unsupported_factual_count: unsupportedCount,
+      supported_factual_count: supportedCount,
       has_supporting_link: introHasLink,
+      support_strategy: 'paragraph_link_locality',
       has_schema: hasSchema,
       topic_terms: introTopicTerms
     },
     wordcountCheck,
     readabilityCheck,
-    firstSentenceTopicCheck,
-    factualEntitiesCheck,
     schemaSuggestionCheck,
-    compositeCheck,
     introHighlights: highlights
   };
 }
@@ -1073,86 +1217,21 @@ function mapIntroOffsetToBlockRange(introBlocks, start, end) {
   return null;
 }
 
-function buildIntroFirstSentenceTopicCheck({ firstSentence, introBlocks, title, introTopicTerms }) {
-  const firstSentenceText = typeof firstSentence?.text === 'string' ? firstSentence.text.trim() : '';
-  const sentenceWords = firstSentenceText.split(/\s+/).filter(Boolean);
-  const sentenceTerms = extractTopicTerms(firstSentenceText, 12);
-  const titleTerms = Array.isArray(introTopicTerms) && introTopicTerms.length
-    ? introTopicTerms
-    : extractTopicTerms(String(title || ''), 8);
-  const overlap = sentenceTerms.filter((term) => titleTerms.includes(term));
-
-  let verdict = 'fail';
-  if (sentenceWords.length >= 6 && overlap.length >= 2) {
-    verdict = 'pass';
-  } else if (sentenceWords.length >= 6 && overlap.length >= 1) {
-    verdict = 'partial';
-  } else if (sentenceWords.length >= 10 && titleTerms.length === 0) {
-    verdict = 'partial';
-  }
-
-  const highlights = [];
-  if (introBlocks && Array.isArray(introBlocks.blocks) && introBlocks.blocks.length > 0 && firstSentenceText) {
-    const firstBlock = introBlocks.blocks[0];
-    const firstBlockText = getBlockText(firstBlock);
-    if (firstBlockText) {
-      const safeEnd = Math.min(firstBlockText.length, Math.max(1, Number(firstSentence?.end || firstSentenceText.length)));
-      highlights.push(buildHighlight(firstBlock, { start: 0, end: safeEnd }, verdict === 'pass' ? 'low' : 'medium'));
-    }
-  }
-
-  return {
-    verdict,
-    confidence: 1.0,
-    explanation: overlap.length > 0
-      ? `Intro first sentence aligns with title topic terms (${overlap.slice(0, 3).join(', ')})`
-      : 'Intro first sentence does not clearly align with the title topic',
-    provenance: 'deterministic',
-    highlights,
-    title_terms: titleTerms,
-    sentence_terms: sentenceTerms,
-    overlap_terms: overlap
-  };
-}
-
-function buildIntroFactualEntitiesCheck({ spansWithSupport, unsupportedCount, introBlocks, introHasLink }) {
-  const spans = Array.isArray(spansWithSupport) ? spansWithSupport : [];
-  const unsupported = Math.max(0, Number(unsupportedCount || 0));
-  let verdict = 'pass';
-  if (spans.length === 0) {
-    verdict = 'partial';
-  } else if (unsupported > 0) {
-    verdict = 'fail';
-  }
-
-  const highlights = [];
-  if (spans.length > 0 && introBlocks && Array.isArray(introBlocks.blocks)) {
-    spans.slice(0, 6).forEach((span) => {
-      if (!span || typeof span.start !== 'number' || typeof span.end !== 'number') return;
-      const mapped = mapIntroOffsetToBlockRange(introBlocks, span.start, span.end);
-      if (!mapped) return;
-      highlights.push(buildHighlight(mapped.block, mapped.range, span.has_supporting_link ? 'low' : 'high'));
-    });
-  }
-
-  const check = {
-    verdict,
-    confidence: 1.0,
-    explanation: spans.length === 0
-      ? 'No factual entities detected in intro; add a concrete fact or source-backed statement.'
-      : unsupported > 0
-        ? `${unsupported} factual span(s) in intro are unsupported by links/citations.`
-        : 'Factual intro entities are present and supported.',
-    provenance: 'deterministic',
-    highlights,
-    factual_span_count: spans.length,
-    unsupported_factual_count: unsupported,
-    has_supporting_link: !!introHasLink
-  };
-  if (verdict !== 'pass' && highlights.length === 0) {
-    markNonInline(check, 'absence_non_inline');
-  }
-  return check;
+function applyIntroLinkLocality(spans, htmlIntro) {
+  const introSpans = Array.isArray(spans) ? spans : [];
+  const paragraphs = Array.isArray(htmlIntro?.paragraphs) ? htmlIntro.paragraphs : [];
+  return introSpans.map((span) => {
+    const paragraph = paragraphs.find((entry) => (
+      typeof entry?.start === 'number'
+      && typeof entry?.end === 'number'
+      && span.start >= entry.start
+      && span.start < entry.end
+    ));
+    return {
+      ...span,
+      has_supporting_link: !!paragraph?.has_link
+    };
+  });
 }
 
 function buildIntroSchemaSuggestionCheck({ hasSchema, hasFactualSpans, contentType }) {
@@ -1173,8 +1252,8 @@ function buildIntroSchemaSuggestionCheck({ hasSchema, hasFactualSpans, contentTy
     verdict: hasSchema ? 'pass' : 'partial',
     confidence: 1.0,
     explanation: hasSchema
-      ? 'Structured data detected for intro context.'
-      : `No structured data detected for intro context; consider adding ${recommendedSchemaType} schema.`,
+      ? 'Structured data is already present for the intro intent.'
+      : `No structured data is present for the intro. Consider adding ${recommendedSchemaType} only if it matches the visible opening content exactly.`,
     provenance: 'deterministic',
     highlights: [],
     has_schema: !!hasSchema,
@@ -1190,98 +1269,109 @@ function buildIntroSchemaSuggestionCheck({ hasSchema, hasFactualSpans, contentTy
   return check;
 }
 
-function buildIntroCompositeCheck({ wordcountVerdict, readabilityVerdict, firstSentenceVerdict, factualEntitiesVerdict, schemaVerdict }) {
-  const verdicts = [wordcountVerdict, readabilityVerdict, firstSentenceVerdict, factualEntitiesVerdict, schemaVerdict];
-  const failCount = verdicts.filter((value) => value === 'fail').length;
-  const partialCount = verdicts.filter((value) => value === 'partial').length;
-  const verdict = failCount > 0 ? 'fail' : (partialCount > 0 ? 'partial' : 'pass');
-  const introCompositeExplanation = verdict === 'pass'
-    ? 'The intro is focused, supported by concrete facts, and structurally balanced for reliable answer extraction.'
-    : (verdict === 'partial'
-      ? 'The intro is directionally strong but still needs tighter focus, stronger factual support, or cleaner structure in the opening lines.'
-      : 'The intro misses core quality signals for focus and factual grounding; tighten the opening claim and support it with concrete evidence.');
-  const check = {
-    verdict,
-    confidence: 1.0,
-    explanation: introCompositeExplanation,
-    provenance: 'deterministic',
-    highlights: [],
-    components: {
-      intro_wordcount: wordcountVerdict,
-      intro_readability: readabilityVerdict,
-      intro_first_sentence_topic: firstSentenceVerdict,
-      intro_factual_entities: factualEntitiesVerdict,
-      intro_schema_suggestion: schemaVerdict
-    }
-  };
-  markNonInline(check, 'intro_composite_non_inline');
-  return check;
-}
-
-function extractIntroBlocks(blockMap, maxParagraphs) {
-  const paragraphs = (Array.isArray(blockMap) ? blockMap : []).filter(isParagraphBlock);
-  const selected = paragraphs.slice(0, maxParagraphs);
-  if (selected.length === 0) {
+function extractIntroBlocks(blockMap) {
+  const blocks = Array.isArray(blockMap) ? blockMap : [];
+  if (blocks.length === 0) {
     return null;
+  }
+  const selected = [];
+  let boundaryHeadingLevel = null;
+  for (const block of blocks) {
+    if (!block) {
+      continue;
+    }
+    if (isHeadingBlock(block)) {
+      const level = getHeadingLevel(block);
+      if (Number.isFinite(level) && level >= 2) {
+        boundaryHeadingLevel = level;
+        break;
+      }
+    }
+    selected.push(block);
   }
   const text = selected.map(block => getBlockText(block)).filter(Boolean).join(' ').trim();
-  if (!text) {
-    return null;
-  }
   return {
     text,
-    blocks: selected
+    blocks: selected,
+    boundary_found: boundaryHeadingLevel !== null,
+    boundary_heading_level: boundaryHeadingLevel
   };
 }
 
-function extractIntroFromHtml(html, maxParagraphs) {
+function extractIntroFromHtml(html) {
   if (!html) {
     return null;
   }
+  let text = '';
+  let hasLink = false;
+  let boundaryHeadingLevel = null;
+  let boundaryFound = false;
+  let currentParagraph = null;
   const paragraphs = [];
-  let current = '';
-  let inParagraph = false;
-  let currentHasLink = false;
   const parser = new htmlparser.Parser({
     onopentag(name) {
-      if (name === 'p' && paragraphs.length < maxParagraphs) {
-        inParagraph = true;
-        current = '';
-        currentHasLink = false;
+      const normalized = String(name || '').toLowerCase();
+      const headingMatch = normalized.match(/^h([2-6])$/);
+      if (headingMatch && !boundaryFound) {
+        boundaryHeadingLevel = parseInt(headingMatch[1], 10);
+        boundaryFound = true;
         return;
       }
-      if (inParagraph && name === 'a') {
-        currentHasLink = true;
+      if (!boundaryFound && normalized === 'a') {
+        hasLink = true;
+        if (currentParagraph) {
+          currentParagraph.has_link = true;
+        }
+      }
+      if (!boundaryFound && normalized === 'p') {
+        currentParagraph = {
+          start: text.length,
+          end: text.length,
+          has_link: false
+        };
       }
     },
-    ontext(text) {
-      if (inParagraph) {
-        current += text;
+    ontext(chunk) {
+      if (!boundaryFound) {
+        const normalized = String(chunk || '').replace(/\s+/g, ' ').trim();
+        if (!normalized) {
+          return;
+        }
+        if (text) {
+          text += ' ';
+        }
+        const start = text.length;
+        text += normalized;
+        if (currentParagraph) {
+          if (currentParagraph.start > start) {
+            currentParagraph.start = start;
+          }
+          currentParagraph.end = text.length;
+        }
       }
     },
     onclosetag(name) {
-      if (name === 'p' && inParagraph) {
-        const cleaned = current.replace(/\s+/g, ' ').trim();
-        if (cleaned) {
-          paragraphs.push({
-            text: cleaned,
-            hasLink: currentHasLink
-          });
+      const normalized = String(name || '').toLowerCase();
+      if (!boundaryFound && normalized === 'p' && currentParagraph) {
+        if (currentParagraph.end > currentParagraph.start) {
+          paragraphs.push(currentParagraph);
         }
-        inParagraph = false;
-        current = '';
-        currentHasLink = false;
+        currentParagraph = null;
       }
     }
   }, { decodeEntities: true });
   parser.write(html);
   parser.end();
-  if (paragraphs.length === 0) {
+  const cleaned = text.trim();
+  if (!cleaned && !boundaryFound) {
     return null;
   }
   return {
-    text: paragraphs.map(p => p.text).join(' ').trim(),
-    paragraphs
+    text: cleaned,
+    has_link: hasLink,
+    paragraphs,
+    boundary_found: boundaryFound,
+    boundary_heading_level: boundaryHeadingLevel
   };
 }
 
@@ -1297,14 +1387,6 @@ function extractIntroFallback(text, wordLimit) {
   return {
     text: slice
   };
-}
-
-function detectIntroLinkPresence(html, maxParagraphs) {
-  const intro = extractIntroFromHtml(html, maxParagraphs);
-  if (!intro || !intro.paragraphs) {
-    return false;
-  }
-  return intro.paragraphs.some(paragraph => paragraph.hasLink);
 }
 
 function extractFirstSentence(text, maxChars) {
@@ -1329,16 +1411,16 @@ function extractFirstSentence(text, maxChars) {
 }
 
 function classifyIntroWordcount(wordCount) {
-  if (wordCount < 10) {
+  if (wordCount < 20) {
     return 'too_short';
   }
-  if (wordCount >= 40 && wordCount <= 60) {
+  if (wordCount >= 40 && wordCount <= 150) {
     return 'snippet_optimal';
   }
-  if (wordCount > 60 && wordCount <= 120) {
+  if ((wordCount >= 20 && wordCount < 40) || (wordCount > 150 && wordCount <= 200)) {
     return 'acceptable';
   }
-  if (wordCount > 120) {
+  if (wordCount > 200) {
     return 'too_long';
   }
   return 'acceptable';
@@ -1512,6 +1594,18 @@ function getBlockText(block) {
   if (typeof block.text_content === 'string') {
     return block.text_content;
   }
+  if (typeof block?.meta?.image_label === 'string') {
+    return block.meta.image_label;
+  }
+  if (typeof block?.meta?.image_caption === 'string' && block.meta.image_caption.trim()) {
+    return block.meta.image_caption;
+  }
+  if (typeof block?.meta?.image_alt === 'string' && block.meta.image_alt.trim()) {
+    return block.meta.image_alt;
+  }
+  if (typeof block?.meta?.image_src === 'string') {
+    return block.meta.image_src;
+  }
   if (typeof block.snippet === 'string') {
     return block.snippet;
   }
@@ -1538,6 +1632,14 @@ function isParagraphBlock(block) {
     return true;
   }
   return /\/p$/i.test(blockType);
+}
+
+function isListBlock(block) {
+  const blockType = typeof block?.block_type === 'string' ? block.block_type.toLowerCase() : '';
+  if (!blockType) {
+    return false;
+  }
+  return blockType.includes('/list') || /\/(ol|ul)$/i.test(blockType);
 }
 
 function getHeadingLevel(block) {
@@ -1594,8 +1696,159 @@ function collectHeadingSections(blockMap) {
   return sections;
 }
 
+function resolveFirstContentNodeRef(blockMap) {
+  const blocks = Array.isArray(blockMap) ? blockMap : [];
+  for (const block of blocks) {
+    if (typeof block?.node_ref === 'string' && block.node_ref.trim()) {
+      return block.node_ref.trim();
+    }
+  }
+  return null;
+}
+
+function collectVisibleSections(blockMap, fallbackHeading = '') {
+  const blocks = Array.isArray(blockMap) ? blockMap : [];
+  const sections = [];
+  let current = null;
+
+  const flushCurrent = () => {
+    if (!current) {
+      return;
+    }
+    const hasSupport = Array.isArray(current.supportBlocks) && current.supportBlocks.length > 0;
+    const keepSection = current.isPseudoHeading === true
+      ? hasSupport
+      : (hasSupport || current.headingText);
+    if (keepSection) {
+      sections.push(current);
+    }
+    current = null;
+  };
+
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    if (!block) {
+      continue;
+    }
+    const nextBlock = blocks[index + 1] || null;
+    if (isHeadingBlock(block)) {
+      flushCurrent();
+      current = {
+        block,
+        nodeRef: block.node_ref || null,
+        headingText: getBlockText(block),
+        supportBlocks: [],
+        supportText: '',
+        level: getHeadingLevel(block)
+      };
+      continue;
+    }
+    if (isHeadingLikeParagraphBlock(block, nextBlock)) {
+      flushCurrent();
+      current = {
+        block,
+        nodeRef: block.node_ref || null,
+        headingText: getBlockText(block),
+        supportBlocks: [],
+        supportText: '',
+        level: null,
+        isPseudoHeading: true
+      };
+      continue;
+    }
+    if (!current) {
+      current = {
+        block: null,
+        nodeRef: block.node_ref || null,
+        headingText: fallbackHeading || '',
+        supportBlocks: [],
+        supportText: '',
+        level: null
+      };
+    }
+    current.supportBlocks.push(block);
+    const text = getBlockText(block);
+    if (text && text.trim()) {
+      current.supportText = `${current.supportText} ${text}`.replace(/\s+/g, ' ').trim();
+    }
+  }
+
+  flushCurrent();
+  return sections;
+}
+
+function collectTopLevelHeadingSections(blockMap, targetLevel = 2) {
+  const blocks = Array.isArray(blockMap) ? blockMap : [];
+  const sections = [];
+  let current = null;
+
+  const flushCurrent = () => {
+    if (!current) {
+      return;
+    }
+    sections.push(current);
+    current = null;
+  };
+
+  for (const block of blocks) {
+    if (!block) {
+      continue;
+    }
+    if (isHeadingBlock(block)) {
+      const level = getHeadingLevel(block);
+      const headingText = getBlockText(block);
+      if (level === targetLevel) {
+        flushCurrent();
+        current = {
+          block,
+          nodeRef: block.node_ref || null,
+          headingText,
+          wordCount: 0,
+          supportText: '',
+          level,
+          descendantHeadingCount: 0,
+          introSupportBlockCount: 0,
+          contentBlockCount: 0,
+          seenDescendantHeading: false
+        };
+        continue;
+      }
+      if (!current) {
+        continue;
+      }
+      if (Number.isFinite(level) && level < targetLevel) {
+        flushCurrent();
+        continue;
+      }
+      if (Number.isFinite(level) && level > targetLevel) {
+        if (headingText) {
+          current.descendantHeadingCount += 1;
+        }
+        current.seenDescendantHeading = true;
+        continue;
+      }
+      continue;
+    }
+    if (!current) {
+      continue;
+    }
+    const text = getBlockText(block);
+    if (text && text.trim()) {
+      current.wordCount += countWords(text);
+      current.supportText = `${current.supportText} ${text}`.replace(/\s+/g, ' ').trim();
+      current.contentBlockCount += 1;
+      if (!current.seenDescendantHeading) {
+        current.introSupportBlockCount += 1;
+      }
+    }
+  }
+
+  flushCurrent();
+  return sections;
+}
+
 // NOTE: isQuestionText, resolveAnswerBlock, getFirstSentenceRange, getWordRange
-// were removed as they were only used by semantic checks (direct_answer_first_120,
+// were removed as they were only used by semantic checks (immediate_answer_placement,
 // answer_sentence_concise) that are now handled by AI instead of deterministic engine.
 
 function buildHighlight(block, range, severity, options = {}) {
@@ -1629,6 +1882,24 @@ function markNonInline(check, reason) {
   check.non_inline = true;
   if (reason) {
     check.non_inline_reason = reason;
+  }
+}
+
+function markScoreNeutral(check, reason) {
+  if (!check || typeof check !== 'object') {
+    return;
+  }
+  check.score_neutral = true;
+  if (reason) {
+    check.score_neutral_reason = reason;
+  }
+  if (!check.details || typeof check.details !== 'object') {
+    check.details = {};
+  }
+  check.details.score_neutral = true;
+  check.details.scope_triggered = false;
+  if (reason && !check.details.score_neutral_reason) {
+    check.details.score_neutral_reason = reason;
   }
 }
 
@@ -1718,7 +1989,7 @@ function buildMissingAltHighlights(blockMap, accessibilityStats) {
       return;
     }
     const needles = buildUrlNeedles(srcValue);
-    const match = findBlockByNeedles(blocks, needles);
+    const match = findImageBlockBySource(blocks, srcValue) || findBlockByNeedles(blocks, needles);
     if (!match || seen.has(match.block.node_ref)) {
       return;
     }
@@ -1733,6 +2004,65 @@ function buildMissingAltHighlights(blockMap, accessibilityStats) {
   });
 
   return highlights;
+}
+
+function normalizeImageSourceCandidate(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[?#].*$/, '')
+    .toLowerCase();
+}
+
+function findImageBlockBySource(blocks, srcValue) {
+  const targetNormalized = normalizeImageSourceCandidate(srcValue);
+  const targetNeedles = buildUrlNeedles(srcValue).map((value) => value.toLowerCase());
+  if (!targetNormalized && !targetNeedles.length) {
+    return null;
+  }
+
+  for (const block of Array.isArray(blocks) ? blocks : []) {
+    if (!block || typeof block !== 'object') {
+      continue;
+    }
+    const meta = block.meta && typeof block.meta === 'object' ? block.meta : {};
+    const sourceCandidates = [];
+    if (typeof meta.image_src === 'string' && meta.image_src.trim()) {
+      sourceCandidates.push(meta.image_src);
+    }
+    if (Array.isArray(meta.image_sources)) {
+      meta.image_sources.forEach((candidate) => {
+        if (typeof candidate === 'string' && candidate.trim()) {
+          sourceCandidates.push(candidate);
+        }
+      });
+    }
+    if (!sourceCandidates.length) {
+      continue;
+    }
+
+    const matched = sourceCandidates.some((candidate) => {
+      const candidateNormalized = normalizeImageSourceCandidate(candidate);
+      if (candidateNormalized && targetNormalized && candidateNormalized === targetNormalized) {
+        return true;
+      }
+      const candidateNeedles = buildUrlNeedles(candidate).map((value) => value.toLowerCase());
+      return targetNeedles.some((needle) => candidateNeedles.includes(needle));
+    });
+    if (!matched) {
+      continue;
+    }
+
+    const text = getBlockText(block) || 'Image';
+    return {
+      block,
+      range: {
+        start: 0,
+        end: Math.max(1, text.length)
+      }
+    };
+  }
+
+  return null;
 }
 
 function buildUrlNeedles(urlValue) {
@@ -1871,6 +2201,47 @@ function getCanonicalUrl(html) {
   }
   const match = html.match(/<link[^>]+rel=["']canonical["'][^>]*href=["']([^"']+)["'][^>]*>/i);
   return match ? match[1].trim() : '';
+}
+
+function normalizeHostCandidate(value) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return '';
+  }
+  const candidate = value.trim();
+  try {
+    return new URL(candidate).hostname.replace(/^www\./i, '').toLowerCase();
+  } catch (error) {
+    try {
+      return new URL(`https://${candidate}`).hostname.replace(/^www\./i, '').toLowerCase();
+    } catch (secondaryError) {
+      return '';
+    }
+  }
+}
+
+function getRobotsDirectives(html) {
+  if (!html) {
+    return [];
+  }
+  const directives = [];
+  const metaMatches = html.match(/<meta[^>]+(?:name|property)=["'](?:robots|googlebot|bingbot)["'][^>]*content=["']([^"']+)["'][^>]*>/gi) || [];
+  metaMatches.forEach((match) => {
+    const contentMatch = match.match(/content=["']([^"']+)["']/i);
+    if (!contentMatch || !contentMatch[1]) {
+      return;
+    }
+    String(contentMatch[1]).split(',').forEach((directive) => {
+      const normalized = directive.trim().toLowerCase();
+      if (normalized) {
+        directives.push(normalized);
+      }
+    });
+  });
+  return Array.from(new Set(directives));
+}
+
+function hasDataNoSnippet(html) {
+  return typeof html === 'string' && /data-nosnippet\b/i.test(html);
 }
 
 function getHtmlLang(html) {
@@ -2144,7 +2515,10 @@ function validateSupportedSchemaTypes(jsonldEntries) {
       verdict: 'pass',
       explanation: 'No supported schema types detected; completeness check passed by scope',
       details: {
-        supported_types_found: 0
+        supported_types_found: 0,
+        score_neutral: true,
+        score_neutral_reason: 'supported_schema_types_absent',
+        scope_triggered: false
       }
     };
   }
@@ -2176,6 +2550,7 @@ function evaluateSchemaMatchesContent(jsonldEntries, runMetadata) {
     organization: ['Organization'],
     person: ['Person']
   };
+  const companionTypes = new Set(['FAQPage', 'HowTo', 'BreadcrumbList', 'ItemList', 'VideoObject', 'ImageObject']);
   const expected = expectedByContentType[contentType] || null;
   const jsonldObjects = normalizeJsonldObjects(jsonldEntries);
   const types = jsonldObjects.flatMap(obj => extractSchemaTypes(obj));
@@ -2185,7 +2560,10 @@ function evaluateSchemaMatchesContent(jsonldEntries, runMetadata) {
       verdict: 'partial',
       explanation: 'Content type not available for schema match evaluation',
       details: {
-        content_type: contentType || null
+        content_type: contentType || null,
+        score_neutral: true,
+        score_neutral_reason: 'content_type_unavailable',
+        scope_triggered: false
       }
     };
   }
@@ -2194,11 +2572,31 @@ function evaluateSchemaMatchesContent(jsonldEntries, runMetadata) {
       verdict: 'partial',
       explanation: 'No schema types available for comparison',
       details: {
-        content_type: contentType
+        content_type: contentType,
+        score_neutral: true,
+        score_neutral_reason: 'schema_types_absent',
+        scope_triggered: false
       }
     };
   }
   const matches = uniqueTypes.filter(type => expected.includes(type));
+  const hasOnlyCompanionTypes = matches.length === 0
+    && uniqueTypes.length > 0
+    && uniqueTypes.every((type) => companionTypes.has(type));
+  if (hasOnlyCompanionTypes) {
+    return {
+      verdict: 'partial',
+      explanation: 'Only companion schema types were found; add a primary schema that matches the content.',
+      details: {
+        content_type: contentType,
+        expected_types: expected,
+        detected_types: uniqueTypes,
+        score_neutral: true,
+        score_neutral_reason: 'schema_companion_only',
+        scope_triggered: true
+      }
+    };
+  }
   return {
     verdict: matches.length > 0 ? 'pass' : 'fail',
     explanation: matches.length > 0 ? 'Schema type matches content type' : 'Schema type does not match content type',
@@ -2222,6 +2620,105 @@ const NON_QUESTION_TOPIC_PATTERNS = [
   /^overview\b/i,
   /^introduction\b/i
 ];
+
+const FAQ_EXCLUDED_CONTENT_TYPES = new Set([
+  'news',
+  'newsarticle',
+  'editorial',
+  'opinion',
+  'essay',
+  'story',
+  'profile',
+  'review',
+  'commentary'
+]);
+
+const FAQ_TITLE_PATTERNS = [
+  /\bfaq\b/i,
+  /\bfrequently asked questions\b/i,
+  /\bcommon questions\b/i,
+  /\bquestions answered\b/i
+];
+
+const HOWTO_TITLE_PATTERNS = [
+  /^how to\b/i,
+  /\bstep-by-step\b/i,
+  /\btutorial\b/i,
+  /\bwalkthrough\b/i
+];
+
+const ITEMLIST_HEADING_PATTERNS = [
+  /\b(top|best|examples?|tools?|resources?|reasons?|benefits?|mistakes?|alternatives?|types?|ways|ideas|signals|factors|patterns|metrics|options|checklists?)\b/i
+];
+
+const PSEUDO_HEADING_EXCLUDED_PATTERNS = [
+  /^meta\s+(title|description)\b/i,
+  /^(author|byline|published|updated)\b\s*:/i,
+  /^(slug|excerpt|focus keyword)\b/i
+];
+
+const TITLE_CASE_HEADING_CONNECTORS = new Set([
+  'a',
+  'an',
+  'and',
+  'as',
+  'at',
+  'by',
+  'for',
+  'from',
+  'in',
+  'of',
+  'on',
+  'or',
+  'the',
+  'to',
+  'with',
+  'vs',
+  '&'
+]);
+
+const ARTICLE_LIKE_CONTENT_TYPES = new Set([
+  'article',
+  'post',
+  'news',
+  'newsarticle',
+  'blog',
+  'blogposting'
+]);
+
+const PRIMARY_ARTICLE_SCHEMA_TYPES = new Set(['Article', 'BlogPosting', 'NewsArticle']);
+
+const PROCEDURAL_SUPPORT_PATTERNS = [
+  /\bfollow these steps\b/i,
+  /\bstep-by-step\b/i,
+  /(?:^|[.!?]\s+)first\b[\s,:-]/i,
+  /(?:^|[.!?]\s+)next\b[\s,:-]/i,
+  /(?:^|[.!?]\s+)then\b[\s,:-]/i,
+  /(?:^|[.!?]\s+)finally\b[\s,:-]/i
+];
+
+const BULLET_GLYPH_PATTERN_SOURCE = '\\u00B7\\u2022\\u2023\\u25E6\\u2043\\u2219';
+const BULLET_GLYPH_ENTRY_REGEX = new RegExp(`^[${BULLET_GLYPH_PATTERN_SOURCE}]\\s+`);
+
+function normalizeIntentContentType(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function titleMatchesAnyPattern(title, patterns) {
+  const normalized = typeof title === 'string' ? title.trim() : '';
+  return Boolean(normalized) && patterns.some((pattern) => pattern.test(normalized));
+}
+
+function countProceduralSupportBlocks(blockMap) {
+  const blocks = Array.isArray(blockMap) ? blockMap : [];
+  return blocks.reduce((count, block) => {
+    const text = getBlockText(block);
+    if (!text || !isParagraphBlock(block)) {
+      return count;
+    }
+    return PROCEDURAL_SUPPORT_PATTERNS.some((pattern) => pattern.test(text)) ? count + 1 : count;
+  }, 0);
+}
 
 function normalizeQuestionHeadingText(text) {
   return typeof text === 'string'
@@ -2251,6 +2748,80 @@ function isStepHeading(text) {
   return /^step\s*\d+/i.test(normalized) || /^how to\b/i.test(normalized);
 }
 
+function isShortTitleCaseHeadingLabel(text) {
+  const normalized = normalizeQuestionHeadingText(text).replace(/[:?]+$/, '').trim();
+  if (!normalized) {
+    return false;
+  }
+  const words = normalized.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 7) {
+    return false;
+  }
+
+  let significantCount = 0;
+  let titleCaseCount = 0;
+  words.forEach((word) => {
+    const cleaned = word.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '');
+    if (!cleaned) {
+      return;
+    }
+    const lower = cleaned.toLowerCase();
+    if (TITLE_CASE_HEADING_CONNECTORS.has(lower)) {
+      return;
+    }
+    significantCount += 1;
+    if (/^[A-Z0-9]/.test(cleaned)) {
+      titleCaseCount += 1;
+    }
+  });
+
+  if (significantCount < 2) {
+    return false;
+  }
+  return titleCaseCount >= Math.max(2, significantCount - 1);
+}
+
+function isHeadingLikeParagraphBlock(block, nextBlock = null) {
+  if (!isParagraphBlock(block)) {
+    return false;
+  }
+  if (!nextBlock || isHeadingBlock(nextBlock)) {
+    return false;
+  }
+
+  const text = normalizeQuestionHeadingText(getBlockText(block));
+  if (!text || text.length > 120) {
+    return false;
+  }
+  if (PSEUDO_HEADING_EXCLUDED_PATTERNS.some((pattern) => pattern.test(text))) {
+    return false;
+  }
+  if (parseBulletGlyphEntry(text) || extractInlineBulletEntries(text).length >= 2) {
+    return false;
+  }
+
+  const wordCount = countWords(text);
+  if (wordCount < 2 || wordCount > 14) {
+    return false;
+  }
+  if (/[.!]$/.test(text) && !text.endsWith('?') && !text.endsWith(':')) {
+    return false;
+  }
+
+  const labelText = text.replace(/[:?]+$/, '').trim();
+  if (!labelText) {
+    return false;
+  }
+
+  return isQuestionHeading(text)
+    || isQuestionHeading(labelText)
+    || isStepHeading(labelText)
+    || titleMatchesAnyPattern(labelText, FAQ_TITLE_PATTERNS)
+    || titleMatchesAnyPattern(labelText, HOWTO_TITLE_PATTERNS)
+    || isMeaningfulItemListHeading(labelText)
+    || isShortTitleCaseHeadingLabel(labelText);
+}
+
 function countQuestionHeadingsFromNodes(nodes) {
   const list = Array.isArray(nodes) ? nodes : [];
   return list.filter(node => {
@@ -2270,6 +2841,99 @@ function countListItemsFromNodes(nodes) {
   }).length;
 }
 
+function hasFaqSectionSignal(blockMap, nodes) {
+  const blocks = Array.isArray(blockMap) ? blockMap : [];
+  const blockSignal = blocks.some((block, index) => {
+    const nextBlock = blocks[index + 1] || null;
+    return (isHeadingBlock(block) || isHeadingLikeParagraphBlock(block, nextBlock))
+      && titleMatchesAnyPattern(getBlockText(block), FAQ_TITLE_PATTERNS);
+  });
+  if (blockSignal) {
+    return true;
+  }
+  const list = Array.isArray(nodes) ? nodes : [];
+  return list.some((node) => {
+    const tag = typeof node?.tag === 'string' ? node.tag.toLowerCase() : '';
+    if (!['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)) {
+      return false;
+    }
+    return titleMatchesAnyPattern(node.text, FAQ_TITLE_PATTERNS);
+  });
+}
+
+function normalizeHowtoListItemText(text) {
+  return typeof text === 'string'
+    ? text
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    : '';
+}
+
+function isExplicitStepListItem(text) {
+  const normalized = typeof text === 'string' ? text.trim() : '';
+  if (!normalized) {
+    return false;
+  }
+  return /^(\d+[.)]\s+|step\s*\d+\b)/i.test(normalized);
+}
+
+function extractOrderedListItemsFromHtml(contentHtml) {
+  if (typeof contentHtml !== 'string' || !contentHtml.trim()) {
+    return [];
+  }
+  const items = [];
+  const seen = new Set();
+  const orderedListRegex = /<ol\b[^>]*>([\s\S]*?)<\/ol>/gi;
+  let orderedListMatch;
+  while ((orderedListMatch = orderedListRegex.exec(contentHtml)) !== null) {
+    const listHtml = String(orderedListMatch[1] || '');
+    const listItemRegex = /<li\b[^>]*>([\s\S]*?)<\/li>/gi;
+    let listItemMatch;
+    while ((listItemMatch = listItemRegex.exec(listHtml)) !== null) {
+      const cleaned = normalizeHowtoListItemText(listItemMatch[1]);
+      if (!cleaned || countWords(cleaned) < 2) {
+        continue;
+      }
+      const key = cleaned.toLowerCase();
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      items.push(cleaned);
+    }
+  }
+  return items;
+}
+
+function resolveHowtoContextNodeRefFromText(blockMap, text) {
+  const normalizedNeedle = normalizeHowtoListItemText(text).toLowerCase();
+  if (!normalizedNeedle) {
+    return null;
+  }
+  const blocks = Array.isArray(blockMap) ? blockMap : [];
+  let fallbackNodeRef = null;
+  for (const block of blocks) {
+    const nodeRef = typeof block?.node_ref === 'string' ? block.node_ref.trim() : '';
+    if (!nodeRef) {
+      continue;
+    }
+    const blockText = normalizeHowtoListItemText(getBlockText(block)).toLowerCase();
+    if (!blockText || !blockText.includes(normalizedNeedle)) {
+      continue;
+    }
+    const blockType = typeof block?.block_type === 'string' ? block.block_type.toLowerCase() : '';
+    if (!fallbackNodeRef) {
+      fallbackNodeRef = nodeRef;
+    }
+    if (blockType.includes('list') || blockType.endsWith('/ol') || blockType.endsWith('/ul')) {
+      return nodeRef;
+    }
+  }
+  return fallbackNodeRef;
+}
+
 function extractOrderedListItemsFromBlocks(blockMap) {
   const blocks = Array.isArray(blockMap) ? blockMap : [];
   const items = [];
@@ -2285,6 +2949,9 @@ function extractOrderedListItemsFromBlocks(blockMap) {
     }
     const candidates = text.split(/\n+/).map(item => item.trim()).filter(Boolean);
     candidates.forEach((candidate) => {
+      if (!isExplicitStepListItem(candidate)) {
+        return;
+      }
       const cleaned = candidate.replace(/^([-*•]|\d+[.)])\s+/, '').replace(/\s+/g, ' ').trim();
       if (!cleaned || countWords(cleaned) < 2) {
         return;
@@ -2304,40 +2971,820 @@ function countOrderedListItemsFromBlocks(blockMap) {
   return extractOrderedListItemsFromBlocks(blockMap).length;
 }
 
-function extractFaqPairsFromSections(blockMap, maxPairs = 8) {
-  const sections = collectHeadingSections(blockMap);
-  const pairs = [];
+function normalizeItemListLabel(text) {
+  return typeof text === 'string'
+    ? text
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/^([-*â€¢]|\d+[.)])\s+/, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    : '';
+}
+
+function normalizeItemListCompareText(text) {
+  return normalizeItemListLabel(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseVisibleListEntries(block) {
+  if (!isListBlock(block)) {
+    return [];
+  }
+  const rawText = getBlockText(block);
+  if (!rawText || !rawText.trim()) {
+    return [];
+  }
+  const entries = rawText
+    .split(/\n+/)
+    .map((line) => {
+      const raw = String(line || '').trim();
+      const text = normalizeItemListLabel(raw);
+      return {
+        raw,
+        text,
+        explicit_step: isExplicitStepListItem(raw),
+        word_count: text ? countWords(text) : 0
+      };
+    })
+    .filter((entry) => entry.text && entry.word_count >= 2);
+  return entries;
+}
+
+function isBulletGlyphEntryText(text) {
+  const normalized = typeof text === 'string' ? text.trim() : '';
+  return BULLET_GLYPH_ENTRY_REGEX.test(normalized);
+}
+
+function parseBulletGlyphEntry(text) {
+  const normalized = typeof text === 'string'
+    ? text.replace(/\s+/g, ' ').trim()
+    : '';
+  if (!isBulletGlyphEntryText(normalized)) {
+    return null;
+  }
+  const entryText = normalizeItemListLabel(normalized);
+  const wordCount = entryText ? countWords(entryText) : 0;
+  if (!entryText || wordCount < 2) {
+    return null;
+  }
+  return {
+    raw: normalized,
+    text: entryText,
+    explicit_step: false,
+    word_count: wordCount
+  };
+}
+
+function extractInlineBulletEntries(text) {
+  const normalized = typeof text === 'string'
+    ? text.replace(/\s+/g, ' ').trim()
+    : '';
+  if (!normalized) {
+    return [];
+  }
+  const segments = normalized
+    .split(new RegExp(`(?=[${BULLET_GLYPH_PATTERN_SOURCE}]\\s+)`, 'g'))
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  const entries = segments
+    .map((segment) => parseBulletGlyphEntry(segment))
+    .filter(Boolean);
+  return entries.length >= 2 ? entries : [];
+}
+
+function extractColonLabelEntries(text) {
+  const normalized = typeof text === 'string'
+    ? text.replace(/\s+/g, ' ').trim()
+    : '';
+  if (!normalized) {
+    return [];
+  }
+  const entries = [];
   const seen = new Set();
-  for (const section of sections) {
-    const question = normalizeQuestionHeadingText(section?.headingText || '');
-    if (!isQuestionHeading(question)) {
+  const labelRegex = /([A-Z][^:.!?]{1,80}?):\s+/g;
+  let match;
+  while ((match = labelRegex.exec(normalized)) !== null) {
+    const label = normalizeQuestionHeadingText(match[1] || '');
+    const wordCount = countWords(label);
+    if (!label || wordCount < 2 || wordCount > 6) {
       continue;
     }
-    const answer = typeof section?.supportText === 'string'
-      ? section.supportText.replace(/\s+/g, ' ').trim()
-      : '';
-    if (!answer || countWords(answer) < 6) {
+    if (isQuestionHeading(label) || isStepHeading(label)) {
       continue;
     }
-    const key = question.toLowerCase();
+    const key = label.toLowerCase();
     if (seen.has(key)) {
       continue;
     }
     seen.add(key);
-    pairs.push({
-      question,
-      answer: answer.slice(0, 800),
-      heading_node_ref: section?.nodeRef || null,
-      source: 'heading_section'
+    entries.push({
+      raw: label,
+      text: label,
+      explicit_step: false,
+      word_count: wordCount
     });
-    if (pairs.length >= maxPairs) {
-      break;
-    }
   }
-  return pairs;
+  return entries;
 }
 
-function extractHowtoStepsFromBlocks(blockMap, maxSteps = 12) {
+function buildStructuralCandidateKey(nodeRef, heading, entries) {
+  return `${String(nodeRef || heading || '').toLowerCase()}::${(Array.isArray(entries) ? entries : [])
+    .map((entry) => normalizeItemListCompareText(entry?.text || ''))
+    .filter(Boolean)
+    .join('|')}`;
+}
+
+function buildStructuralListSectionSummary(section, entries, sourceKind, nodeRef, sourceBlockType, ordered, title = '') {
+  const heading = normalizeQuestionHeadingText(section?.headingText || title || '');
+  return {
+    heading: heading || normalizeQuestionHeadingText(title || ''),
+    item_count: entries.length,
+    items: entries.map((entry, index) => ({
+      text: entry.text,
+      position: index + 1
+    })),
+    ordered,
+    heading_signal: isMeaningfulItemListHeading(heading),
+    node_ref: nodeRef,
+    heading_node_ref: typeof section?.nodeRef === 'string' && section.nodeRef.trim() ? section.nodeRef.trim() : null,
+    source_kind: sourceKind,
+    source_block_type: sourceBlockType || '',
+    support_word_count: countWords(section?.supportText || '')
+  };
+}
+
+function appendVisibleItemListCandidate(candidates, seen, section, entries, options = {}) {
+  const listEntries = Array.isArray(entries) ? entries : [];
+  const sourceKind = typeof options.sourceKind === 'string' && options.sourceKind.trim()
+    ? options.sourceKind.trim()
+    : 'visible_list';
+  const heading = normalizeQuestionHeadingText(section?.headingText || options.title || '');
+  const ordered = options.ordered === true || listEntries.some((entry) => entry.explicit_step === true);
+  const headingSignal = isMeaningfulItemListHeading(heading);
+  const questionHeadingSignal = heading ? isQuestionHeading(heading) : false;
+  const strongSectionContext = headingSignal || questionHeadingSignal;
+  const minimumEntries = sourceKind === 'list_block'
+    ? (strongSectionContext ? 2 : 3)
+    : 3;
+  if (listEntries.length < minimumEntries) {
+    return;
+  }
+  const averageWords = listEntries.reduce((sum, entry) => sum + Number(entry.word_count || 0), 0) / listEntries.length;
+  const strongEnough = sourceKind === 'list_block'
+    ? (strongSectionContext || ordered || listEntries.length >= 3)
+    : (headingSignal || ordered || listEntries.length >= 4);
+
+  if (!strongEnough || averageWords < 2) {
+    return;
+  }
+  if (heading && titleMatchesAnyPattern(heading, FAQ_TITLE_PATTERNS)) {
+    return;
+  }
+  if (isProceduralListContext(section, listEntries, options.title || '', options.runMetadata || {})) {
+    return;
+  }
+
+  const nodeRef = typeof options.nodeRef === 'string' && options.nodeRef.trim()
+    ? options.nodeRef.trim()
+    : (typeof section?.nodeRef === 'string' && section.nodeRef.trim() ? section.nodeRef.trim() : null);
+  const key = buildStructuralCandidateKey(nodeRef, heading, listEntries);
+  if (!key || seen.has(key)) {
+    return;
+  }
+  seen.add(key);
+
+  candidates.push(buildStructuralListSectionSummary(
+    section,
+    listEntries,
+    sourceKind,
+    nodeRef,
+    options.sourceBlockType || '',
+    ordered,
+    options.title || ''
+  ));
+}
+
+function isMeaningfulItemListHeading(text) {
+  const heading = normalizeQuestionHeadingText(text);
+  if (!heading) {
+    return false;
+  }
+  if (isStepHeading(heading)) {
+    return false;
+  }
+  if (titleMatchesAnyPattern(heading, FAQ_TITLE_PATTERNS) || titleMatchesAnyPattern(heading, HOWTO_TITLE_PATTERNS)) {
+    return false;
+  }
+  return ITEMLIST_HEADING_PATTERNS.some((pattern) => pattern.test(heading));
+}
+
+function isProceduralListContext(section, entries, title = '', runMetadata = {}) {
+  const contentType = normalizeIntentContentType(runMetadata?.content_type);
+  const heading = normalizeQuestionHeadingText(section?.headingText || '');
+  const supportText = typeof section?.supportText === 'string' ? section.supportText : '';
+  const explicitStepCount = entries.filter((entry) => entry.explicit_step === true).length;
+  if (contentType === 'howto' || contentType === 'how-to') {
+    return true;
+  }
+  if (titleMatchesAnyPattern(title, HOWTO_TITLE_PATTERNS)) {
+    return true;
+  }
+  if (heading && (isStepHeading(heading) || titleMatchesAnyPattern(heading, HOWTO_TITLE_PATTERNS))) {
+    return true;
+  }
+  if (PROCEDURAL_SUPPORT_PATTERNS.some((pattern) => pattern.test(supportText))) {
+    return true;
+  }
+  return explicitStepCount >= Math.ceil(entries.length * 0.6);
+}
+
+function buildStructuralSectionInventory(blockMap, nodes, runMetadata = {}, title = '', contentHtml = '') {
+  const sections = collectVisibleSections(blockMap, title);
+  const visibleItemListSections = [];
+  const pseudoListSections = [];
+  const seenVisible = new Set();
+  const seenPseudo = new Set();
+  const headingLikeSections = sections
+    .filter((section) => section?.isPseudoHeading === true)
+    .map((section) => {
+      const headingText = normalizeQuestionHeadingText(section?.headingText || '');
+      const labelText = headingText.replace(/[:?]+$/, '').trim();
+      const supportBlocks = Array.isArray(section?.supportBlocks) ? section.supportBlocks : [];
+      const supportNodeRefs = supportBlocks
+        .map((block) => (typeof block?.node_ref === 'string' && block.node_ref.trim() ? block.node_ref.trim() : null))
+        .filter(Boolean);
+      return {
+        text: headingText,
+        node_ref: typeof section?.nodeRef === 'string' && section.nodeRef.trim() ? section.nodeRef.trim() : null,
+        source_block_type: typeof section?.block?.block_type === 'string' ? section.block.block_type.toLowerCase() : '',
+        question_like: isQuestionHeading(headingText),
+        step_like: isStepHeading(labelText),
+        faq_like: titleMatchesAnyPattern(labelText, FAQ_TITLE_PATTERNS),
+        howto_like: titleMatchesAnyPattern(labelText, HOWTO_TITLE_PATTERNS),
+        itemlist_like: isMeaningfulItemListHeading(labelText),
+        title_case_like: isShortTitleCaseHeadingLabel(labelText),
+        support_block_count: supportBlocks.length,
+        support_word_count: countWords(section?.supportText || ''),
+        support_node_refs: supportNodeRefs.slice(0, 8),
+        followed_by_list: supportBlocks.some((block) => isListBlock(block)),
+        affects_structural_detection: true
+      };
+    });
+
+  sections.forEach((section) => {
+    const supportBlocks = Array.isArray(section?.supportBlocks) ? section.supportBlocks : [];
+    supportBlocks.forEach((block) => {
+      const blockType = typeof block?.block_type === 'string' ? block.block_type.toLowerCase() : '';
+      const blockText = getBlockText(block);
+      if (isListBlock(block)) {
+        appendVisibleItemListCandidate(visibleItemListSections, seenVisible, section, parseVisibleListEntries(block), {
+          title,
+          runMetadata,
+          nodeRef: typeof block?.node_ref === 'string' ? block.node_ref : null,
+          sourceKind: 'list_block',
+          sourceBlockType: blockType,
+          ordered: /\/ol$/i.test(blockType)
+        });
+      }
+
+      const inlineBulletEntries = extractInlineBulletEntries(blockText);
+      if (inlineBulletEntries.length >= 3) {
+        appendVisibleItemListCandidate(visibleItemListSections, seenVisible, section, inlineBulletEntries, {
+          title,
+          runMetadata,
+          nodeRef: typeof block?.node_ref === 'string' ? block.node_ref : null,
+          sourceKind: 'inline_bullet_paragraph',
+          sourceBlockType: blockType,
+          ordered: false
+        });
+      }
+
+      const colonEntries = extractColonLabelEntries(blockText);
+      if (colonEntries.length >= 3) {
+        const nodeRef = typeof block?.node_ref === 'string' && block.node_ref.trim()
+          ? block.node_ref.trim()
+          : (typeof section?.nodeRef === 'string' && section.nodeRef.trim() ? section.nodeRef.trim() : null);
+        const key = buildStructuralCandidateKey(nodeRef, section?.headingText || title || '', colonEntries);
+        if (key && !seenPseudo.has(key)) {
+          seenPseudo.add(key);
+          pseudoListSections.push(buildStructuralListSectionSummary(
+            section,
+            colonEntries,
+            'colon_labeled_paragraph',
+            nodeRef,
+            blockType,
+            false,
+            title
+          ));
+        }
+      }
+    });
+
+    const bulletBlockEntries = supportBlocks
+      .map((block) => ({
+        block,
+        entry: parseBulletGlyphEntry(getBlockText(block))
+      }))
+      .filter((entry) => entry.entry);
+    if (bulletBlockEntries.length >= 3) {
+      appendVisibleItemListCandidate(
+        visibleItemListSections,
+        seenVisible,
+        section,
+        bulletBlockEntries.map((entry) => entry.entry),
+        {
+          title,
+          runMetadata,
+          nodeRef: typeof bulletBlockEntries[0]?.block?.node_ref === 'string' ? bulletBlockEntries[0].block.node_ref : null,
+          sourceKind: 'bullet_block_sequence',
+          sourceBlockType: typeof bulletBlockEntries[0]?.block?.block_type === 'string' ? bulletBlockEntries[0].block.block_type.toLowerCase() : '',
+          ordered: false
+        }
+      );
+    }
+  });
+
+  const questionSections = sections.reduce((acc, section) => {
+    const question = normalizeQuestionHeadingText(section?.headingText || '');
+    if (!isQuestionHeading(question)) {
+      return acc;
+    }
+    const answer = typeof section?.supportText === 'string'
+      ? section.supportText.replace(/\s+/g, ' ').trim()
+      : '';
+    const answerWordCount = answer ? countWords(answer) : 0;
+    if (answerWordCount < 6) {
+      return acc;
+    }
+    const supportNodeRefs = (Array.isArray(section?.supportBlocks) ? section.supportBlocks : [])
+      .map((block) => (typeof block?.node_ref === 'string' && block.node_ref.trim() ? block.node_ref.trim() : null))
+      .filter(Boolean);
+    const hasVisibleList = visibleItemListSections.some((candidate) =>
+      (candidate?.heading_node_ref && candidate.heading_node_ref === section?.nodeRef)
+      || (candidate?.node_ref && supportNodeRefs.includes(candidate.node_ref))
+    );
+    const hasPseudoList = pseudoListSections.some((candidate) =>
+      (candidate?.heading_node_ref && candidate.heading_node_ref === section?.nodeRef)
+      || (candidate?.node_ref && supportNodeRefs.includes(candidate.node_ref))
+    );
+    acc.push({
+      question,
+      heading_node_ref: typeof section?.nodeRef === 'string' && section.nodeRef.trim() ? section.nodeRef.trim() : null,
+      answer_word_count: answerWordCount,
+      compact_answer: answerWordCount >= 8 && answerWordCount <= 120,
+      visible_list_present: hasVisibleList,
+      pseudo_list_present: hasPseudoList,
+      answer_preview: answer.slice(0, 180),
+      support_node_refs: supportNodeRefs.slice(0, 6)
+    });
+    return acc;
+  }, []);
+
+  const contentType = normalizeIntentContentType(runMetadata?.content_type);
+  const faqTitleSignal = titleMatchesAnyPattern(title, FAQ_TITLE_PATTERNS);
+  const faqSectionSignal = hasFaqSectionSignal(blockMap, nodes);
+  const faqExplicitSignal = faqTitleSignal || faqSectionSignal || contentType === 'faq';
+  const faqBlockedByType = FAQ_EXCLUDED_CONTENT_TYPES.has(contentType);
+  const reusableQuestionSections = questionSections.filter((section) =>
+    section.compact_answer === true
+    && section.visible_list_present !== true
+    && section.pseudo_list_present !== true
+  );
+  const faqCandidateSections = reusableQuestionSections.length >= 2
+    ? reusableQuestionSections.slice(0, 8).map((section) => ({
+      question: section.question,
+      answer: section.answer_preview,
+      heading_node_ref: section.heading_node_ref || null,
+      source: 'question_section'
+    }))
+    : [];
+
+  const detectedSteps = extractHowtoStepsFromBlocks(blockMap, contentHtml, 12);
+  const proceduralSections = sections.reduce((acc, section) => {
+    const heading = normalizeQuestionHeadingText(section?.headingText || '');
+    const supportText = typeof section?.supportText === 'string' ? section.supportText : '';
+    const supportBlocks = Array.isArray(section?.supportBlocks) ? section.supportBlocks : [];
+    const supportNodeRefs = supportBlocks
+      .map((block) => (typeof block?.node_ref === 'string' && block.node_ref.trim() ? block.node_ref.trim() : null))
+      .filter(Boolean);
+    const detectedStepCount = detectedSteps.filter((step) =>
+      (typeof step?.node_ref === 'string' && supportNodeRefs.includes(step.node_ref))
+      || (typeof step?.heading_node_ref === 'string' && (
+        step.heading_node_ref === section?.nodeRef
+        || supportNodeRefs.includes(step.heading_node_ref)
+      ))
+    ).length;
+    const hasProceduralSupport = PROCEDURAL_SUPPORT_PATTERNS.some((pattern) => pattern.test(supportText));
+    const hasOrderedSupport = supportBlocks.some((block) => parseVisibleListEntries(block).some((entry) => entry.explicit_step === true));
+    const hasStepHeading = isStepHeading(heading);
+    if (!hasStepHeading && !hasProceduralSupport && !hasOrderedSupport && detectedStepCount === 0) {
+      return acc;
+    }
+    acc.push({
+      heading,
+      node_ref: typeof section?.nodeRef === 'string' && section.nodeRef.trim() ? section.nodeRef.trim() : (supportNodeRefs[0] || null),
+      support_word_count: countWords(supportText || ''),
+      detected_step_count: detectedStepCount,
+      has_step_heading: hasStepHeading,
+      has_procedural_support: hasProceduralSupport,
+      has_ordered_support: hasOrderedSupport
+    });
+    return acc;
+  }, []);
+
+  const htmlOrderedListCount = extractOrderedListItemsFromHtml(contentHtml).length;
+  const blockListCount = countOrderedListItemsFromBlocks(blockMap);
+  const orderedListCount = Math.max(blockListCount, htmlOrderedListCount);
+  const proceduralSupportCount = countProceduralSupportBlocks(blockMap);
+  const howtoTitleSignal = titleMatchesAnyPattern(title, HOWTO_TITLE_PATTERNS);
+  const howtoBlockedByType = FAQ_EXCLUDED_CONTENT_TYPES.has(contentType) && !howtoTitleSignal;
+
+  return {
+    inventory_version: 2,
+    visible_itemlist_sections: visibleItemListSections,
+    pseudo_list_sections: pseudoListSections,
+    heading_like_sections: headingLikeSections,
+    question_sections: questionSections,
+    faq_candidate_sections: faqCandidateSections,
+    faq_signals: {
+      title_signal: faqTitleSignal,
+      section_signal: faqSectionSignal,
+      explicit_signal: faqExplicitSignal,
+      blocked_by_type: faqBlockedByType,
+      content_type: contentType || ''
+    },
+    procedural_sections: proceduralSections,
+    howto_summary: {
+      step_heading_count: sections.filter((section) => isStepHeading(section.headingText)).length,
+      list_item_count: orderedListCount,
+      procedural_support_count: proceduralSupportCount,
+      title_signal: howtoTitleSignal,
+      blocked_by_type: howtoBlockedByType,
+      content_type: contentType || '',
+      detected_steps: detectedSteps
+    },
+    semantic_candidate_hints: {
+      lists_tables_presence: {
+        visible_list_section_node_refs: visibleItemListSections
+          .map((section) => section?.node_ref || section?.heading_node_ref || null)
+          .filter(Boolean),
+        pseudo_list_section_node_refs: pseudoListSections
+          .map((section) => section?.node_ref || section?.heading_node_ref || null)
+          .filter(Boolean)
+      },
+      faq_structure_opportunity: {
+        question_section_node_refs: questionSections
+          .map((section) => section?.heading_node_ref || null)
+          .filter(Boolean),
+        faq_candidate_section_node_refs: faqCandidateSections
+          .map((section) => section?.heading_node_ref || null)
+          .filter(Boolean)
+      },
+      howto_semantic_validity: {
+        procedural_section_node_refs: proceduralSections
+          .map((section) => section?.node_ref || null)
+          .filter(Boolean)
+      }
+    }
+  };
+}
+
+function detectVisibleItemListCandidates(blockMap, runMetadata = {}, title = '', structureInventory = null) {
+  const inventory = structureInventory && typeof structureInventory === 'object'
+    ? structureInventory
+    : buildStructuralSectionInventory(blockMap, [], runMetadata, title, '');
+  return Array.isArray(inventory?.visible_itemlist_sections) ? inventory.visible_itemlist_sections : [];
+}
+
+function evaluateHeadingLikeTextUsesHeadingMarkup(structureInventory, blockMap) {
+  const detectedSections = Array.isArray(structureInventory?.heading_like_sections)
+    ? structureInventory.heading_like_sections.filter((section) => typeof section?.node_ref === 'string' && section.node_ref.trim())
+    : [];
+  const contextNodeRef = detectedSections[0]?.node_ref || null;
+
+  if (detectedSections.length === 0) {
+    return {
+      verdict: 'pass',
+      explanation: 'No heading-like paragraph labels detected',
+      highlights: [],
+      details: {
+        heading_like_count: 0,
+        structurally_impactful_count: 0,
+        context_node_ref: null,
+        detected_sections: []
+      }
+    };
+  }
+
+  const impactfulSections = detectedSections.filter((section) =>
+    section?.followed_by_list === true
+    || section?.step_like === true
+    || section?.faq_like === true
+    || section?.howto_like === true
+    || section?.itemlist_like === true
+  );
+  const verdict = detectedSections.length > 1 || impactfulSections.length > 0 ? 'fail' : 'partial';
+  const message = 'This section label looks like a heading but is still paragraph text';
+  const highlights = detectedSections.slice(0, 8).reduce((acc, section) => {
+    const nodeRef = typeof section?.node_ref === 'string' ? section.node_ref.trim() : '';
+    if (!nodeRef) {
+      return acc;
+    }
+    const block = (Array.isArray(blockMap) ? blockMap : []).find((candidate) =>
+      typeof candidate?.node_ref === 'string' && candidate.node_ref.trim() === nodeRef
+    );
+    const text = getBlockText(block);
+    if (!block || !text.trim()) {
+      return acc;
+    }
+    acc.push(buildHighlight(
+      block,
+      { start: 0, end: text.length },
+      verdict === 'fail' ? 'high' : 'medium',
+      {
+        message,
+        facts: {
+          support_block_count: Number(section?.support_block_count || 0),
+          followed_by_list: section?.followed_by_list === true
+        }
+      }
+    ));
+    return acc;
+  }, []);
+
+  return {
+    verdict,
+    explanation: verdict === 'partial'
+      ? 'One heading-like paragraph should use real heading markup'
+      : `${detectedSections.length} heading-like paragraph labels should use real heading markup`,
+    highlights,
+    details: {
+      heading_like_count: detectedSections.length,
+      structurally_impactful_count: impactfulSections.length,
+      context_node_ref: contextNodeRef,
+      detected_sections: detectedSections.slice(0, 8)
+    }
+  };
+}
+
+function extractItemListElements(schema) {
+  const raw = schema?.itemListElement || schema?.itemListElements || [];
+  const entries = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+  return entries.map((entry, index) => {
+    if (typeof entry === 'string') {
+      return {
+        text: normalizeItemListLabel(entry),
+        position: index + 1
+      };
+    }
+    const itemValue = entry?.item;
+    const text = normalizeItemListLabel(
+      entry?.name
+      || entry?.headline
+      || entry?.text
+      || (typeof itemValue === 'string' ? itemValue : '')
+      || itemValue?.name
+      || itemValue?.headline
+      || itemValue?.text
+    );
+    const position = Number.isFinite(Number(entry?.position)) ? Number(entry.position) : null;
+    return {
+      text,
+      position
+    };
+  }).filter((entry) => entry.text);
+}
+
+function itemListLabelsAlign(candidateItems, schemaItems) {
+  const visible = (Array.isArray(candidateItems) ? candidateItems : [])
+    .map((entry) => normalizeItemListCompareText(entry?.text || ''))
+    .filter(Boolean);
+  const schema = (Array.isArray(schemaItems) ? schemaItems : [])
+    .map((entry) => normalizeItemListCompareText(entry?.text || ''))
+    .filter(Boolean);
+  if (visible.length === 0 || schema.length === 0) {
+    return 0;
+  }
+  let matched = 0;
+  visible.forEach((visibleLabel) => {
+    const hasMatch = schema.some((schemaLabel) =>
+      schemaLabel === visibleLabel
+      || schemaLabel.includes(visibleLabel)
+      || visibleLabel.includes(schemaLabel)
+    );
+    if (hasMatch) {
+      matched += 1;
+    }
+  });
+  return matched;
+}
+
+function evaluateItemListSchemaCandidate(candidate, schemas) {
+  const listCandidate = candidate && typeof candidate === 'object' ? candidate : null;
+  const schemaList = Array.isArray(schemas) ? schemas : [];
+  let best = {
+    aligned: false,
+    complete: false,
+    matched_count: 0,
+    schema_item_count: 0,
+    schema_index: -1,
+    missing_positions: false
+  };
+
+  schemaList.forEach((schema, index) => {
+    const schemaItems = extractItemListElements(schema);
+    const matchedCount = itemListLabelsAlign(listCandidate?.items, schemaItems);
+    const requiredCount = Number(listCandidate?.item_count || 0);
+    const hasPositionalCoverage = listCandidate?.ordered !== true
+      || schemaItems.length === 0
+      ? true
+      : schemaItems.every((entry, entryIndex) => Number(entry.position) === entryIndex + 1);
+    const aligned = matchedCount >= Math.min(requiredCount, 2);
+    const complete = aligned && schemaItems.length >= requiredCount && hasPositionalCoverage;
+    const candidateScore = (complete ? 1000 : 0) + matchedCount * 10 + schemaItems.length;
+    const bestScore = (best.complete ? 1000 : 0) + best.matched_count * 10 + best.schema_item_count;
+    if (candidateScore > bestScore) {
+      best = {
+        aligned,
+        complete,
+        matched_count: matchedCount,
+        schema_item_count: schemaItems.length,
+        schema_index: index,
+        missing_positions: listCandidate?.ordered === true && !hasPositionalCoverage
+      };
+    }
+  });
+
+  return best;
+}
+
+function evaluateItemListSchemaRequirement(blockMap, jsonldEntries, runMetadata = {}, title = '', structureInventory = null) {
+  const candidates = detectVisibleItemListCandidates(blockMap, runMetadata, title, structureInventory);
+  if (candidates.length === 0) {
+    return {
+      verdict: 'pass',
+      explanation: 'No strong visible list candidate detected; ItemList schema requirement not triggered',
+      details: {
+        candidate_count: 0,
+        detected_candidates: [],
+        score_neutral: true,
+        score_neutral_reason: 'itemlist_intent_not_detected',
+        scope_triggered: false
+      }
+    };
+  }
+
+  const itemListSchemas = extractSchemaObjectsByType(jsonldEntries, 'ItemList');
+  if (itemListSchemas.length === 0) {
+    return {
+      verdict: 'fail',
+      explanation: 'Strong visible list sections are present, but ItemList schema is missing',
+      details: {
+        candidate_count: candidates.length,
+        detected_candidates: candidates,
+        itemlist_schema_found: 0,
+        context_node_ref: candidates[0]?.node_ref || candidates[0]?.heading_node_ref || null,
+        scope_triggered: true
+      }
+    };
+  }
+
+  const evaluations = candidates.map((candidate) => ({
+    candidate,
+    result: evaluateItemListSchemaCandidate(candidate, itemListSchemas)
+  }));
+  const completeCount = evaluations.filter((entry) => entry.result.complete === true).length;
+  const alignedCount = evaluations.filter((entry) => entry.result.aligned === true).length;
+  const bestMismatch = evaluations.find((entry) => entry.result.complete !== true) || evaluations[0];
+  const verdict = completeCount === candidates.length ? 'pass' : 'partial';
+
+  return {
+    verdict,
+    explanation: verdict === 'pass'
+      ? 'Strong visible list sections are supported by aligned ItemList schema'
+      : 'ItemList schema is present but incomplete or misaligned with the visible list',
+    details: {
+      candidate_count: candidates.length,
+      detected_candidates: candidates,
+      itemlist_schema_found: itemListSchemas.length,
+      itemlist_schema_complete: completeCount,
+      itemlist_schema_aligned: alignedCount,
+      context_node_ref: bestMismatch?.candidate?.node_ref || bestMismatch?.candidate?.heading_node_ref || null,
+      missing_positions: bestMismatch?.result?.missing_positions === true,
+      scope_triggered: true
+    }
+  };
+}
+
+function hasPrimaryArticlePageReference(schema, canonicalUrl = '') {
+  if (!schema || typeof schema !== 'object') {
+    return false;
+  }
+  if (hasField(schema, 'mainEntityOfPage') || hasField(schema, 'url') || hasField(schema, '@id')) {
+    return true;
+  }
+  return !canonicalUrl;
+}
+
+function resolvePrimaryArticleSchemaType(contentType = '') {
+  const normalizedType = normalizeIntentContentType(contentType);
+  if (normalizedType === 'news' || normalizedType === 'newsarticle') {
+    return 'NewsArticle';
+  }
+  if (normalizedType === 'post' || normalizedType === 'blog' || normalizedType === 'blogposting') {
+    return 'BlogPosting';
+  }
+  return 'Article';
+}
+
+function evaluateArticleSchemaPresenceAndCompleteness(jsonldEntries, runMetadata = {}, canonicalUrl = '', blockMap = []) {
+  const contentType = normalizeIntentContentType(runMetadata?.content_type);
+  if (!ARTICLE_LIKE_CONTENT_TYPES.has(contentType)) {
+    return {
+      verdict: 'pass',
+      explanation: 'Primary article schema is not required for this content type',
+      details: {
+        content_type: contentType || '',
+        preferred_article_type: resolvePrimaryArticleSchemaType(contentType),
+        score_neutral: true,
+        score_neutral_reason: 'article_schema_not_applicable',
+        scope_triggered: false
+      }
+    };
+  }
+
+  const jsonldObjects = normalizeJsonldObjects(jsonldEntries);
+  const articleSchemas = jsonldObjects.filter((obj) => extractSchemaTypes(obj).some((type) => PRIMARY_ARTICLE_SCHEMA_TYPES.has(type)));
+  const detectedTypes = Array.from(new Set(jsonldObjects.flatMap((obj) => extractSchemaTypes(obj))));
+  const companionTypes = detectedTypes.filter((type) => !PRIMARY_ARTICLE_SCHEMA_TYPES.has(type));
+
+  if (articleSchemas.length === 0) {
+    const companionOnly = companionTypes.length > 0;
+    return {
+      verdict: companionOnly ? 'partial' : 'fail',
+      explanation: companionOnly
+        ? 'Only companion or supporting schemas were found; primary article schema is missing'
+        : 'Article-like content detected but no primary article schema was found',
+      details: {
+        content_type: contentType,
+        preferred_article_type: resolvePrimaryArticleSchemaType(contentType),
+        article_schema_found: 0,
+        detected_types: detectedTypes,
+        companion_types: companionTypes,
+        companion_only: companionOnly,
+        context_node_ref: resolveFirstContentNodeRef(blockMap),
+        scope_triggered: true
+      }
+    };
+  }
+
+  const evaluations = articleSchemas.map((schema) => {
+    const types = extractSchemaTypes(schema);
+    const resolvedType = types.find((type) => PRIMARY_ARTICLE_SCHEMA_TYPES.has(type)) || types[0] || 'Article';
+    const missing = [];
+    if (!hasField(schema, '@context')) missing.push('@context');
+    if (!hasField(schema, '@type')) missing.push('@type');
+    if (!(hasField(schema, 'headline') || hasField(schema, 'name'))) missing.push('headline_or_name');
+    if (!hasField(schema, 'author')) missing.push('author');
+    if (!(hasField(schema, 'datePublished') || hasField(schema, 'dateModified'))) missing.push('datePublished_or_dateModified');
+    if (!hasPrimaryArticlePageReference(schema, canonicalUrl)) missing.push('mainEntityOfPage_or_page_reference');
+    return {
+      type: resolvedType,
+      missing
+    };
+  });
+
+  const completeCount = evaluations.filter((entry) => entry.missing.length === 0).length;
+  return {
+    verdict: completeCount > 0 ? 'pass' : 'partial',
+    explanation: completeCount > 0
+      ? 'Primary article schema is present with required core fields'
+      : 'Primary article schema is present but missing required core fields',
+    details: {
+      content_type: contentType,
+      preferred_article_type: resolvePrimaryArticleSchemaType(contentType),
+      article_schema_found: articleSchemas.length,
+      article_schema_complete: completeCount,
+      article_schema_evaluations: evaluations,
+      detected_types: detectedTypes,
+      companion_types: companionTypes,
+      context_node_ref: resolveFirstContentNodeRef(blockMap),
+      scope_triggered: true
+    }
+  };
+}
+
+function extractFaqPairsFromSections(blockMap, maxPairs = 8, nodes = [], runMetadata = {}, title = '') {
+  const inventory = buildStructuralSectionInventory(blockMap, nodes, runMetadata, title, '');
+  const pairs = Array.isArray(inventory?.faq_candidate_sections) ? inventory.faq_candidate_sections : [];
+  return pairs.slice(0, maxPairs);
+}
+
+function extractHowtoStepsFromBlocks(blockMap, contentHtml = '', maxSteps = 12) {
   const sections = collectHeadingSections(blockMap);
   const steps = [];
   const seen = new Set();
@@ -2364,11 +3811,15 @@ function extractHowtoStepsFromBlocks(blockMap, maxSteps = 12) {
     steps.push({
       text: text.slice(0, 320),
       source: 'step_heading',
-      heading_node_ref: section?.nodeRef || null
+      heading_node_ref: section?.nodeRef || null,
+      node_ref: section?.nodeRef || null
     });
   });
 
-  extractOrderedListItemsFromBlocks(blockMap).forEach((item) => {
+  const orderedListItems = extractOrderedListItemsFromHtml(contentHtml);
+  const fallbackListItems = orderedListItems.length > 0 ? [] : extractOrderedListItemsFromBlocks(blockMap);
+
+  orderedListItems.concat(fallbackListItems).forEach((item) => {
     const text = item.replace(/\s+/g, ' ').trim();
     if (!text) {
       return;
@@ -2378,39 +3829,95 @@ function extractHowtoStepsFromBlocks(blockMap, maxSteps = 12) {
       return;
     }
     seen.add(key);
+    const nodeRef = resolveHowtoContextNodeRefFromText(blockMap, text);
     steps.push({
       text: text.slice(0, 320),
       source: 'ordered_list',
-      heading_node_ref: null
+      heading_node_ref: null,
+      node_ref: nodeRef || null
     });
   });
 
   return steps.slice(0, maxSteps);
 }
 
-function detectFaqNeed(blockMap, nodes) {
-  const sections = collectHeadingSections(blockMap);
-  const sectionCount = sections.filter(section => isQuestionHeading(section.headingText) && section.wordCount >= 10).length;
-  const nodeCount = countQuestionHeadingsFromNodes(nodes);
-  const count = Math.max(sectionCount, nodeCount);
-  const source = sectionCount >= nodeCount ? 'headings' : 'html';
+function resolveHowtoContextNodeRef(detectedSteps) {
+  const steps = Array.isArray(detectedSteps) ? detectedSteps : [];
+  for (const step of steps) {
+    const nodeRef = typeof step?.node_ref === 'string' ? step.node_ref.trim() : '';
+    if (nodeRef) {
+      return nodeRef;
+    }
+    const headingNodeRef = typeof step?.heading_node_ref === 'string' ? step.heading_node_ref.trim() : '';
+    if (headingNodeRef) {
+      return headingNodeRef;
+    }
+  }
+  return null;
+}
+
+function detectFaqNeed(blockMap, nodes, runMetadata = {}, title = '', structureInventory = null) {
+  const inventory = structureInventory && typeof structureInventory === 'object'
+    ? structureInventory
+    : buildStructuralSectionInventory(blockMap, nodes, runMetadata, title, '');
+  const detectedPairs = Array.isArray(inventory?.faq_candidate_sections) ? inventory.faq_candidate_sections : [];
+  const questionSections = Array.isArray(inventory?.question_sections) ? inventory.question_sections : [];
+  const faqSignals = inventory?.faq_signals && typeof inventory.faq_signals === 'object'
+    ? inventory.faq_signals
+    : {};
+  const count = detectedPairs.length;
+  const source = detectedPairs.length > 0
+    ? 'pairs'
+    : questionSections.length > 0
+      ? 'question_sections'
+      : 'none';
   return {
-    needed: count >= 2,
+    needed: !faqSignals.blocked_by_type && (
+      (detectedPairs.length >= 2 && faqSignals.explicit_signal === true)
+      || detectedPairs.length >= 3
+    ),
     count,
-    source
+    question_section_count: questionSections.length,
+    source,
+    content_type: faqSignals.content_type || '',
+    blocked_by_type: faqSignals.blocked_by_type === true,
+    title_signal: faqSignals.title_signal === true,
+    section_signal: faqSignals.section_signal === true,
+    explicit_signal: faqSignals.explicit_signal === true,
+    detected_pairs: detectedPairs,
+    compact_pairs: detectedPairs
   };
 }
 
-function detectHowtoNeed(blockMap, nodes) {
-  const sections = collectHeadingSections(blockMap);
-  const stepHeadingCount = sections.filter(section => isStepHeading(section.headingText)).length;
-  const blockListCount = countOrderedListItemsFromBlocks(blockMap);
-  const nodeListCount = countListItemsFromNodes(nodes);
-  const listCount = Math.max(blockListCount, nodeListCount);
+function detectHowtoNeed(blockMap, nodes, runMetadata = {}, title = '', contentHtml = '', structureInventory = null) {
+  const inventory = structureInventory && typeof structureInventory === 'object'
+    ? structureInventory
+    : buildStructuralSectionInventory(blockMap, nodes, runMetadata, title, contentHtml);
+  const howtoSummary = inventory?.howto_summary && typeof inventory.howto_summary === 'object'
+    ? inventory.howto_summary
+    : {};
+  const stepHeadingCount = Number(howtoSummary.step_heading_count || 0);
+  const listCount = Number(howtoSummary.list_item_count || 0);
+  const detectedSteps = Array.isArray(howtoSummary.detected_steps) ? howtoSummary.detected_steps : [];
+  const titleSignal = howtoSummary.title_signal === true;
+  const proceduralSupportCount = Number(howtoSummary.procedural_support_count || 0);
+  const contentType = typeof howtoSummary.content_type === 'string'
+    ? howtoSummary.content_type
+    : normalizeIntentContentType(runMetadata?.content_type);
+  const blockedByType = howtoSummary.blocked_by_type === true;
   return {
-    needed: stepHeadingCount >= 2 || listCount >= 2,
+    needed: !blockedByType && (
+      titleSignal
+        ? (detectedSteps.length >= 2 || stepHeadingCount >= 1 || listCount >= 3)
+        : (stepHeadingCount >= 2 || (detectedSteps.length >= 3 && (listCount >= 3 || proceduralSupportCount >= 1)))
+    ),
     step_heading_count: stepHeadingCount,
-    list_item_count: listCount
+    list_item_count: listCount,
+    procedural_support_count: proceduralSupportCount,
+    title_signal: titleSignal,
+    content_type: contentType || '',
+    blocked_by_type: blockedByType,
+    detected_steps: detectedSteps
   };
 }
 
@@ -2431,17 +3938,26 @@ function getFaqQuestionCount(mainEntity) {
   }).length;
 }
 
-function evaluateFaqSchemaRequirement(blockMap, nodes, jsonldEntries) {
-  const detection = detectFaqNeed(blockMap, nodes);
-  const detectedPairs = extractFaqPairsFromSections(blockMap, 8);
+function evaluateFaqSchemaRequirement(blockMap, nodes, jsonldEntries, runMetadata = {}, title = '', structureInventory = null) {
+  const detection = detectFaqNeed(blockMap, nodes, runMetadata, title, structureInventory);
+  const detectedPairs = detection.detected_pairs || extractFaqPairsFromSections(blockMap, 8, nodes, runMetadata, title);
   if (!detection.needed) {
     return {
       verdict: 'pass',
       explanation: 'No FAQ-style content detected; FAQ schema requirement not triggered',
       details: {
+        question_sections_detected: detection.question_section_count || 0,
         faq_pairs_detected: detection.count,
+        faq_pairs_compact: Array.isArray(detection.compact_pairs) ? detection.compact_pairs.length : 0,
         detection_source: detection.source,
-        detected_pairs: detectedPairs
+        faq_candidate_blocked_by_type: detection.blocked_by_type === true,
+        faq_title_signal: detection.title_signal === true,
+        faq_section_signal: detection.section_signal === true,
+        content_type: detection.content_type || '',
+        detected_pairs: detectedPairs,
+        score_neutral: true,
+        score_neutral_reason: 'faq_intent_not_detected',
+        scope_triggered: false
       }
     };
   }
@@ -2451,10 +3967,16 @@ function evaluateFaqSchemaRequirement(blockMap, nodes, jsonldEntries) {
       verdict: 'fail',
       explanation: 'FAQ-style content detected but no FAQPage schema found',
       details: {
+        question_sections_detected: detection.question_section_count || 0,
         faq_pairs_detected: detection.count,
+        faq_pairs_compact: Array.isArray(detection.compact_pairs) ? detection.compact_pairs.length : 0,
         faq_schema_found: 0,
         detection_source: detection.source,
-        detected_pairs: detectedPairs
+        faq_title_signal: detection.title_signal === true,
+        faq_section_signal: detection.section_signal === true,
+        content_type: detection.content_type || '',
+        detected_pairs: detectedPairs,
+        scope_triggered: true
       }
     };
   }
@@ -2474,12 +3996,18 @@ function evaluateFaqSchemaRequirement(blockMap, nodes, jsonldEntries) {
       verdict === 'partial' ? 'Some FAQPage schemas are missing required question-answer pairs' :
         'FAQPage schema is missing required question-answer pairs',
     details: {
+      question_sections_detected: detection.question_section_count || 0,
       faq_pairs_detected: detection.count,
+      faq_pairs_compact: Array.isArray(detection.compact_pairs) ? detection.compact_pairs.length : 0,
       faq_schema_found: faqSchemas.length,
       faq_schema_complete: completeCount,
       faq_questions_detected: questionCount,
       detection_source: detection.source,
-      detected_pairs: detectedPairs
+      faq_title_signal: detection.title_signal === true,
+      faq_section_signal: detection.section_signal === true,
+      content_type: detection.content_type || '',
+      detected_pairs: detectedPairs,
+      scope_triggered: true
     }
   };
 }
@@ -2498,9 +4026,10 @@ function getHowToStepCount(schema) {
   return 0;
 }
 
-function evaluateHowtoSchemaRequirement(blockMap, nodes, jsonldEntries) {
-  const detection = detectHowtoNeed(blockMap, nodes);
-  const detectedSteps = extractHowtoStepsFromBlocks(blockMap, 12);
+function evaluateHowtoSchemaRequirement(blockMap, nodes, jsonldEntries, runMetadata = {}, title = '', contentHtml = '', structureInventory = null) {
+  const detection = detectHowtoNeed(blockMap, nodes, runMetadata, title, contentHtml, structureInventory);
+  const detectedSteps = detection.detected_steps || extractHowtoStepsFromBlocks(blockMap, contentHtml, 12);
+  const contextNodeRef = resolveHowtoContextNodeRef(detectedSteps);
   if (!detection.needed) {
     return {
       verdict: 'pass',
@@ -2508,7 +4037,15 @@ function evaluateHowtoSchemaRequirement(blockMap, nodes, jsonldEntries) {
       details: {
         step_heading_count: detection.step_heading_count,
         list_item_count: detection.list_item_count,
-        detected_steps: detectedSteps
+        procedural_support_count: detection.procedural_support_count,
+        title_signal: detection.title_signal === true,
+        content_type: detection.content_type || '',
+        howto_candidate_blocked_by_type: detection.blocked_by_type === true,
+        detected_steps: detectedSteps,
+        context_node_ref: contextNodeRef,
+        score_neutral: true,
+        score_neutral_reason: 'howto_intent_not_detected',
+        scope_triggered: false
       }
     };
   }
@@ -2520,8 +4057,13 @@ function evaluateHowtoSchemaRequirement(blockMap, nodes, jsonldEntries) {
       details: {
         step_heading_count: detection.step_heading_count,
         list_item_count: detection.list_item_count,
+        procedural_support_count: detection.procedural_support_count,
+        title_signal: detection.title_signal === true,
+        content_type: detection.content_type || '',
         howto_schema_found: 0,
-        detected_steps: detectedSteps
+        detected_steps: detectedSteps,
+        context_node_ref: contextNodeRef,
+        scope_triggered: true
       }
     };
   }
@@ -2544,15 +4086,231 @@ function evaluateHowtoSchemaRequirement(blockMap, nodes, jsonldEntries) {
     details: {
       step_heading_count: detection.step_heading_count,
       list_item_count: detection.list_item_count,
+      procedural_support_count: detection.procedural_support_count,
+      title_signal: detection.title_signal === true,
+      content_type: detection.content_type || '',
       howto_schema_found: howtoSchemas.length,
       howto_schema_complete: completeCount,
       howto_steps_detected: stepCount,
-      detected_steps: detectedSteps
+      detected_steps: detectedSteps,
+      context_node_ref: contextNodeRef,
+      scope_triggered: true
     }
   };
 }
 
+function cloneCheckDetails(details) {
+  if (!details || typeof details !== 'object') {
+    return {};
+  }
+  return JSON.parse(JSON.stringify(details));
+}
+
+function resolveSchemaBridgeScopeTriggered(sourceCheck) {
+  const details = sourceCheck?.details && typeof sourceCheck.details === 'object'
+    ? sourceCheck.details
+    : {};
+  if (typeof details.scope_triggered === 'boolean') {
+    return details.scope_triggered;
+  }
+  if (details.score_neutral === true || sourceCheck?.score_neutral === true) {
+    return false;
+  }
+  const verdict = String(sourceCheck?.verdict || '').trim().toLowerCase();
+  return verdict === 'pass' || verdict === 'partial' || verdict === 'fail';
+}
+
+function buildFaqJsonldGenerationSuggestionCheck(sourceCheck) {
+  const details = cloneCheckDetails(sourceCheck?.details);
+  const scopeTriggered = resolveSchemaBridgeScopeTriggered(sourceCheck);
+  const sourceVerdict = String(sourceCheck?.verdict || 'pass').trim().toLowerCase() || 'pass';
+  const verdict = scopeTriggered ? sourceVerdict : 'pass';
+  const explanation = !scopeTriggered
+    ? 'FAQ JSON-LD is not needed because this article is not a strong FAQ candidate.'
+    : (sourceVerdict === 'pass'
+      ? 'FAQ-ready question-answer pairs are supported by complete FAQ schema.'
+      : sourceVerdict === 'partial'
+        ? 'FAQ-ready question-answer pairs are present, but the existing FAQ schema is incomplete.'
+        : 'FAQ-ready question-answer pairs are present, but FAQ schema is missing.');
+  return {
+    verdict,
+    confidence: 1.0,
+    explanation,
+    provenance: 'deterministic',
+    highlights: [],
+    details: {
+      ...details,
+      scope_triggered: scopeTriggered,
+      bridge_source_check_id: 'faq_jsonld_presence_and_completeness'
+    }
+  };
+}
+
+function buildHowtoSchemaPresenceBridgeCheck(sourceCheck) {
+  const details = cloneCheckDetails(sourceCheck?.details);
+  const scopeTriggered = resolveSchemaBridgeScopeTriggered(sourceCheck);
+  const sourceVerdict = String(sourceCheck?.verdict || 'pass').trim().toLowerCase() || 'pass';
+  const verdict = scopeTriggered ? sourceVerdict : 'pass';
+  const explanation = !scopeTriggered
+    ? 'HowTo schema is not needed because this article is not a clear step-by-step candidate.'
+    : (sourceVerdict === 'pass'
+      ? 'Visible step-by-step content is supported by complete HowTo schema.'
+      : sourceVerdict === 'partial'
+        ? 'Visible step-by-step content is present, but the existing HowTo schema is incomplete.'
+        : 'Visible step-by-step content is present, but HowTo schema is missing.');
+  return {
+    verdict,
+    confidence: 1.0,
+    explanation,
+    provenance: 'deterministic',
+    highlights: [],
+    details: {
+      ...details,
+      scope_triggered: scopeTriggered,
+      bridge_source_check_id: 'howto_jsonld_presence_and_completeness'
+    }
+  };
+}
+
+function evaluateCanonicalClarity(canonicalUrl, runMetadata = {}, manifest = {}) {
+  const rawCanonical = typeof canonicalUrl === 'string' ? canonicalUrl.trim() : '';
+  if (!rawCanonical) {
+    return {
+      verdict: 'partial',
+      explanation: 'No canonical URL was detected for this page.',
+      details: {
+        canonical_url: '',
+        canonical_present: false
+      }
+    };
+  }
+
+  let parsedCanonical = null;
+  try {
+    parsedCanonical = new URL(rawCanonical);
+  } catch (error) {
+    return {
+      verdict: rawCanonical.startsWith('/') ? 'partial' : 'fail',
+      explanation: rawCanonical.startsWith('/')
+        ? 'Canonical URL is present but not absolute.'
+        : 'Canonical URL is malformed and cannot be trusted.',
+      details: {
+        canonical_url: rawCanonical,
+        canonical_present: true,
+        canonical_absolute: false
+      }
+    };
+  }
+
+  const expectedHost = normalizeHostCandidate(runMetadata?.site_url)
+    || normalizeHostCandidate(manifest?.site_url)
+    || normalizeHostCandidate(runMetadata?.site_id);
+  const canonicalHost = parsedCanonical.hostname.replace(/^www\./i, '').toLowerCase();
+  if (expectedHost && canonicalHost && canonicalHost !== expectedHost) {
+    return {
+      verdict: 'partial',
+      explanation: 'Canonical URL points to a different host than the analyzed page.',
+      details: {
+        canonical_url: rawCanonical,
+        canonical_present: true,
+        canonical_absolute: true,
+        expected_host: expectedHost,
+        canonical_host: canonicalHost
+      }
+    };
+  }
+
+  return {
+    verdict: 'pass',
+    explanation: 'Canonical URL clearly points to the preferred page.',
+    details: {
+      canonical_url: rawCanonical,
+      canonical_present: true,
+      canonical_absolute: true,
+      expected_host: expectedHost || null,
+      canonical_host: canonicalHost || null
+    }
+  };
+}
+
+function evaluateAiCrawlerAccessibility(contentHtml) {
+  const directives = getRobotsDirectives(contentHtml);
+  const restrictive = directives.filter((directive) => (
+    directive === 'noindex'
+    || directive === 'none'
+    || directive === 'nosnippet'
+    || /^max-snippet\s*:\s*0$/i.test(directive)
+  ));
+  const permissive = directives.filter((directive) => (
+    directive === 'index'
+    || directive === 'all'
+    || /^max-snippet\s*:\s*[1-9]\d*$/i.test(directive)
+  ));
+  if (hasDataNoSnippet(contentHtml)) {
+    restrictive.push('data-nosnippet');
+  }
+  if (restrictive.length === 0) {
+    return {
+      verdict: 'pass',
+      explanation: 'No crawler directives block indexing or snippet reuse.',
+      details: {
+        directives,
+        restrictive_directives: [],
+        permissive_directives: permissive,
+        data_nosnippet: false
+      }
+    };
+  }
+  const uniqueRestrictive = Array.from(new Set(restrictive));
+  const hasMixedSignals = permissive.length > 0;
+  return {
+    verdict: hasMixedSignals ? 'partial' : 'fail',
+    explanation: hasMixedSignals
+      ? 'Crawler directives include both permissive and restrictive instructions.'
+      : 'Crawler directives restrict indexing or snippet extraction needed for answer-engine reuse.',
+    details: {
+      directives,
+      restrictive_directives: uniqueRestrictive,
+      permissive_directives: Array.from(new Set(permissive)),
+      data_nosnippet: uniqueRestrictive.includes('data-nosnippet')
+    }
+  };
+}
+
+const FRESHNESS_SENSITIVE_CONTENT_TYPES = new Set(['news', 'newsarticle']);
+const FRESHNESS_EXPLICIT_RECENCY_PATTERNS = [
+  /\b(?:today|latest|recent|recently|currently|as of|this year|this month|forecast|market update|breaking)\b/i,
+  /\b(?:updated|newly updated|last updated)\b/i
+];
+
+function isFreshnessSensitiveContent(contentHtml, runMetadata = {}, blockMap = []) {
+  const contentType = typeof runMetadata?.content_type === 'string' ? runMetadata.content_type.trim().toLowerCase() : '';
+  if (FRESHNESS_SENSITIVE_CONTENT_TYPES.has(contentType)) {
+    return true;
+  }
+  const sampledText = [
+    typeof runMetadata?.title === 'string' ? runMetadata.title : '',
+    Array.isArray(blockMap) ? blockMap.slice(0, 6).map((block) => getBlockText(block)).join(' ') : '',
+    typeof contentHtml === 'string' ? contentHtml.replace(/<[^>]+>/g, ' ') : ''
+  ].join(' ');
+  return FRESHNESS_EXPLICIT_RECENCY_PATTERNS.some((pattern) => pattern.test(sampledText));
+}
+
 function evaluateContentFreshness(contentHtml, runMetadata, blockMap = []) {
+  const freshnessSensitive = isFreshnessSensitiveContent(contentHtml, runMetadata, blockMap);
+  if (!freshnessSensitive) {
+    return {
+      verdict: 'pass',
+      explanation: 'Freshness is not a material signal for this content.',
+      details: {
+        date_found: null,
+        score_neutral: true,
+        score_neutral_reason: 'freshness_not_material',
+        scope_triggered: false,
+        freshness_sensitive: false
+      }
+    };
+  }
   const candidateDates = [];
   const metadataDate = runMetadata?.post_modified || runMetadata?.post_date || runMetadata?.published_at || runMetadata?.updated_at;
   if (metadataDate) {
@@ -2569,10 +4327,14 @@ function evaluateContentFreshness(contentHtml, runMetadata, blockMap = []) {
   htmlDates.forEach(date => candidateDates.push(date));
   if (candidateDates.length === 0) {
     return {
-      verdict: 'pass',
-      explanation: 'No publish date detected; freshness check not applicable',
+      verdict: 'partial',
+      explanation: 'No visible update date was found for freshness-sensitive content.',
       details: {
-        date_found: null
+        date_found: null,
+        score_neutral: false,
+        score_neutral_reason: null,
+        scope_triggered: true,
+        freshness_sensitive: true
       }
     };
   }
@@ -2590,7 +4352,8 @@ function evaluateContentFreshness(contentHtml, runMetadata, blockMap = []) {
     details: {
       date_found: latestDate.date.toISOString(),
       days_since_update: diffDays,
-      date_source: latestDate.source || null
+      date_source: latestDate.source || null,
+      freshness_sensitive: true
     }
   };
 }
@@ -2662,7 +4425,10 @@ function evaluateInternalLinks(manifest, options, blockMap = [], contentHtml = '
       explanation: 'No internal links detected',
       details: {
         internal_link_count: 0,
-        broken_links: []
+        broken_links: [],
+        score_neutral: true,
+        score_neutral_reason: 'internal_links_absent',
+        scope_triggered: false
       }
     };
   }

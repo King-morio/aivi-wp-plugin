@@ -1,6 +1,7 @@
 param(
     [string]$OutputDir = "dist",
-    [string]$PackageName = "AiVI-WP-Plugin",
+    [string]$PackageName = "ai-visibility-inspector",
+    [string]$PluginFolderName = "ai-visibility-inspector",
     [switch]$ListOnly
 )
 
@@ -9,14 +10,16 @@ $ErrorActionPreference = "Stop"
 $pluginRoot = Split-Path -Parent $PSScriptRoot
 $outputDirPath = Join-Path $pluginRoot $OutputDir
 $stageRoot = Join-Path $outputDirPath "_stage"
-$stagePluginRoot = Join-Path $stageRoot $PackageName
+$stagePluginRoot = Join-Path $stageRoot $PluginFolderName
 $zipPath = Join-Path $outputDirPath ($PackageName + ".zip")
 
 # Runtime allowlist. Release zips should include only files WordPress needs.
 $allowlist = @(
     "ai-visibility-inspector.php",
     "LICENSE",
-    "readme.md",
+    "readme.txt",
+    "CHANGELOG.md",
+    "languages",
     "assets",
     "includes"
 )
@@ -34,7 +37,10 @@ function Copy-AllowlistedItem {
     $destinationPath = Join-Path $stagePluginRoot $RelativePath
     if ((Get-Item $sourcePath) -is [System.IO.DirectoryInfo]) {
         New-Item -ItemType Directory -Force -Path $destinationPath | Out-Null
-        Copy-Item -Path (Join-Path $sourcePath "*") -Destination $destinationPath -Recurse -Force
+        Get-ChildItem -Path $sourcePath -Recurse -File | ForEach-Object {
+            $childRelativePath = $_.FullName.Substring($sourcePath.Length + 1)
+            Copy-AllowlistedItem -RelativePath (Join-Path $RelativePath $childRelativePath)
+        }
         return
     }
 
@@ -42,11 +48,58 @@ function Copy-AllowlistedItem {
     if ($destinationDir) {
         New-Item -ItemType Directory -Force -Path $destinationDir | Out-Null
     }
-    Copy-Item -Path $sourcePath -Destination $destinationPath -Force
+
+    $sourceStream = $null
+    $destinationStream = $null
+    try {
+        $sourceStream = [System.IO.File]::Open($sourcePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        $destinationStream = [System.IO.File]::Open($destinationPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+        $sourceStream.CopyTo($destinationStream)
+    } finally {
+        if ($destinationStream) {
+            $destinationStream.Dispose()
+        }
+        if ($sourceStream) {
+            $sourceStream.Dispose()
+        }
+    }
+}
+
+function New-NormalizedZipArchive {
+    param(
+        [string]$SourceRoot,
+        [string]$DestinationZip
+    )
+
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+    $archive = [System.IO.Compression.ZipFile]::Open($DestinationZip, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        $sourceRootPath = (Resolve-Path $SourceRoot).Path
+        $sourceRootLength = $sourceRootPath.Length
+
+        Get-ChildItem -Path $SourceRoot -Recurse -Directory | Sort-Object FullName | ForEach-Object {
+            $directoryPath = $_.FullName
+            $relativePath = ($directoryPath.Substring($sourceRootLength + 1) -replace '\\', '/').Trim('/')
+            if (-not [string]::IsNullOrWhiteSpace($relativePath)) {
+                [void]$archive.CreateEntry($relativePath + '/')
+            }
+        }
+
+        Get-ChildItem -Path $SourceRoot -Recurse -File | ForEach-Object {
+            $fullPath = $_.FullName
+            $relativePath = $fullPath.Substring($sourceRootLength + 1) -replace '\\', '/'
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $fullPath, $relativePath, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+        }
+    } finally {
+        $archive.Dispose()
+    }
 }
 
 if ($ListOnly) {
     Write-Output "PLUGIN_ROOT=$pluginRoot"
+    Write-Output "PLUGIN_FOLDER_NAME=$PluginFolderName"
     Write-Output "ALLOWLIST_COUNT=$($allowlist.Count)"
     $allowlist | ForEach-Object { Write-Output ("KEEP:" + $_) }
     exit 0
@@ -67,7 +120,7 @@ foreach ($item in $allowlist) {
     Copy-AllowlistedItem -RelativePath $item
 }
 
-Compress-Archive -Path (Join-Path $stageRoot "*") -DestinationPath $zipPath -CompressionLevel Optimal -Force
+New-NormalizedZipArchive -SourceRoot $stageRoot -DestinationZip $zipPath
 
 $zipSizeMb = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
 Write-Output ("PACKAGED=" + $zipPath)

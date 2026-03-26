@@ -28,16 +28,37 @@ const extractAccountId = (event = {}) => {
     return match ? sanitizeString(match[1]) : '';
 };
 
+const listConnectedSites = (state = {}) => {
+    if (Array.isArray(state.sites) && state.sites.length > 0) {
+        return state.sites;
+    }
+    const legacySiteId = sanitizeString(state.site?.site_id);
+    const legacyDomain = sanitizeString(state.site?.connected_domain);
+    if (!legacySiteId && !legacyDomain) {
+        return [];
+    }
+    return [{
+        site_id: legacySiteId,
+        blog_id: normalizeInt(state.site?.blog_id),
+        connected_domain: legacyDomain,
+        home_url: sanitizeString(state.site?.home_url),
+        binding_status: sanitizeString(state.site_binding_status || 'connected'),
+        plugin_version: sanitizeString(state.site?.plugin_version),
+        connected: state.connected === true
+    }];
+};
+
 const buildAccountListRow = (state = {}) => ({
     account_id: sanitizeString(state.account_id),
     account_label: sanitizeString(state.account_label || state.account_id || 'Unknown account'),
+    contact_email: sanitizeString(state.contact_email),
     plan_code: sanitizeString(state.plan_code),
     plan_name: sanitizeString(state.plan_name || state.plan_code || 'No plan'),
     subscription_status: sanitizeString(state.subscription_status || 'unknown'),
     trial_status: sanitizeString(state.trial_status || 'none'),
     credits_remaining: normalizeInt(state.credits?.total_remaining),
-    site_count: sanitizeString(state.site?.site_id) ? 1 : 0,
-    connected_domain: sanitizeString(state.site?.connected_domain),
+    site_count: listConnectedSites(state).length,
+    connected_domain: sanitizeString(state.site?.connected_domain || listConnectedSites(state)[0]?.connected_domain),
     updated_at: sanitizeString(state.updated_at)
 });
 
@@ -110,6 +131,20 @@ const sanitizeAuditEvent = (record = {}) => ({
     updated_at: sanitizeString(record.updated_at)
 });
 
+const sanitizeFinancialAuditAdjustment = (record = {}, labelByAccountId = new Map()) => ({
+    event_id: sanitizeString(record.event_id),
+    account_id: sanitizeString(record.account_id),
+    account_label: labelByAccountId.get(sanitizeString(record.account_id))
+        || sanitizeString(record.account_id || 'Unknown account'),
+    actor_email: sanitizeString(record.actor_email),
+    actor_role: sanitizeString(record.actor_role),
+    reason: sanitizeString(record.reason),
+    status: sanitizeString(record.status),
+    credits_delta: normalizeInt(record.metadata?.request_payload?.credits_delta),
+    created_at: sanitizeString(record.created_at),
+    updated_at: sanitizeString(record.updated_at)
+});
+
 const buildAccountDetail = ({
     state,
     subscriptions,
@@ -147,14 +182,15 @@ const buildAccountDetail = ({
         last_analysis_at: sanitizeString(state.usage?.last_analysis_at),
         last_run_status: sanitizeString(state.usage?.last_run_status)
     },
-    sites: sanitizeString(state.site?.site_id) ? [{
-        site_id: sanitizeString(state.site.site_id),
-        blog_id: normalizeInt(state.site.blog_id),
-        connected_domain: sanitizeString(state.site.connected_domain),
-        binding_status: sanitizeString(state.site_binding_status),
-        plugin_version: sanitizeString(state.site.plugin_version),
-        connected: state.connected === true
-    }] : [],
+    sites: listConnectedSites(state).map((site) => ({
+        site_id: sanitizeString(site.site_id),
+        blog_id: normalizeInt(site.blog_id),
+        connected_domain: sanitizeString(site.connected_domain),
+        binding_status: sanitizeString(site.binding_status || state.site_binding_status || 'connected'),
+        plugin_version: sanitizeString(site.plugin_version),
+        connected: site.connected === true || state.connected === true,
+        last_analysis_at: sanitizeString(state.usage?.last_analysis_at)
+    })),
     billing_health: {
         recent_checkout_intents: checkoutIntents.map(sanitizeCheckoutIntent),
         recent_subscriptions: subscriptions.map(sanitizeSubscriptionRecord),
@@ -181,21 +217,67 @@ const buildAccountDetail = ({
 const superAdminReadHandler = async (event = {}) => {
     try {
         const actor = assertSuperAdminAccess(event, process.env);
-        assertPermission(actor, 'accounts.read');
         const route = sanitizeString(event.aiviResolvedRoute || event.routeKey || `${event.httpMethod || event?.requestContext?.http?.method} ${event.path || event?.requestContext?.http?.path}`);
         const query = event.queryStringParameters || {};
         const limit = Math.max(1, Math.min(100, normalizeInt(query.limit, 25) || 25));
         const store = createSuperAdminStore();
 
+        if (route === 'GET /aivi/v1/admin/financials/overview') {
+            assertPermission(actor, 'billing.read');
+            const [item, accountStates] = await Promise.all([
+                store.getFinancialOverview({
+                    recentEventsLimit: Math.max(1, Math.min(25, normalizeInt(query.recent_limit, 8) || 8))
+                }),
+                store.listAccountStates({ limit: 100 })
+            ]);
+            const labelByAccountId = new Map(
+                (accountStates || []).map((state) => [
+                    sanitizeString(state.account_id),
+                    sanitizeString(state.account_label || state.account_id || 'Unknown account')
+                ])
+            );
+            let recentCreditAdjustments = [];
+            try {
+                const auditStore = createSuperAdminAuditStore();
+                const auditEvents = await auditStore.listRecentAuditEvents({
+                    limit: Math.max(1, Math.min(25, normalizeInt(query.adjustment_limit, 8) || 8)),
+                    action: 'manual_credit_adjustment'
+                });
+                recentCreditAdjustments = auditEvents.map((record) => sanitizeFinancialAuditAdjustment(record, labelByAccountId));
+            } catch (error) {
+                recentCreditAdjustments = [];
+            }
+
+            item.operator_views = {
+                ...(item.operator_views || {}),
+                recent_credit_adjustments: recentCreditAdjustments
+            };
+
+            log('INFO', 'Returned super-admin financial overview', {
+                actor_role: actor.actorRole,
+                paid_accounts: normalizeInt(item?.snapshot?.paid_accounts),
+                recent_event_count: normalizeInt(item?.observed_checkout_revenue?.counted_events)
+            });
+
+            return jsonResponse(200, {
+                ok: true,
+                item
+            });
+        }
+
+        assertPermission(actor, 'accounts.read');
+
         if (route === 'GET /aivi/v1/admin/accounts') {
-            const items = await store.listAccountStates({
+            const result = await store.listAccountStatePage({
                 limit,
+                cursor: query.cursor,
                 query: query.q || query.query,
                 site_id: query.site_id,
                 plan_code: query.plan_code,
                 subscription_status: query.subscription_status
             });
 
+            const items = Array.isArray(result?.items) ? result.items : [];
             const rows = items.map(buildAccountListRow);
             log('INFO', 'Returned super-admin account list', {
                 actor_role: actor.actorRole,
@@ -206,9 +288,12 @@ const superAdminReadHandler = async (event = {}) => {
                 ok: true,
                 items: rows,
                 page: {
-                    count: rows.length,
-                    limit,
-                    next_cursor: null
+                    count: normalizeInt(result?.page?.count, rows.length),
+                    limit: normalizeInt(result?.page?.limit, limit) || limit,
+                    total_count: normalizeInt(result?.page?.total_count, rows.length),
+                    page_start: normalizeInt(result?.page?.page_start, rows.length > 0 ? 1 : 0),
+                    page_end: normalizeInt(result?.page?.page_end, rows.length),
+                    next_cursor: sanitizeString(result?.page?.next_cursor)
                 }
             });
         }

@@ -8,7 +8,7 @@ Validate PayPal plan checkout, webhook reconciliation, credit grants, and entitl
 
 ## Rollout Gate
 
-Keep `AIVI_BILLING_READY` set to `false` until all checks in this runbook pass.
+Customer builds now ship with hosted billing enabled by default. For sandbox/staging validation, explicitly override `AIVI_BILLING_READY` to `false` until all checks in this runbook pass.
 
 Hosted billing should only be enabled after:
 - PayPal environment variables are set
@@ -29,6 +29,7 @@ Set these backend environment variables:
 - `PAYPAL_CANCEL_URL`
 - `PAYPAL_PLAN_ID_STARTER`
 - `PAYPAL_PLAN_ID_GROWTH`
+- `PAYPAL_PLAN_ID_GROWTH_INTRO`
 - `PAYPAL_PLAN_ID_PRO`
 
 ## Required Tables
@@ -45,7 +46,7 @@ Accepted fallback alias:
 
 ## Preflight Checklist
 
-1. Confirm WordPress still shows billing controls as disabled while `AIVI_BILLING_READY=false`.
+1. Confirm WordPress shows billing controls as disabled while the staging override `AIVI_BILLING_READY=false` is active.
 2. Confirm browser payload does not expose:
    - PayPal secret
    - webhook ID
@@ -60,6 +61,7 @@ Accepted fallback alias:
 
 1. Start from a trial-linked account with no active subscription.
 2. Open hosted checkout for `starter` or `growth`.
+   - for `growth`, confirm the environment includes `PAYPAL_PLAN_ID_GROWTH_INTRO`
 3. Complete sandbox PayPal approval.
 4. Wait for verified webhook processing.
 5. Confirm:
@@ -127,6 +129,6 @@ Do not enable hosted billing if any of the following are true:
 - analysis admission blocks legitimate entitled users
 
 If any fail:
-- keep `AIVI_BILLING_READY=false`
+- keep the staging override `AIVI_BILLING_READY=false`
 - fix the failing path
 - rerun sandbox validation before retrying rollout

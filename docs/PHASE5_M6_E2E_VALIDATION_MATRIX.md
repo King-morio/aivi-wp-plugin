@@ -1,6 +1,6 @@
 # Phase 5 Milestone 6 End-to-End Validation Matrix
 
-Updated: 2026-03-07
+Updated: 2026-03-16
 
 ## Purpose
 
@@ -21,15 +21,24 @@ It is the bridge between:
 - CloudFront ACM certificate region for the admin console hostname:
   - `us-east-1`
 - WordPress staging has:
-  - `AIVI_BILLING_READY=true`
-- production still has:
-  - `AIVI_BILLING_READY=false`
+  - `AIVI_BILLING_READY=false` only when billing needs to be held off intentionally
+- customer/production builds otherwise use:
+  - the built-in production backend default
+  - hosted billing enabled by default
+
+## Recorded current truth
+
+- Growth introductory pricing has now been validated end to end in sandbox using the dedicated `PAYPAL_PLAN_ID_GROWTH_INTRO` path.
+- Keep Scenario 3 below in the matrix anyway as a regression gate if pricing logic or provider mapping changes again.
+- Staging super-admin validation is still not release-complete because MFA restoration and one fresh MFA-backed Hosted UI sign-in are still pending.
 
 ## Validation scenarios
 
 ### 1. Trial lifecycle
 
 - create/connect a trial-backed account
+- confirm free-trial balance starts at `5,000` included credits
+- confirm free-trial duration resolves to `7 days`
 - confirm trial state appears in:
   - WordPress dashboard
   - sidebar account status
@@ -40,6 +49,10 @@ It is the bridge between:
   - settlement written
   - credits reduced
   - post-run debit shown in sidebar
+- force or simulate an expired `trial_expires_at` timestamp
+- confirm:
+  - trial status resolves to ended
+  - analysis is blocked unless a paid subscription is active
 
 ### 2. First paid subscription activation
 
@@ -58,9 +71,10 @@ It is the bridge between:
 - confirm:
   - checkout intent stored
   - subscription record stored
-  - first-cycle plan activation succeeds
+  - first-cycle plan activation succeeds through the dedicated intro plan mapping
+  - checkout intent records the discounted first-cycle price
 - note:
-  - the pricing logic is primarily PayPal-side; account entitlements must still resolve correctly after webhook reconciliation
+  - the pricing logic is primarily PayPal-side through `PAYPAL_PLAN_ID_GROWTH_INTRO`; account entitlements must still resolve correctly after webhook reconciliation
 
 ### 4. Top-up purchase
 
@@ -71,7 +85,7 @@ It is the bridge between:
   - does not double-grant on repeated webhook delivery
 - confirm new balance is visible in:
   - WordPress dashboard
-  - sidebar post-run balance card
+  - sidebar account state
   - super-admin account detail
 
 ### 5. Successful run settlement

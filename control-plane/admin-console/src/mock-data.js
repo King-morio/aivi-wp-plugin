@@ -3,6 +3,7 @@
         {
             account_id: 'acct_1001',
             account_label: 'Acme Media',
+            contact_email: 'ops@acmemedia.com',
             plan_code: 'growth',
             plan_name: 'Growth',
             subscription_status: 'active',
@@ -15,11 +16,12 @@
         {
             account_id: 'acct_1002',
             account_label: 'Northstar Commerce',
+            contact_email: 'founder@northstar.shop',
             plan_code: 'starter',
             plan_name: 'Starter',
             subscription_status: 'trial',
             trial_status: 'active',
-            credits_remaining: 12900,
+            credits_remaining: 2900,
             site_count: 1,
             connected_domain: 'northstar.shop',
             updated_at: '2026-03-06T09:18:00.000Z'
@@ -27,6 +29,7 @@
         {
             account_id: 'acct_1003',
             account_label: 'Helix Health',
+            contact_email: 'billing@helixhealth.io',
             plan_code: 'pro',
             plan_name: 'Pro',
             subscription_status: 'suspended',
@@ -42,6 +45,7 @@
         acct_1001: {
             account_id: 'acct_1001',
             account_label: 'Acme Media',
+            contact_email: 'ops@acmemedia.com',
             plan: {
                 plan_code: 'growth',
                 plan_name: 'Growth',
@@ -53,17 +57,17 @@
                 cancel_at_period_end: false
             },
             credits: {
-                included_remaining: 125000,
+                included_remaining: 17000,
                 topup_remaining: 17600,
-                total_remaining: 142600,
+                total_remaining: 34600,
                 reserved_credits: 800,
                 last_run_debit: 1184,
-                monthly_included: 150000,
-                monthly_used: 25000
+                monthly_included: 100000,
+                monthly_used: 83000
             },
             usage: {
-                analyses_this_month: 28,
-                credits_used_this_month: 25000,
+                analyses_this_month: 94,
+                credits_used_this_month: 83000,
                 last_analysis_at: '2026-03-06T11:42:00.000Z',
                 last_run_status: 'success_partial'
             },
@@ -166,7 +170,7 @@
                         status: 'settled',
                         reason_code: 'monthly_grant',
                         amounts: {
-                            granted_credits: 150000,
+                            granted_credits: 100000,
                             reserved_credits: 0,
                             settled_credits: 0,
                             refunded_credits: 0
@@ -200,6 +204,7 @@
         acct_1002: {
             account_id: 'acct_1002',
             account_label: 'Northstar Commerce',
+            contact_email: 'founder@northstar.shop',
             plan: {
                 plan_code: 'starter',
                 plan_name: 'Starter',
@@ -211,12 +216,12 @@
                 cancel_at_period_end: false
             },
             credits: {
-                included_remaining: 12900,
+                included_remaining: 2900,
                 topup_remaining: 0,
-                total_remaining: 12900,
+                total_remaining: 2900,
                 reserved_credits: 0,
                 last_run_debit: 0,
-                monthly_included: 15000,
+                monthly_included: 5000,
                 monthly_used: 2100
             },
             usage: {
@@ -273,6 +278,7 @@
         acct_1003: {
             account_id: 'acct_1003',
             account_label: 'Helix Health',
+            contact_email: 'billing@helixhealth.io',
             plan: {
                 plan_code: 'pro',
                 plan_name: 'Pro',
@@ -284,12 +290,12 @@
                 cancel_at_period_end: false
             },
             credits: {
-                included_remaining: 430000,
+                included_remaining: 230000,
                 topup_remaining: 78000,
-                total_remaining: 508000,
+                total_remaining: 308000,
                 reserved_credits: 0,
                 last_run_debit: 0,
-                monthly_included: 450000,
+                monthly_included: 250000,
                 monthly_used: 20000
             },
             usage: {
@@ -340,7 +346,7 @@
                 ]
             },
             credit_ledger_summary: {
-                included_remaining: 430000,
+                included_remaining: 230000,
                 topup_remaining: 78000,
                 reserved_credits: 0,
                 last_run_debit: 0,
@@ -370,6 +376,165 @@
         }
     };
 
+    const mockFinancialOverview = {
+        financials_version: 'v1',
+        generated_at: '2026-03-16T18:00:00.000Z',
+        currency: 'USD',
+        snapshot: {
+            total_accounts: 3,
+            paid_accounts: 1,
+            active_trials: 1,
+            suspended_paid_accounts: 1
+        },
+        projected_recurring: {
+            mrr_usd: 22,
+            active_paid_accounts: 1
+        },
+        observed_checkout_revenue: {
+            last_7d_usd: 36,
+            last_30d_usd: 36,
+            last_365d_usd: 36,
+            counted_events: 2
+        },
+        plan_mix: [
+            {
+                plan_code: 'growth',
+                plan_label: 'Growth',
+                active_accounts: 1,
+                projected_mrr_usd: 22,
+                share_of_paid_accounts: 100
+            }
+        ],
+        recent_monetized_events: [
+            {
+                event_kind: 'subscription_checkout',
+                account_id: 'acct_1001',
+                account_label: 'Acme Media',
+                summary: 'Growth subscription checkout',
+                amount_usd: 11,
+                observed_at: '2026-03-01T00:02:11.000Z'
+            },
+            {
+                event_kind: 'topup_purchase',
+                account_id: 'acct_1001',
+                account_label: 'Acme Media',
+                summary: 'Top-up 25k purchase',
+                amount_usd: 25,
+                observed_at: '2026-03-04T09:22:00.000Z'
+            }
+        ],
+        watchlist: {
+            suspended_paid_accounts: 1,
+            near_trial_expiry_accounts: 1,
+            low_credit_paid_accounts: 0,
+            high_usage_paid_accounts: 1,
+            payment_failure_accounts: 0,
+            items: [
+                {
+                    key: 'suspended_paid_accounts',
+                    label: 'Suspended paid accounts',
+                    count: 1,
+                    description: 'One paid account is paused for finance review and likely needs follow-up before the next billing cycle.'
+                },
+                {
+                    key: 'near_trial_expiry_accounts',
+                    label: 'Trials expiring soon',
+                    count: 1,
+                    description: 'One active free-trial account is close enough to expiry to deserve conversion follow-up.'
+                },
+                {
+                    key: 'payment_failure_accounts',
+                    label: 'Payment failures detected',
+                    count: 0,
+                    description: 'No failed recurring payment events are recorded in preview data right now.'
+                }
+            ]
+        },
+        operator_views: {
+            payment_failures: [],
+            recent_credit_adjustments: [
+                {
+                    event_id: 'audit_adj_preview_1',
+                    account_id: 'acct_1001',
+                    account_label: 'Acme Media',
+                    actor_email: 'finance@example.com',
+                    actor_role: 'finance_operator',
+                    reason: 'Courtesy launch credit top-up',
+                    status: 'completed',
+                    credits_delta: 5000,
+                    created_at: '2026-03-06T10:30:00.000Z',
+                    updated_at: '2026-03-06T10:35:00.000Z'
+                }
+            ],
+            watch_accounts: {
+                active_trials: [
+                    {
+                        account_id: 'acct_1002',
+                        account_label: 'Northstar Commerce',
+                        plan_code: 'starter',
+                        plan_label: 'Starter',
+                        subscription_status: 'trial',
+                        trial_status: 'active',
+                        credits_remaining: 2900,
+                        connected_domain: 'northstar.shop',
+                        updated_at: '2026-03-06T09:18:00.000Z',
+                        trial_expires_at: '2026-03-17T09:00:00.000Z'
+                    }
+                ],
+                suspended_paid: [
+                    {
+                        account_id: 'acct_1003',
+                        account_label: 'Helix Health',
+                        plan_code: 'pro',
+                        plan_label: 'Pro',
+                        subscription_status: 'suspended',
+                        trial_status: 'none',
+                        credits_remaining: 508000,
+                        connected_domain: 'helixhealth.io',
+                        updated_at: '2026-03-05T18:05:00.000Z'
+                    }
+                ],
+                near_trial_expiry: [
+                    {
+                        account_id: 'acct_1002',
+                        account_label: 'Northstar Commerce',
+                        plan_code: 'starter',
+                        plan_label: 'Starter',
+                        subscription_status: 'trial',
+                        trial_status: 'active',
+                        credits_remaining: 2900,
+                        connected_domain: 'northstar.shop',
+                        updated_at: '2026-03-06T09:18:00.000Z',
+                        trial_expires_at: '2026-03-17T09:00:00.000Z'
+                    }
+                ],
+                low_credit_paid: [],
+                high_usage_paid: [
+                    {
+                        account_id: 'acct_1001',
+                        account_label: 'Acme Media',
+                        plan_code: 'growth',
+                        plan_label: 'Growth',
+                        subscription_status: 'active',
+                        trial_status: 'none',
+                        credits_remaining: 34600,
+                        connected_domain: 'acmemedia.com',
+                        updated_at: '2026-03-06T11:42:00.000Z',
+                        monthly_included: 100000,
+                        credits_used_this_month: 83000,
+                        usage_ratio: 83.0
+                    }
+                ]
+            }
+        },
+        truth_boundary: {
+            projected_recurring_scope: 'Projected MRR is derived from currently active paid subscriptions priced against the plan catalog.',
+            observed_revenue_scope: 'Observed checkout revenue counts stored subscription checkouts and captured top-up purchases only.',
+            recurring_renewals_included: false,
+            plan_change_collections_included: false
+        }
+    };
+
     window.AIVI_ADMIN_MOCK = {
         auth: {
             provider: 'AWS Cognito',
@@ -382,6 +547,7 @@
             role: 'Super Admin',
             environment: 'Staging'
         },
+        financialOverview: mockFinancialOverview,
         accounts: mockAccounts,
         accountDetails: mockAccountDetails
     };

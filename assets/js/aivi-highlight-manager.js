@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AiVI Highlight Manager
  *
  * Central single-highlight manager implementing:
@@ -13,7 +13,7 @@
     'use strict';
 
     // ============================================
-    // SEMANTIC STYLE TOKENS (Verdict â†’ Style mapping)
+    // SEMANTIC STYLE TOKENS (Verdict -> Style mapping)
     // ============================================
     const HIGHLIGHT_STYLES = {
         'highlight-severity-critical': {
@@ -36,7 +36,7 @@
         }
     };
 
-    // Verdict to semantic style mapping
+    // Verdict -> Style mapping
     const VERDICT_STYLE_MAP = {
         'fail': 'highlight-severity-critical',
         'partial': 'highlight-severity-warning',
@@ -1158,7 +1158,7 @@
                 return {
                     success: false,
                     error: 'stale_run',
-                    message: 'Content changed â€” please re-run analysis'
+                    message: 'Content changed - please re-run analysis'
                 };
             }
 
@@ -1223,7 +1223,7 @@
                     return {
                         success: false,
                         error: 'cannot_anchor',
-                        message: 'Evidence could not be anchored - Open details'
+                        message: 'Evidence could not be anchored - open details'
                     };
                 }
             }
@@ -1259,7 +1259,7 @@
                 return {
                     success: false,
                     error: 'no_highlights',
-                    message: 'Cannot locate instance in current content â€” Open details'
+                    message: 'Cannot locate instance in current content - open details'
                 };
             }
 
@@ -1290,7 +1290,7 @@
                 return {
                     success: false,
                     error: 'results_stale',
-                    message: 'Content changed â€” please re-run analysis'
+                    message: 'Content changed - please re-run analysis'
                 };
             }
 
@@ -1315,7 +1315,7 @@
                 return {
                     success: false,
                     error: 'anchor_unresolved',
-                    message: 'Cannot locate instance in current content â€” Open details'
+                    message: 'Cannot locate instance in current content - open details'
                 };
             }
 
@@ -1352,7 +1352,7 @@
                 return {
                     success: false,
                     error: 'inline_unavailable',
-                    message: 'Cannot render inline evidence â€” Open details'
+                    message: 'Cannot render inline evidence - open details'
                 };
             }
 
@@ -1741,7 +1741,7 @@
                     transition: transform 0.1s;
                     flex-shrink: 0;
                     white-space: nowrap;
-                ">âœ¨ Fix with AI</button>
+                ">Fix with AI</button>
             `;
             tooltipElement.style.pointerEvents = 'auto';
             if (!tooltipElement.parentNode) {
@@ -1796,9 +1796,9 @@
                 const iconEl = tooltipElement.querySelector('.aivi-pill-icon');
                 const verdict = span.dataset ? span.dataset.aiviVerdict : 'partial';
                 if (iconEl) {
-                    if (verdict === 'fail') iconEl.textContent = 'âŒ';
-                    else if (verdict === 'pass') iconEl.textContent = 'âœ…';
-                    else iconEl.textContent = 'âš ï¸';
+                    if (verdict === 'fail') iconEl.textContent = '\u274C';
+                    else if (verdict === 'pass') iconEl.textContent = '\u2705';
+                    else iconEl.textContent = '\u26A0\uFE0F';
                 }
                 tooltipElement.style.display = 'flex';
                 this.positionTooltip(span, tooltipElement);
@@ -2237,3 +2237,4 @@
     window.AiviHighlightTelemetry = Telemetry;
 
 })(window);
+

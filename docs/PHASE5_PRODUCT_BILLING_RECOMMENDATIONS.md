@@ -196,9 +196,9 @@ These are product recommendations, not locked economics. Final included credits 
 Recommend:
 
 - price: `$0`
-- included credits: `15,000`
+- included credits: `5,000`
 - site limit: `1`
-- duration: `14 days or until credits are exhausted`, whichever comes first
+- duration: `7 days or until credits are exhausted`, whichever comes first
 - features: all current core user-facing features
 
 Reason:
@@ -497,7 +497,7 @@ Use PayPal in two modes:
 ### Specific recommendation
 
 - Starter, Growth, Pro = PayPal subscriptions
-- Growth first-month 50% off = PayPal discounted trial / introductory pricing
+- Growth first-month 50% off = PayPal discounted trial / introductory pricing via a dedicated Growth intro plan mapping
 - top-up credits = PayPal one-time order/capture flow
 
 ### PayPal environment scaffold
@@ -513,6 +513,7 @@ Recommended backend environment variable names:
 - `PAYPAL_CANCEL_URL`
 - `PAYPAL_PLAN_ID_STARTER`
 - `PAYPAL_PLAN_ID_GROWTH`
+- `PAYPAL_PLAN_ID_GROWTH_INTRO`
 - `PAYPAL_PLAN_ID_PRO`
 
 Recommended catalog codes:
@@ -635,7 +636,7 @@ Keep advanced operational configuration hidden behind:
 1. Super admin lives in the backend control plane, not in customer WordPress.
 2. Plans include monthly credits.
 3. Top-ups are one-time purchases and roll over.
-4. Free trial = `15,000` credits, 14 days, 1 site.
+4. Free trial = `5,000` credits, 7 days, 1 site.
 5. Starter/Growth/Pro are differentiated mainly by credits, site count, history, and admin controls.
 6. Credits are debited from actual model cost, then converted into large visible balances for UX.
 7. Preflight reservation stays silent unless the balance is insufficient.

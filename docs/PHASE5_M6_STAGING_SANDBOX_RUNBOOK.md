@@ -57,21 +57,24 @@ This still requires the exact registered domain/zone before AWS hosting can be f
 
 ## WordPress staging billing gate
 
-The plugin now keeps billing disabled by default through:
+Customer builds now ship with:
 
-- `AIVI_BILLING_READY=false`
+- a built-in production backend default
+- hosted billing enabled by default
 
-For staging validation only, enable billing by defining the constant before the plugin loads, for example in `wp-config.php`:
+For staging validation only, override billing before the plugin loads, for example in `wp-config.php`:
 
 ```php
-define( 'AIVI_BILLING_READY', true );
+define( 'AIVI_BILLING_READY', false );
 ```
 
-This is safer than editing plugin source for each environment.
+Use the same override pattern for local or staging backend hosts when needed:
 
-Production remains:
+```php
+define( 'AIVI_BACKEND_URL', 'https://your-staging-api.example.com' );
+```
 
-- `AIVI_BILLING_READY=false` until staging proof passes
+This keeps customer installs zero-config while preserving support/staging overrides.
 
 ## Admin console staging bundle
 

@@ -140,9 +140,10 @@ Harden the commercial AiVI product for staging and production rollout without we
   - `control-plane/admin-console/runtime-config.staging.example.js`
   - `control-plane/admin-console/package-admin-console.ps1`
 - updated admin-console README with staging bundle instructions
-- made WordPress billing readiness safely overrideable before plugin load while keeping the default locked off:
-  - `AIVI_BILLING_READY=false` remains the default
-  - staging can opt in via `wp-config.php`
+- made customer installs zero-config by shipping:
+  - a built-in production backend default
+  - hosted billing enabled by default
+- preserved staging/local overrides before plugin load via `wp-config.php`
 - did not bind a real AWS hostname yet; that still requires the final domain decision at live staging deploy time
 
 ## Step 5 - End-to-end entitlement and credit validation

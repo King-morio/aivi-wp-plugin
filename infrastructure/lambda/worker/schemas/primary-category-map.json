@@ -3,9 +3,9 @@
     "last_updated": "2026-02-23",
     "description": "Canonical Primary Category Mapping - Single Source of Truth for UI grouping. DO NOT use AEO/GEO for grouping.",
     "total_categories": 8,
-    "total_checks": 51,
+    "total_checks": 54,
     "rules": {
-        "grouping": "Use ONLY these 7 categories for sidebar presentation",
+        "grouping": "Use ONLY these 8 categories for sidebar presentation",
         "aeo_geo": "AEO/GEO are aggregate SCORES only, never grouping labels",
         "uniqueness": "Each check_id belongs to exactly ONE category",
         "order": "Display categories and checks in the order defined here"
@@ -14,10 +14,8 @@
         {
             "id": "intro_focus_factuality",
             "name": "Intro Focus & Factuality",
-            "display_order": 0,
+            "display_order": 1,
             "check_ids": [
-                "intro_focus_and_factuality.v1",
-                "intro_first_sentence_topic",
                 "intro_wordcount",
                 "intro_readability",
                 "intro_factual_entities",
@@ -27,9 +25,9 @@
         {
             "id": "answer_extractability",
             "name": "Answer Extractability",
-            "display_order": 1,
+            "display_order": 2,
             "check_ids": [
-                "direct_answer_first_120",
+                "immediate_answer_placement",
                 "answer_sentence_concise",
                 "question_answer_alignment",
                 "clear_answer_formatting",
@@ -39,12 +37,13 @@
         {
             "id": "structure_readability",
             "name": "Structure & Readability",
-            "display_order": 2,
+            "display_order": 3,
             "check_ids": [
                 "single_h1",
                 "logical_heading_hierarchy",
-                "orphan_headings",
+                "heading_topic_fulfillment",
                 "heading_fragmentation",
+                "heading_like_text_uses_heading_markup",
                 "appropriate_paragraph_length",
                 "lists_tables_presence",
                 "readability_adaptivity"
@@ -53,22 +52,25 @@
         {
             "id": "schema_structured_data",
             "name": "Schema & Structured Data",
-            "display_order": 3,
+            "display_order": 4,
             "check_ids": [
                 "valid_jsonld_schema",
+                "article_jsonld_presence_and_completeness",
                 "schema_matches_content",
+                "canonical_clarity",
                 "semantic_html_usage",
                 "supported_schema_types_validation",
                 "faq_jsonld_presence_and_completeness",
                 "howto_jsonld_presence_and_completeness",
                 "faq_jsonld_generation_suggestion",
-                "howto_schema_presence_and_completeness"
+                "howto_schema_presence_and_completeness",
+                "itemlist_jsonld_presence_and_completeness"
             ]
         },
         {
             "id": "freshness_temporal_validity",
             "name": "Freshness & Temporal Validity",
-            "display_order": 4,
+            "display_order": 5,
             "check_ids": [
                 "content_updated_12_months",
                 "no_broken_internal_links",
@@ -78,7 +80,7 @@
         {
             "id": "entities_semantic_clarity",
             "name": "Entities & Semantic Clarity",
-            "display_order": 5,
+            "display_order": 6,
             "check_ids": [
                 "named_entities_detected",
                 "entities_contextually_relevant",
@@ -91,11 +93,12 @@
         {
             "id": "trust_neutrality_safety",
             "name": "Trust, Neutrality & Safety",
-            "display_order": 6,
+            "display_order": 7,
             "check_ids": [
                 "author_identified",
                 "author_bio_present",
                 "metadata_checks",
+                "ai_crawler_accessibility",
                 "accessibility_basics",
                 "external_authoritative_sources",
                 "claim_provenance_and_evidence",
@@ -109,8 +112,9 @@
         {
             "id": "citability_verifiability",
             "name": "Citability & Verifiability",
-            "display_order": 7,
+            "display_order": 8,
             "check_ids": [
+                "original_evidence_signal",
                 "claim_pattern_detection",
                 "factual_statements_well_formed",
                 "internal_link_context_relevance",

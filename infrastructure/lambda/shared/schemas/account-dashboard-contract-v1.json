@@ -45,7 +45,15 @@
       "docs_url": "string",
       "billing_url": "string",
       "support_url": "string",
-      "help_label": "string"
+      "help_label": "string",
+      "provider": "string",
+      "zoho_asap": {
+        "widget_snippet_url": "string",
+        "department_id": "string",
+        "layout_id": "string",
+        "ticket_title": "string",
+        "field_map": "object<string,string>"
+      }
     }
   }
 }

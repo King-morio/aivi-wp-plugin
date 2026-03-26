@@ -1,10 +1,12 @@
 {
   "name": "ai-visibility-inspector",
   "version": "1.0.8",
-  "description": "AI-gated content analysis product that measures AEO/GEO visibility",
+  "description": "Analyze content in WordPress, review structured AiVI findings, and improve AI search readiness",
   "main": "assets/js/aivi-sidebar.js",
   "scripts": {
     "test": "jest",
+    "verify:textdomain": "node tests/diagnostics/verify-text-domain-guard.js",
+    "verify:translators": "node tests/diagnostics/verify-translators-comments.js",
     "lint": "eslint assets/js/ --ext .js",
     "lint:fix": "eslint assets/js/ --ext .js --fix",
     "build": "npm run lint && npm run test",

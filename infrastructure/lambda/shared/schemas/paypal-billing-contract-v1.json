@@ -6,9 +6,9 @@
       "code": "free_trial",
       "billing_type": "trial",
       "price_usd": 0,
-      "included_credits": 15000,
+      "included_credits": 5000,
       "site_limit": 1,
-      "duration_days": 14
+      "duration_days": 7
     },
     "starter": {
       "code": "starter",
@@ -23,20 +23,21 @@
       "code": "growth",
       "billing_type": "subscription",
       "price_usd": 22,
-      "included_credits": 150000,
+      "included_credits": 100000,
       "site_limit": 3,
       "history_days": 90,
       "intro_offer": {
         "type": "percent_off_first_cycle",
         "percent_off": 50
       },
+      "paypal_intro_plan_env_key": "PAYPAL_PLAN_ID_GROWTH_INTRO",
       "paypal_plan_env_key": "PAYPAL_PLAN_ID_GROWTH"
     },
     "pro": {
       "code": "pro",
       "billing_type": "subscription",
       "price_usd": 59,
-      "included_credits": 450000,
+      "included_credits": 250000,
       "site_limit": 10,
       "history_days": 365,
       "paypal_plan_env_key": "PAYPAL_PLAN_ID_PRO"
@@ -124,6 +125,7 @@
     "plan_ids": {
       "starter": "PAYPAL_PLAN_ID_STARTER",
       "growth": "PAYPAL_PLAN_ID_GROWTH",
+      "growth_intro": "PAYPAL_PLAN_ID_GROWTH_INTRO",
       "pro": "PAYPAL_PLAN_ID_PRO"
     }
   }

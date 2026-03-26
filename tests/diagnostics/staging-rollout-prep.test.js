@@ -4,11 +4,12 @@ const path = require('path');
 const read = (relativePath) => fs.readFileSync(path.join(__dirname, '..', '..', relativePath), 'utf8');
 
 describe('staging rollout prep', () => {
-    test('billing ready default stays false but can be overridden before plugin load', () => {
+    test('billing is enabled by default for customer installs but still overrideable before plugin load', () => {
         const config = read('includes/config.php');
 
         expect(config).toContain("if ( ! defined( 'AIVI_BILLING_READY' ) ) {");
-        expect(config).toContain("define( 'AIVI_BILLING_READY', false );");
+        expect(config).toContain("define( 'AIVI_BILLING_READY', true );");
+        expect(config).toContain("define( 'AIVI_DEFAULT_BACKEND_URL', 'https://dnvo4w1sca.execute-api.eu-north-1.amazonaws.com' );");
     });
 
     test('admin console ships a staging runtime template and bundle script', () => {
@@ -30,7 +31,7 @@ describe('staging rollout prep', () => {
         const runbook = read('docs/PHASE5_M6_STAGING_SANDBOX_RUNBOOK.md');
 
         expect(runbook).toContain('candidate brand/domain name: `pusskin`');
-        expect(runbook).toContain("define( 'AIVI_BILLING_READY', true );");
+        expect(runbook).toContain("define( 'AIVI_BILLING_READY', false );");
         expect(runbook).toContain('trial -> starter');
         expect(runbook).toContain('successful 25k top-up');
         expect(runbook).toContain('manual credit adjustment writes audit log');

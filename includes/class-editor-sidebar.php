@@ -64,7 +64,7 @@ class Editor_Sidebar {
     public function render_meta_box( $post ) {
         ?>
         <div id="aivi-meta-root" style="min-height:220px;">
-            <p style="margin:0;"><strong>AiVI (Prototype UI shell)</strong></p>
+            <p style="margin:0;"><strong>AiVI Inspector</strong></p>
             <div id="aivi-meta-ui"></div>
         </div>
         <?php

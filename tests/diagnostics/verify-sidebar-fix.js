@@ -126,8 +126,8 @@ test('Should read from analysis_summary.categories when present', () => {
                     issue_count: 2,
                     issues: [
                         {
-                            check_id: 'direct_answer_first_120',
-                            name: 'Direct Answer in First 120 Words',
+                            check_id: 'immediate_answer_placement',
+                            name: 'Immediate Answer Placement',
                             ui_verdict: 'fail',
                             instances: 1
                         },
@@ -145,7 +145,7 @@ test('Should read from analysis_summary.categories when present', () => {
                     issue_count: 1,
                     issues: [
                         {
-                            check_id: 'orphan_headings',
+                            check_id: 'heading_topic_fulfillment',
                             name: 'Orphan Headings',
                             ui_verdict: 'fail',
                             instances: 3
@@ -162,8 +162,8 @@ test('Should read from analysis_summary.categories when present', () => {
     assertEqual(Object.keys(result.groups).length, 2, 'groups count');
 
     const checkIds = result.allIssues.map(i => i.check_id);
-    assert(checkIds.includes('direct_answer_first_120'), 'Missing direct_answer_first_120');
-    assert(checkIds.includes('orphan_headings'), 'Missing orphan_headings');
+    assert(checkIds.includes('immediate_answer_placement'), 'Missing immediate_answer_placement');
+    assert(checkIds.includes('heading_topic_fulfillment'), 'Missing heading_topic_fulfillment');
 });
 
 test('REGRESSION: Should NOT return 0 issues when analysis_summary has categories', () => {

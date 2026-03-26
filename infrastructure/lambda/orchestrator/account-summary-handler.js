@@ -27,6 +27,60 @@ const normalizeNullableInt = (value) => {
 };
 
 const sanitizeString = (value) => String(value || '').trim();
+const sanitizeEmail = (value) => {
+    const candidate = sanitizeString(value).toLowerCase();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate) ? candidate : '';
+};
+const sanitizeSupportFieldMap = (rawValue) => {
+    let parsed = rawValue;
+    if (typeof rawValue === 'string') {
+        const candidate = rawValue.trim();
+        if (!candidate) {
+            return {};
+        }
+        try {
+            parsed = JSON.parse(candidate);
+        } catch (error) {
+            return {};
+        }
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return {};
+    }
+    return Object.entries(parsed).reduce((accumulator, [key, value]) => {
+        const normalizedKey = sanitizeString(key);
+        const normalizedValue = sanitizeString(value);
+        if (normalizedKey && normalizedValue) {
+            accumulator[normalizedKey] = normalizedValue;
+        }
+        return accumulator;
+    }, {});
+};
+
+const buildSupportLinks = () => {
+    const provider = sanitizeString(getEnv('AIVI_SUPPORT_PROVIDER', ''));
+    const widgetSnippetUrl = sanitizeString(getEnv('AIVI_SUPPORT_ZOHO_SNIPPET_URL', ''));
+    const departmentId = sanitizeString(getEnv('AIVI_SUPPORT_ZOHO_DEPARTMENT_ID', ''));
+    const layoutId = sanitizeString(getEnv('AIVI_SUPPORT_ZOHO_LAYOUT_ID', ''));
+    const ticketTitle = sanitizeString(getEnv('AIVI_SUPPORT_ZOHO_TICKET_TITLE', 'AiVI Support'));
+    const fieldMap = sanitizeSupportFieldMap(getEnv('AIVI_SUPPORT_ZOHO_FIELD_MAP', ''));
+    const normalizedProvider = provider || (widgetSnippetUrl && departmentId && layoutId ? 'zoho_desk_asap' : '');
+
+    return {
+        docs_url: sanitizeString(getEnv('AIVI_DOCS_URL', '')),
+        billing_url: sanitizeString(getEnv('AIVI_BILLING_URL', '')),
+        support_url: sanitizeString(getEnv('AIVI_SUPPORT_URL', '')),
+        help_label: 'AiVI Support',
+        provider: normalizedProvider,
+        zoho_asap: {
+            widget_snippet_url: widgetSnippetUrl,
+            department_id: departmentId,
+            layout_id: layoutId,
+            ticket_title: ticketTitle,
+            field_map: fieldMap
+        }
+    };
+};
 
 const extractDomain = (rawUrl) => {
     const candidate = sanitizeString(rawUrl);
@@ -42,12 +96,7 @@ const buildDefaultDashboardSummary = ({ siteId, blogId, homeUrl, pluginVersion }
     return buildRemoteAccountPayload(
         buildDefaultAccountBillingState({ siteId, blogId, homeUrl, pluginVersion }),
         { siteId, blogId, homeUrl, pluginVersion },
-        {
-            docs_url: sanitizeString(getEnv('AIVI_DOCS_URL', '')),
-            billing_url: sanitizeString(getEnv('AIVI_BILLING_URL', '')),
-            support_url: sanitizeString(getEnv('AIVI_SUPPORT_URL', '')),
-            help_label: 'AiVI Help'
-        }
+        buildSupportLinks()
     ).dashboard_summary;
 };
 
@@ -59,18 +108,25 @@ const accountSummaryHandler = async (event = {}) => {
     const blogId = normalizeNullableInt(query.blog_id || headers['X-AIVI-Blog-Id'] || headers['x-aivi-blog-id']) || 0;
     const homeUrl = sanitizeString(query.home_url || headers['X-AIVI-Home-Url'] || headers['x-aivi-home-url']);
     const pluginVersion = sanitizeString(headers['X-AIVI-Plugin-Version'] || headers['x-aivi-plugin-version']);
-    const supportLinks = {
-        docs_url: sanitizeString(getEnv('AIVI_DOCS_URL', '')),
-        billing_url: sanitizeString(getEnv('AIVI_BILLING_URL', '')),
-        support_url: sanitizeString(getEnv('AIVI_SUPPORT_URL', '')),
-        help_label: 'AiVI Help'
-    };
+    const adminEmail = sanitizeEmail(query.admin_email || headers['X-AIVI-Admin-Email'] || headers['x-aivi-admin-email']);
+    const supportLinks = buildSupportLinks();
 
     let remotePayload;
     if (accountId) {
         try {
             const store = createAccountBillingStateStore();
-            const state = await store.getAccountState(accountId);
+            let state = await store.getAccountState(accountId);
+            if (state && !sanitizeString(state.contact_email) && adminEmail) {
+                state = await store.putAccountState({
+                    ...state,
+                    contact_email: adminEmail
+                });
+                log('INFO', 'Backfilled missing contact email from site identity during account summary refresh', {
+                    account_id: accountId,
+                    site_id: siteId || null,
+                    contact_email: adminEmail
+                });
+            }
             if (state) {
                 remotePayload = buildRemoteAccountPayload(state, {
                     siteId,

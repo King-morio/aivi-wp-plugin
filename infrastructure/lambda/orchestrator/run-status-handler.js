@@ -10,14 +10,26 @@ const { DynamoDBDocumentClient, UpdateCommand: UpdateCommandDoc } = require('@aw
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { unmarshall } = require('@aws-sdk/util-dynamodb');
+const loadSharedModule = (moduleName) => {
+    try {
+        return require(`./shared/${moduleName}`);
+    } catch (error) {
+        if (error && error.code !== 'MODULE_NOT_FOUND') {
+            throw error;
+        }
+        return require(`../shared/${moduleName}`);
+    }
+};
 const {
     prepareSidebarPayload,
     generateAbortedSummary,
     mapErrorToAbortReason
 } = require('./analysis-serializer');
+const { normalizeScoreContract } = loadSharedModule('score-contract');
 const { generateSessionToken } = require('./analysis-details-handler');
 const { stripSidebarPayload, validateSidebarPayload } = require('./sidebar-payload-stripper');
 const { emitTelemetry } = require('./telemetry-emitter');
+const { buildArticlePointerRunId, getRunArticleKey, getSupersedingRunId } = require('./run-supersession');
 
 const ddbClient = new DynamoDBClient({});
 const ddbDoc = DynamoDBDocumentClient.from(ddbClient);
@@ -39,27 +51,53 @@ const parseTimestamp = (value, fallbackMs) => {
     return Number.isFinite(parsed) ? parsed : fallbackMs;
 };
 
-const normalizeBoundedScore = (value, max) => {
+const normalizeScoresForSidebar = (scores) => normalizeScoreContract(scores);
+
+const normalizePartialCount = (value) => {
     const numeric = Number(value);
-    if (!Number.isFinite(numeric)) return 0;
-    if (numeric <= 1) return Math.round(Math.max(0, Math.min(max, numeric * max)));
-    if (numeric > max && numeric <= 100) return Math.round((numeric / 100) * max);
-    return Math.round(Math.max(0, Math.min(max, numeric)));
+    if (!Number.isFinite(numeric) || numeric < 0) return null;
+    return Math.round(numeric);
 };
 
-const normalizeScoresForSidebar = (scores) => {
-    const src = scores && typeof scores === 'object' ? scores : {};
-    const aeoCandidate = src.AEO ?? src.aeo ?? src?.global?.AEO?.score ?? src?.categories?.AEO?.score;
-    const geoCandidate = src.GEO ?? src.geo ?? src?.global?.GEO?.score ?? src?.categories?.GEO?.score;
-    const globalCandidate = src.GLOBAL ?? src.global_score ?? src?.global?.score;
+const normalizePartialCheckIds = (value) => {
+    if (!Array.isArray(value)) return null;
+    const normalized = value
+        .map((item) => String(item || '').trim())
+        .filter(Boolean);
+    return normalized.length > 0 ? normalized : null;
+};
 
-    const AEO = normalizeBoundedScore(aeoCandidate, 55);
-    const GEO = normalizeBoundedScore(geoCandidate, 45);
-    const GLOBAL = globalCandidate === undefined || globalCandidate === null
-        ? Math.round(Math.max(0, Math.min(100, AEO + GEO)))
-        : normalizeBoundedScore(globalCandidate, 100);
+const buildSidebarPartial = (runPartial, fullAnalysis) => {
+    const runSrc = runPartial && typeof runPartial === 'object' ? runPartial : {};
+    const fullSrc = fullAnalysis && typeof fullAnalysis.partial_context === 'object'
+        ? fullAnalysis.partial_context
+        : ((fullAnalysis && fullAnalysis.audit && typeof fullAnalysis.audit.partial_context === 'object')
+            ? fullAnalysis.audit.partial_context
+            : {});
 
-    return { AEO, GEO, GLOBAL };
+    const merged = {};
+    const mode = typeof runSrc.mode === 'string' ? runSrc.mode.trim() : '';
+    const reason = typeof runSrc.reason === 'string' ? runSrc.reason.trim() : '';
+
+    if (mode) merged.mode = mode;
+    if (reason) merged.reason = reason;
+
+    ['expected_ai_checks', 'returned_ai_checks', 'missing_ai_checks', 'filtered_invalid_checks', 'completed_checks']
+        .forEach((field) => {
+            const normalized = normalizePartialCount(runSrc[field] ?? fullSrc[field]);
+            if (normalized !== null) {
+                merged[field] = normalized;
+            }
+        });
+
+    const missingCheckIds = normalizePartialCheckIds(
+        runSrc.missing_ai_check_ids ?? fullSrc.missing_ai_check_ids
+    );
+    if (missingCheckIds) {
+        merged.missing_ai_check_ids = missingCheckIds;
+    }
+
+    return Object.keys(merged).length > 0 ? merged : null;
 };
 
 const isLikelyTruncationError = (message = '') => {
@@ -333,6 +371,27 @@ const getRunStatus = async (runId) => {
     return unmarshall(response.Item);
 };
 
+const getLatestArticlePointer = async (articleKey) => {
+    const pointerRunId = buildArticlePointerRunId(articleKey);
+    if (!pointerRunId) {
+        return null;
+    }
+
+    const command = new GetItemCommand({
+        TableName: getEnv('RUNS_TABLE', 'aivi-runs-dev'),
+        Key: {
+            run_id: { S: pointerRunId }
+        }
+    });
+
+    const response = await ddbClient.send(command);
+    if (!response.Item) {
+        return null;
+    }
+
+    return unmarshall(response.Item);
+};
+
 /**
  * Main handler for GET /aivi/v1/analyze/run/{run_id}
  */
@@ -369,6 +428,27 @@ const runStatusHandler = async (event) => {
                     message: `Run ${runId} not found`
                 })
             };
+        }
+
+        const articleKey = getRunArticleKey(run);
+        if (articleKey) {
+            const latestPointer = await getLatestArticlePointer(articleKey);
+            const supersedingRunId = getSupersedingRunId(run, latestPointer);
+            if (supersedingRunId) {
+                const supersededResponse = stripSidebarPayload({
+                    ok: true,
+                    run_id: runId,
+                    status: 'superseded',
+                    superseded_by_run_id: supersedingRunId,
+                    message: 'A newer analysis run for this article is active.'
+                }, runId);
+
+                return {
+                    statusCode: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(supersededResponse)
+                };
+            }
         }
 
         // Check for stuck runs (timeout handling)
@@ -459,13 +539,14 @@ const runStatusHandler = async (event) => {
                 if (fullAnalysis) {
                     const deferDetailsEnabled = !!(run.feature_flags && run.feature_flags.defer_details_enabled);
                     const normalizedScores = normalizeScoresForSidebar(run.scores || fullAnalysis.scores || {});
+                    const sidebarPartial = buildSidebarPartial(run.partial, fullAnalysis);
                     // Use serializer to build sidebar payload with analysis_summary
                     const sidebarPayload = prepareSidebarPayload(fullAnalysis, {
                         runId: runId,
                         scores: normalizedScores,
                         includeHighlights: !deferDetailsEnabled,
                         status: finalStatus,
-                        partial: run.partial || null
+                        partial: sidebarPartial
                     });
 
                     // Merge sidebar payload into response
@@ -475,8 +556,8 @@ const runStatusHandler = async (event) => {
                     if (sidebarPayload.overlay_content) {
                         response.overlay_content = sidebarPayload.overlay_content;
                     }
-                    if (run.partial && finalStatus === 'success_partial') {
-                        response.partial = run.partial;
+                    if (sidebarPartial) {
+                        response.partial = sidebarPartial;
                     }
 
                     // Generate session token for details endpoint access
@@ -494,8 +575,9 @@ const runStatusHandler = async (event) => {
                     // Fallback: return scores only if analysis not available
                     response.scores = normalizeScoresForSidebar(run.scores || {});
                     response.completed_at = run.completed_at || null;
-                    if (run.partial && finalStatus === 'success_partial') {
-                        response.partial = run.partial;
+                    const sidebarPartial = buildSidebarPartial(run.partial, null);
+                    if (sidebarPartial) {
+                        response.partial = sidebarPartial;
                     }
                     if (run.site_id) {
                         const detailsToken = await generateSessionToken(runId, run.site_id);
