@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AiVI - AI Visibility for WordPress</title>
+  <style>
+    :root {
+      --paper: #f4eee1;
+      --paper-strong: rgba(247, 241, 232, 0.82);
+      --paper-soft: rgba(255, 255, 255, 0.72);
+      --ink: #10151b;
+      --muted: #5d6673;
+      --blue: #285b8c;
+      --red: #cb5a40;
+      --gold: #bf9551;
+      --line: rgba(16, 21, 27, 0.1);
+      --shadow: 0 24px 54px rgba(24, 30, 38, 0.12);
+      --radius-xl: 32px;
+      --radius-lg: 22px;
+      --radius-md: 16px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Segoe UI", "Aptos", sans-serif;
+      background:
+        linear-gradient(180deg, rgba(191, 149, 81, 0.08), transparent 16%),
+        linear-gradient(180deg, #f3ebdd 0%, #faf6ef 100%);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    img {
+      max-width: 100%;
+      display: block;
+    }
+
+    .page {
+      width: min(1220px, calc(100% - 36px));
+      margin: 0 auto;
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 24px 0 14px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand img {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      box-shadow: 0 0 0 1px rgba(16, 21, 27, 0.06);
+    }
+
+    .brand-copy strong {
+      display: block;
+      font-family: "Bahnschrift", "Segoe UI Variable Display", sans-serif;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-copy span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      min-height: 760px;
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--line);
+      background: #11161d;
+      box-shadow: var(--shadow);
+    }
+
+    .hero-image {
+      width: 100%;
+      height: 100%;
+      min-height: 760px;
+      object-fit: cover;
+      object-position: center center;
+      background: #11161d;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(12, 17, 22, 0.74) 0%, rgba(12, 17, 22, 0.44) 28%, rgba(12, 17, 22, 0.08) 62%, rgba(12, 17, 22, 0.14) 100%),
+        linear-gradient(180deg, rgba(12, 17, 22, 0.05) 0%, rgba(12, 17, 22, 0.2) 100%);
+    }
+
+    .hero-copy {
+      position: absolute;
+      right: 34px;
+      bottom: 34px;
+      z-index: 1;
+      width: min(450px, calc(100% - 68px));
+      padding: 22px 24px;
+      border-radius: var(--radius-lg);
+      background: rgba(247, 241, 232, 0.36);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.14);
+    }
+
+    .eyebrow {
+      color: var(--red);
+      font: 700 0.8rem/1 "Segoe UI", sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    h1, h2, h3 {
+      margin: 0;
+      font-family: "Bahnschrift", "Segoe UI Variable Display", sans-serif;
+      letter-spacing: -0.03em;
+    }
+
+    h1 {
+      margin-top: 12px;
+      font-size: clamp(3rem, 7vw, 5rem);
+      line-height: 0.93;
+      max-width: 8.8ch;
+      color: #11161d;
+    }
+
+    .lead {
+      margin: 14px 0 0;
+      max-width: 31ch;
+      color: #333c47;
+      line-height: 1.6;
+      font-size: 1.02rem;
+      font-weight: 500;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .button {
+      min-height: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 18px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      transition: transform 160ms ease, background 160ms ease;
+    }
+
+    .button:hover {
+      transform: translateY(-1px);
+    }
+
+    .button-primary {
+      color: #fff;
+      background: var(--blue);
+    }
+
+    .button-secondary {
+      color: var(--ink);
+      border: 1px solid rgba(16, 21, 27, 0.12);
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    section {
+      padding: 34px 0 12px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .section-head p {
+      margin: 0;
+      max-width: 35ch;
+      color: var(--muted);
+      line-height: 1.58;
+    }
+
+    h2 {
+      font-size: clamp(2rem, 4vw, 3rem);
+      max-width: 12ch;
+    }
+
+    .grid-2,
+    .grid-3 {
+      display: grid;
+      gap: 18px;
+    }
+
+    .grid-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .grid-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .panel,
+    .shot {
+      overflow: hidden;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--line);
+      background: var(--paper-soft);
+      box-shadow: var(--shadow);
+    }
+
+    .panel {
+      padding: 22px;
+    }
+
+    .panel h3 {
+      font-size: 1.08rem;
+      margin-bottom: 8px;
+    }
+
+    .panel p,
+    .shot-body p,
+    .callout p,
+    .faq p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.62;
+    }
+
+    .intro-callout {
+      padding: 26px;
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(191, 149, 81, 0.18);
+      background: rgba(255, 255, 255, 0.64);
+      box-shadow: var(--shadow);
+    }
+
+    .intro-callout p + p {
+      margin-top: 12px;
+    }
+
+    .bullet-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 12px;
+    }
+
+    .bullet-list li {
+      display: grid;
+      grid-template-columns: 16px 1fr;
+      gap: 12px;
+      align-items: start;
+      color: var(--muted);
+      line-height: 1.58;
+    }
+
+    .bullet-list li::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--gold);
+      margin-top: 0.58em;
+      box-shadow: 0 0 16px rgba(191, 149, 81, 0.3);
+    }
+
+    .shot-large img {
+      height: 560px;
+      object-fit: cover;
+    }
+
+    .shot-medium img {
+      height: 340px;
+      object-fit: cover;
+    }
+
+    .shot-body {
+      padding: 16px 18px 18px;
+    }
+
+    .shot-body strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 1rem;
+    }
+
+    .callout {
+      padding: 26px;
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(203, 90, 64, 0.18);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(243, 235, 221, 0.72));
+      box-shadow: var(--shadow);
+    }
+
+    .callout h3 {
+      font-size: 1.18rem;
+      margin-bottom: 10px;
+    }
+
+    .faq-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .faq {
+      padding: 20px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.66);
+      box-shadow: var(--shadow);
+    }
+
+    .faq strong {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .final-cta {
+      margin: 32px 0 56px;
+      padding: 26px;
+      border-radius: var(--radius-xl);
+      border: 1px solid rgba(40, 91, 140, 0.12);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(243, 235, 221, 0.76));
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .final-cta p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      max-width: 44ch;
+      line-height: 1.6;
+    }
+
+    .footer {
+      padding: 0 0 40px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 980px) {
+      .grid-2,
+      .grid-3,
+      .faq-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        min-height: 560px;
+      }
+
+      .hero-image {
+        min-height: 560px;
+      }
+
+      .hero-copy {
+        left: 20px;
+        right: 20px;
+        bottom: 20px;
+        width: auto;
+      }
+
+      .section-head,
+      .final-cta,
+      .footer {
+        display: block;
+      }
+
+      .section-head p {
+        margin-top: 10px;
+      }
+
+      .footer span + span {
+        display: block;
+        margin-top: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="nav">
+      <div class="brand">
+        <img src="./assets/aivi-icon.png" alt="AiVI icon">
+        <div class="brand-copy">
+          <strong>AiVI</strong>
+          <span>AI visibility for WordPress</span>
+        </div>
+      </div>
+      <nav class="nav-links">
+        <a href="#what">What It Is</a>
+        <a href="#workflow">How It Works</a>
+        <a href="#buyers">Why Buy</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <img class="hero-image" src="./assets/aivi-hero.png" alt="AiVI inside WordPress showing review rail and editor sidebar">
+      <div class="hero-copy">
+        <span class="eyebrow">Content intelligence for AI-driven search</span>
+        <h1>Your content can be accurate, well-written, and still disappear in AI search.</h1>
+        <p class="lead">
+          AiVI shows why that happens inside WordPress, then helps you fix the structure,
+          trust, schema, and answer-readiness issues that make content harder for AI systems to reuse.
+        </p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#workflow">See How AiVI Works</a>
+          <a class="button button-secondary" href="https://github.com/King-morio/aivi-wp-plugin/releases/tag/v1.0.30">Download AiVI</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="what">
+      <div class="section-head">
+        <h2>What AiVI is</h2>
+        <p>A direct explanation for people who do not want marketing fog.</p>
+      </div>
+      <div class="intro-callout">
+        <p>
+          AiVI is a WordPress plugin for AI visibility. It analyzes your content before
+          publication and shows where it may fail machine extraction, trust, structure,
+          schema, and answer readiness.
+        </p>
+        <p>
+          In simple terms, AiVI helps content become more usable by AI systems, not just
+          readable by people.
+        </p>
+      </div>
+    </section>
+
+    <section id="buyers">
+      <div class="section-head">
+        <h2>Why good content still gets missed</h2>
+        <p>This is the gap most skeptical buyers feel but cannot usually see clearly.</p>
+      </div>
+      <div class="grid-2">
+        <article class="callout">
+          <h3>A different problem from traditional SEO</h3>
+          <p>
+            A page can be factually correct, well-formatted, and still underperform in
+            AI-driven discovery.
+          </p>
+          <p style="margin-top: 12px;">
+            That usually happens because the content does not present answers clearly
+            enough for extraction, does not support claims strongly enough for trust,
+            or does not signal structure and schema cleanly enough for machines to
+            interpret with confidence.
+          </p>
+          <p style="margin-top: 12px;">
+            AiVI helps you see those gaps before the page goes live.
+          </p>
+        </article>
+        <article class="panel">
+          <h3>What AiVI helps you improve</h3>
+          <ul class="bullet-list">
+            <li>Opening answers that are easier for AI systems to quote and reuse</li>
+            <li>Content structure that is easier to scan, interpret, and extract</li>
+            <li>Schema and semantic signals that better match what the page is trying to do</li>
+            <li>Trust signals that reduce weak, vague, or unsupported claims</li>
+            <li>Editorial decisions inside WordPress, before publication</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="workflow">
+      <div class="section-head">
+        <h2>How it works inside WordPress</h2>
+        <p>One clear flow, kept close to the editor so authors can review and act without bouncing between tools.</p>
+      </div>
+      <article class="shot shot-large">
+        <img src="./assets/workflow-open-sidebar.jpg" alt="AiVI opened inside the WordPress editor">
+        <div class="shot-body">
+          <strong>Open AiVI where you already work</strong>
+          <p>
+            Run analysis on the page you are editing and bring the review workflow directly into WordPress.
+          </p>
+        </div>
+      </article>
+      <div class="grid-2" style="margin-top: 18px;">
+        <article class="shot shot-medium">
+          <img src="./assets/workflow-review-results.jpg" alt="AiVI grouped findings in the review rail">
+          <div class="shot-body">
+            <strong>Review grouped findings</strong>
+            <p>
+              See what is weakening AI visibility and focus on the strongest problems first.
+            </p>
+          </div>
+        </article>
+        <article class="shot shot-medium">
+          <img src="./assets/workflow-open-overlay.jpg" alt="AiVI overlay editor open inside WordPress">
+          <div class="shot-body">
+            <strong>Revise before publication</strong>
+            <p>
+              Inspect the issue, improve the content, and keep editorial control close to the page.
+            </p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Why not rely on SEO tools alone?</h2>
+        <p>Because AI-assisted discovery is asking a different question.</p>
+      </div>
+      <div class="grid-3">
+        <article class="panel">
+          <h3>SEO tools are useful</h3>
+          <p>They help with visibility in ranking-era workflows and still have a place in the stack.</p>
+        </article>
+        <article class="panel">
+          <h3>AiVI looks at a different problem</h3>
+          <p>Can an AI system extract, trust, structure, and reuse this content cleanly enough to surface it in answer-driven experiences?</p>
+        </article>
+        <article class="panel">
+          <h3>That needs a different lens</h3>
+          <p>AiVI gives you that lens inside WordPress, before weak signals cost you discoverability.</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Who it is for</h2>
+        <p>Short answer: teams that want their content understood correctly, not just indexed.</p>
+      </div>
+      <div class="grid-3">
+        <article class="panel"><h3>Publishers</h3><p>Catch answer, structure, and trust gaps before articles go live.</p></article>
+        <article class="panel"><h3>Brands</h3><p>Strengthen content clarity, support, and schema across pages that matter.</p></article>
+        <article class="panel"><h3>Editors and content teams</h3><p>Use a review layer built for practical action, not vague AI promises.</p></article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Questions a skeptical buyer would ask</h2>
+        <p>And the direct answers they should get.</p>
+      </div>
+      <div class="faq-grid">
+        <article class="faq">
+          <strong>Is this just SEO with a new label?</strong>
+          <p>No. AiVI focuses on whether content can be extracted, trusted, structured, and reused by AI systems, which is not the same problem as traditional ranking checks.</p>
+        </article>
+        <article class="faq">
+          <strong>Why pay thousands for AI search optimization before you know what is actually broken?</strong>
+          <p>AiVI gives you an in-house diagnostic layer inside WordPress, so you can find the real clarity, trust, structure, and schema gaps first and spend outside help where it will actually matter.</p>
+        </article>
+        <article class="faq">
+          <strong>Do I have to leave WordPress to use it?</strong>
+          <p>No. AiVI is designed to analyze and guide revision close to the editor workflow.</p>
+        </article>
+        <article class="faq">
+          <strong>Does it tell me what is wrong in practical terms?</strong>
+          <p>Yes. AiVI groups findings, shows what is weakening visibility, and helps you move into revision before publication.</p>
+        </article>
+        <article class="faq">
+          <strong>Who gets value from it first?</strong>
+          <p>Publishers, brands, editors, and content teams who depend on content being found, understood, and reused correctly.</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="final-cta">
+        <div>
+          <h2>See what your content looks like to AI systems before you publish it.</h2>
+          <p>
+            Install AiVI, run a review on your current content, and see where clarity,
+            trust, structure, and answer readiness break down.
+          </p>
+        </div>
+        <div class="hero-actions">
+          <a class="button button-primary" href="https://github.com/King-morio/aivi-wp-plugin/releases/tag/v1.0.30">Download AiVI</a>
+          <a class="button button-secondary" href="https://github.com/King-morio/aivi-wp-plugin">View GitHub Repo</a>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>AiVI GitHub Pages build preview.</span>
+      <span>Product copy structured for skeptical buyers who want a clear explanation, not vague AI language.</span>
+    </footer>
+  </div>
+</body>
+</html>
