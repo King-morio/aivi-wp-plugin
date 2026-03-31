@@ -71,6 +71,8 @@ describe('worker overlay serializer regressions', () => {
 
         expect(anchoredRecommendation).toBeDefined();
         expect(anchoredRecommendation).toHaveProperty('analysis_ref');
+        expect(anchoredRecommendation).toHaveProperty('fix_assist_triage');
+        expect(typeof anchoredRecommendation.fix_assist_triage?.state).toBe('string');
         expect(anchoredRecommendation).toHaveProperty('start');
         expect(anchoredRecommendation).toHaveProperty('end');
     });
@@ -757,22 +759,20 @@ test('worker and orchestrator keep real broken internal-link failures visible in
         expect(String(orchestratorOverlay.html || '')).not.toMatch(/strict question anchor/i);
     });
 
-    test('March 16 answer-extractability specimen preserves brittle raw summaries while serializers add richer narrative', () => {
+    test('March 16 answer-extractability specimen preserves cleaned analyzer-led summaries without stock enrichment', () => {
         const { manifest, analysisResult } = march16AnswerExtractabilityFixture;
         const workerOverlay = buildWorkerOverlay(manifest, analysisResult);
         const expectations = {
             immediate_answer_placement: {
                 raw: 'Answer appears at 121-150 words after the question anchor.',
-                normalized: /did not confirm a direct answer within the first 120 words/i,
-                richer: /Answer engines are more reliable when the direct answer appears immediately/i
+                normalized: 'The opening does not reach a clear direct answer early enough to fulfill the headline or section promise.'
             },
             answer_sentence_concise: {
                 raw: 'Answer sentence has 32 words, which is below the 40-60 word threshold.',
-                richer: /easier to scan, quote, and reuse/i
+                normalized: 'The opening answer does not yet read as a clean reusable snippet. Tighten it so it stands alone cleanly without extra setup or filler.'
             },
             clear_answer_formatting: {
-                raw: 'Answer is not separated into clear steps or bullet points for better readability.',
-                richer: /Dense answer formatting makes the main point harder to scan and extract quickly/i
+                raw: 'Answer is not separated into clear steps or bullet points for better readability.'
             }
         };
 
@@ -782,14 +782,15 @@ test('worker and orchestrator keep real broken internal-link failures visible in
             expect(issue).toBeDefined();
             expect(issue.message).toBe(matcher.raw);
             if (matcher.normalized) {
-                expect(issue.explanation_pack.what_failed).toMatch(matcher.normalized);
-                expect(issue.issue_explanation).toMatch(matcher.normalized);
+                expect(issue.explanation_pack.what_failed).toBe(matcher.normalized);
+                expect(issue.issue_explanation).toBe(matcher.normalized);
                 expect(issue.issue_explanation).not.toContain(matcher.raw);
             } else {
-                expect(issue.issue_explanation).toContain(matcher.raw);
+                expect(issue.explanation_pack.what_failed).toBe(matcher.raw);
+                expect(issue.issue_explanation).toBe(matcher.raw);
             }
-            expect(issue.issue_explanation).toMatch(matcher.richer);
-            expect(countWords(issue.issue_explanation)).toBeGreaterThan(countWords(issue.message));
+            expect(issue.issue_explanation).not.toContain('Answer engines are more reliable when the direct answer appears immediately');
+            expect(issue.issue_explanation).not.toContain('Place one direct answer sentence');
             expect(issue.issue_explanation).not.toMatch(/strict question anchor/i);
         });
     });
@@ -801,15 +802,15 @@ test('worker and orchestrator keep real broken internal-link failures visible in
         const conciseIssue = workerOverlay.recommendations.find((item) => item.check_id === 'answer_sentence_concise');
 
         expect(directAnswerIssue.message).toBe('The direct answer starts at 125 words, missing the 120-word threshold.');
-        expect(directAnswerIssue.explanation_pack.what_failed).toMatch(/did not confirm a direct answer within the first 120 words/i);
-        expect(directAnswerIssue.issue_explanation).toMatch(/did not confirm a direct answer within the first 120 words/i);
+        expect(directAnswerIssue.explanation_pack.what_failed).toMatch(/headline or section promise/i);
+        expect(directAnswerIssue.issue_explanation).toBe('The opening does not reach a clear direct answer early enough to fulfill the headline or section promise.');
         expect(directAnswerIssue.issue_explanation).not.toMatch(/125 words/i);
 
         expect(conciseIssue.message).toBe('The answer is 35 words, which is concise but lacks direct evidence for the claim.');
-        expect(conciseIssue.explanation_pack.what_failed).toBe('The opening answer is 35 words, which is near the target range but still below the ideal reusable answer band.');
-        expect(conciseIssue.issue_explanation).toContain('The opening answer is 35 words, which is near the target range but still below the ideal reusable answer band.');
+        expect(conciseIssue.explanation_pack.what_failed).toBe('The opening answer is close, but it still needs a tighter standalone shape to read as a clean reusable snippet.');
+        expect(conciseIssue.issue_explanation).toBe('The opening answer is close, but it still needs a tighter standalone shape to read as a clean reusable snippet.');
         expect(conciseIssue.issue_explanation).not.toMatch(/lacks direct evidence for the claim/i);
-        expect(conciseIssue.issue_explanation).toMatch(/Two or three short sentences are fine if they deliver one complete answer/i);
+        expect(conciseIssue.issue_explanation).not.toContain('Two or three short sentences are fine if they deliver one complete answer.');
     });
 
     test('worker and orchestrator drop implausible concise-answer threshold math when it contradicts the anchored snippet', () => {
@@ -850,8 +851,7 @@ test('worker and orchestrator keep real broken internal-link failures visible in
 
         [workerIssue, orchestratorIssue].forEach((issue) => {
             expect(issue).toBeDefined();
-            expect(issue.message).toBe('The first sentence is 22 words over the ideal 60-word threshold for a concise snippet.');
-            expect(issue.explanation_pack.what_failed).toBe('The opening answer does not yet read as a clean reusable snippet. Keep the first answer near 40-60 words and make sure it stands alone without extra setup or filler.');
+            expect(issue.explanation_pack.what_failed).toBe('The opening answer does not yet read as a clean reusable snippet. Tighten it so it stands alone cleanly without extra setup or filler.');
             expect(issue.issue_explanation).toContain('The opening answer does not yet read as a clean reusable snippet.');
             expect(issue.issue_explanation).not.toMatch(/22 words over the ideal 60-word threshold/i);
         });
@@ -910,10 +910,100 @@ test('worker and orchestrator keep real broken internal-link failures visible in
 
         expect(issue).toBeDefined();
         expect(issue.review_summary || '').toMatch(/reaches the answer only after setup/i);
-        expect(issue.explanation_pack.what_failed).toBe('The check did not confirm a direct answer within the first 120 words after the selected question anchor.');
+        expect(issue.explanation_pack.what_failed).toBe('The opening does not reach a clear direct answer early enough to fulfill the headline or section promise.');
         expect(issue.issue_explanation).toContain('only arrives at the actual answer after too much framing');
         expect(issue.issue_explanation).toContain('extractable answer confidence');
         expect(issue.issue_explanation).not.toBe(issue.explanation_pack.what_failed);
+    });
+
+    test('answer-extractability overlay preserves usable AI explanation packs for section-intent cases', () => {
+        const manifest = {
+            block_map: [
+                {
+                    node_ref: 'block-1',
+                    signature: 'sig-1',
+                    block_type: 'core/paragraph',
+                    text: 'Digital tools can make exam revision more manageable, efficient, and less stressful.'
+                }
+            ]
+        };
+        const analysisResult = {
+            run_id: 'worker-headline-intent-pack-preservation',
+            checks: {
+                immediate_answer_placement: {
+                    verdict: 'partial',
+                    explanation: 'The opening is informative, but it does not fulfill the headline or section promise quickly enough for direct extraction.',
+                    ai_explanation_pack: {
+                        what_failed: 'The H2 promises five concrete ways, but the section spends its opening lines on setup before the first actual way appears.',
+                        why_it_matters: 'A list-style heading works best when the first concrete item shows up quickly and confirms the promised structure.',
+                        how_to_fix_steps: [
+                            'Keep one short lead-in line, then surface the first numbered way immediately under the heading.'
+                        ],
+                        issue_explanation: 'This section already has the right list intent, but the opening paragraph delays the first concrete item. Bringing the first numbered way closer to the heading would make the structure easier to extract and reuse.'
+                    },
+                    highlights: [{
+                        node_ref: 'block-1',
+                        signature: 'sig-1',
+                        start: 0,
+                        end: 84,
+                        text: 'Digital tools can make exam revision more manageable, efficient, and less stressful.',
+                        message: 'The opening is informative, but it does not fulfill the headline or section promise quickly enough for direct extraction.'
+                    }]
+                }
+            }
+        };
+
+        const workerOverlay = buildWorkerOverlay(manifest, analysisResult);
+        const issue = workerOverlay.recommendations.find((item) => item.check_id === 'immediate_answer_placement');
+
+        expect(issue).toBeDefined();
+        expect(issue.explanation_pack.what_failed).toBe('The H2 promises five concrete ways, but the section spends its opening lines on setup before the first actual way appears.');
+        expect(issue.explanation_pack.why_it_matters).toBe('A list-style heading works best when the first concrete item shows up quickly and confirms the promised structure.');
+        expect(issue.issue_explanation).toContain('opening paragraph delays the first concrete item');
+        expect(issue.issue_explanation).not.toContain('Answer engines are more reliable when the direct answer appears immediately');
+        expect(issue.issue_explanation).not.toContain('question heading');
+    });
+
+    test('answer-extractability overlay preserves highlight-level analyzer reasoning when no explicit issue_explanation exists', () => {
+        const manifest = {
+            block_map: [
+                {
+                    node_ref: 'block-1',
+                    signature: 'sig-1',
+                    block_type: 'core/paragraph',
+                    text: 'Digital tools can make exam revision more manageable, efficient, and less stressful.'
+                }
+            ]
+        };
+        const analysisResult = {
+            run_id: 'worker-headline-intent-message-preservation',
+            checks: {
+                immediate_answer_placement: {
+                    verdict: 'partial',
+                    explanation: 'The opening is informative, but it does not fulfill the headline or section promise quickly enough for direct extraction.',
+                    highlights: [{
+                        node_ref: 'block-1',
+                        signature: 'sig-1',
+                        start: 0,
+                        end: 84,
+                        text: 'Digital tools can make exam revision more manageable, efficient, and less stressful.',
+                        message: 'The H2 promises five concrete ways, but this opening paragraph stays in setup mode instead of surfacing the first actual way.'
+                    }]
+                }
+            }
+        };
+
+        const workerOverlay = buildWorkerOverlay(manifest, analysisResult);
+        const issue = workerOverlay.recommendations.find((item) => item.check_id === 'immediate_answer_placement');
+
+        expect(issue).toBeDefined();
+        expect(issue.explanation_pack.what_failed).toBe('The H2 promises five concrete ways, but this opening paragraph stays in setup mode instead of surfacing the first actual way.');
+        expect([
+            'The H2 promises five concrete ways, but this opening paragraph stays in setup mode instead of surfacing the first actual way.',
+            'The opening is informative, but it does not fulfill the headline or section promise quickly enough for direct extraction.'
+        ]).toContain(issue.issue_explanation);
+        expect(issue.issue_explanation).not.toContain('Answer engines are more reliable when the direct answer appears immediately');
+        expect(issue.issue_explanation).not.toContain('Place one direct answer sentence');
     });
 
     test('synthetic incomplete semantic checks are excluded from recommendations but deterministic issues remain', () => {

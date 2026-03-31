@@ -83,6 +83,13 @@ function Ensure-SharedDefinitions {
                 (Join-Path $sharedDir "scoring-config-v1.json"),
                 (Join-Path $orchestratorSchemaDir "scoring-config-v1.json")
             )
+        },
+        @{
+            name = "fix-assist-contract-v1.json"
+            candidates = @(
+                (Join-Path $sharedDir "fix-assist-contract-v1.json"),
+                (Join-Path $orchestratorSchemaDir "fix-assist-contract-v1.json")
+            )
         }
     )
 
@@ -425,6 +432,9 @@ $orchestratorFiles = @(
     "paypal-reconciliation.js",
     "paypal-webhook-handler.js",
     "paypal-webhook-processing.js",
+    "evidence-verifier.js",
+    "fix-assist-contract-builder.js",
+    "fix-assist-triage.js",
     "sidebar-payload-stripper.js",
     "pii-scrubber.js",
     "super-admin-audit-store.js",
@@ -456,6 +466,7 @@ $orchestratorFiles = @(
     "shared\schemas\checks-definitions-v1.json",
     "shared\schemas\check-runtime-contract-v1.json",
     "shared\schemas\deterministic-explanations-v1.json",
+    "shared\schemas\fix-assist-contract-v1.json",
     "shared\schemas\scoring-config-v1.json"
 )
 
@@ -472,6 +483,11 @@ Assert-ArchiveContains -ArchivePath "..\orchestrator-rcl.zip" -Label "orchestrat
     "billing-account-state.js",
     "billing-checkout-handler.js",
     "connection-token.js",
+    "evidence-verifier.js",
+    "fix-assist-contract-builder.js",
+    "fix-assist-triage.js",
+    "rewrite-handler.js",
+    "rewrite-target-resolver.js",
     "run-supersession.js",
     "super-admin-read-handler.js",
     "schema-draft-builder.js",
@@ -482,6 +498,7 @@ Assert-ArchiveContains -ArchivePath "..\orchestrator-rcl.zip" -Label "orchestrat
     "shared/scoring-policy.js",
     "shared/schemas/check-runtime-contract-v1.json",
     "shared/schemas/deterministic-explanations-v1.json",
+    "shared/schemas/fix-assist-contract-v1.json",
     "shared/schemas/scoring-config-v1.json"
 )
 
@@ -499,6 +516,7 @@ Ensure-SharedRuntime -LambdaDir (Get-Location).Path
 $workerFiles = @(
     "index.js",
     "analysis-serializer.js",
+    "fix-assist-triage.js",
     "schema-draft-builder.js",
     "preflight-handler.js",
     "pii-scrubber.js",
@@ -525,6 +543,7 @@ Write-ZipArchive -ArchivePath "..\worker-rcl.zip" -Paths $workerFiles
 Assert-ArchiveContains -ArchivePath "..\worker-rcl.zip" -Label "worker-rcl.zip" -RequiredEntries @(
     "index.js",
     "analysis-serializer.js",
+    "fix-assist-triage.js",
     "schema-draft-builder.js",
     "shared/billing-account-state.js",
     "shared/credit-ledger.js",
@@ -544,7 +563,7 @@ Write-Host ""
 Write-Host "[3/4] Deploying Orchestrator to AWS..."
 
 Set-Location (Join-Path $PSScriptRoot "lambda")
-$result = aws lambda update-function-code --function-name $orchestratorFunction --zip-file "fileb://orchestrator-rcl.zip" --region $region --output json 2>&1
+$result = (& aws --no-cli-pager lambda update-function-code --function-name $orchestratorFunction --zip-file "fileb://orchestrator-rcl.zip" --region $region --output json 2>&1 | Out-String)
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to deploy orchestrator: $result"
 }
@@ -558,7 +577,7 @@ Write-Host "   OK Orchestrator ready"
 Write-Host ""
 Write-Host "[4/4] Deploying Worker to AWS..."
 
-$result = aws lambda update-function-code --function-name $workerFunction --zip-file "fileb://worker-rcl.zip" --region $region --output json 2>&1
+$result = (& aws --no-cli-pager lambda update-function-code --function-name $workerFunction --zip-file "fileb://worker-rcl.zip" --region $region --output json 2>&1 | Out-String)
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to deploy worker: $result"
 }
@@ -576,8 +595,31 @@ Write-Host "   OK Model environment pinned"
 
 Write-Host ""
 Write-Host "Reconciling critical HTTP API routes..."
-Ensure-HttpApiRoute -ApiId $httpApiId -Region $region -RouteKey "GET /aivi/v1/worker/health"
-Ensure-HttpApiRoute -ApiId $httpApiId -Region $region -RouteKey "GET /aivi/v1/admin/financials/overview" -AuthorizationType "JWT" -SeedRouteKey "GET /aivi/v1/admin/accounts"
+$criticalHttpRoutes = @(
+    @{
+        RouteKey = "GET /aivi/v1/worker/health"
+        AuthorizationType = "NONE"
+        SeedRouteKey = "GET /ping"
+    },
+    @{
+        RouteKey = "POST /aivi/v1/rewrite"
+        AuthorizationType = "NONE"
+        SeedRouteKey = "GET /ping"
+    },
+    @{
+        RouteKey = "GET /aivi/v1/admin/financials/overview"
+        AuthorizationType = "JWT"
+        SeedRouteKey = "GET /aivi/v1/admin/accounts"
+    }
+)
+foreach ($routeSpec in $criticalHttpRoutes) {
+    Ensure-HttpApiRoute `
+        -ApiId $httpApiId `
+        -Region $region `
+        -RouteKey $routeSpec.RouteKey `
+        -AuthorizationType $routeSpec.AuthorizationType `
+        -SeedRouteKey $routeSpec.SeedRouteKey
+}
 Write-Host "   OK Critical HTTP API routes reconciled"
 
 # SUMMARY

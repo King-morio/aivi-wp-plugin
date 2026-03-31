@@ -22,6 +22,16 @@ describe('overlay pass-filter regression guard', () => {
         expect(source).toContain('resetInlineSuppressedRecommendations();');
         expect(source).toContain("const syntheticReasons = new Set([");
         expect(source).toContain("if (syntheticReasons.has(normalizedFailureReason)) return false;");
+        expect(source).toContain('const actionableByKey = new Map();');
+        expect(source).toContain('const mergeReviewRailIssue = (issue, actionableIssue) => {');
+        expect(source).toContain('const source = recommendationFallback.length');
+        expect(source).toContain('? recommendationFallback');
+        expect(source).toContain(': actionableFindings;');
+        expect(source).toContain('function humanizeCheckIdentifier(value) {');
+        expect(source).toContain('function resolveIssueDisplayName(issueLike) {');
+        expect(source).toContain("name.textContent = resolveIssueDisplayName(issue);");
+        expect(source).toContain('checkName: issueDisplayName,');
+        expect(source).not.toContain("issue && issue.check_name ? issue.check_name : 'Untitled issue'");
         expect(source).toContain("issue_explanation: issue.issue_explanation || ''");
         expect(source).toContain("review_summary: normalizeText(issue.review_summary || '')");
         expect(source).toContain('function resolveRecommendationDetailText(issue, explanationPack, summaryText)');

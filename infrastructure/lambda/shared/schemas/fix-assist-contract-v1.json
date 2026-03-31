@@ -1,0 +1,120 @@
+{
+    "version": "1.0.0",
+    "generated_at": "2026-03-29T07:30:00+03:00",
+    "defaults": {
+        "repair_mode": "rewrite",
+        "severity_by_triage": {
+            "rewrite_needed": "moderate",
+            "optional_improvement": "low",
+            "structural_guidance_only": "guidance",
+            "leave_as_is": "none"
+        },
+        "tone_guard": [
+            "Keep the tone calm, professional, and publication-ready.",
+            "Do not sound alarmist, robotic, or salesy.",
+            "Prefer clear editorial language over generic AI phrasing."
+        ],
+        "do_not_invent": [
+            "Do not add new facts, statistics, dates, or named entities that are not already supported by the source context.",
+            "Do not fabricate citations, sources, credentials, or claims of authority."
+        ],
+        "must_preserve": [
+            "Preserve factual meaning, topical scope, and article intent.",
+            "Preserve named entities, numbers, and dates already present in the target text."
+        ],
+        "scope_guard": [
+            "Edit only the resolved repair scope.",
+            "Do not rewrite unrelated blocks, headings, or later sections."
+        ]
+    },
+    "contracts": {
+        "answer_sentence_concise": {
+            "repair_mode": "tighten",
+            "severity": "moderate",
+            "must_change": [
+                "Shorten the opening answer without removing key meaning.",
+                "Keep the first answer directly quotable and easy to reuse."
+            ]
+        },
+        "immediate_answer_placement": {
+            "repair_mode": "rewrite",
+            "severity": "high",
+            "must_change": [
+                "Move the direct answer closer to the opening of the target section.",
+                "Reduce setup before the answer appears."
+            ]
+        },
+        "question_answer_alignment": {
+            "repair_mode": "tighten",
+            "severity": "high",
+            "must_change": [
+                "Make the first answer directly match the question being asked.",
+                "Remove indirect lead-in phrasing that delays the answer."
+            ]
+        },
+        "heading_topic_fulfillment": {
+            "repair_mode": "expand_support",
+            "severity": "high",
+            "must_preserve": [
+                "Keep the heading text and section promise intact."
+            ],
+            "must_change": [
+                "Strengthen the supporting text under the heading.",
+                "Add concrete support that fulfills the heading promise."
+            ]
+        },
+        "clear_answer_formatting": {
+            "repair_mode": "suggest_structure",
+            "severity": "low",
+            "must_change": [
+                "Only restructure into a list when it materially improves scanability."
+            ]
+        },
+        "lists_tables_presence": {
+            "repair_mode": "suggest_structure",
+            "severity": "low",
+            "must_change": [
+                "Convert dense comparison prose into a clearer list only when it improves readability."
+            ]
+        },
+        "faq_structure_opportunity": {
+            "repair_mode": "suggest_structure",
+            "severity": "low",
+            "must_change": [
+                "Separate reusable question-answer pairs more clearly if the section is still dense inline prose."
+            ]
+        },
+        "readability_adaptivity": {
+            "repair_mode": "tighten",
+            "severity": "moderate",
+            "must_change": [
+                "Simplify sentence shape and reduce avoidable reading friction.",
+                "Keep the original meaning intact while improving scanability."
+            ]
+        },
+        "claim_pattern_detection": {
+            "repair_mode": "tighten",
+            "severity": "high",
+            "must_change": [
+                "Tighten vague or over-soft claims.",
+                "Keep claims within what the current text can responsibly support."
+            ]
+        },
+        "factual_statements_well_formed": {
+            "repair_mode": "tighten",
+            "severity": "high",
+            "must_change": [
+                "Rewrite weak or ambiguous factual phrasing into clear statements.",
+                "Keep the claim precise without overstating certainty."
+            ]
+        },
+        "howto_semantic_validity": {
+            "repair_mode": "suggest_structure",
+            "severity": "moderate",
+            "must_change": [
+                "Make each step explicit, ordered, and action-led.",
+                "Keep the sequence easy to extract as instructions."
+            ]
+        }
+    }
+}

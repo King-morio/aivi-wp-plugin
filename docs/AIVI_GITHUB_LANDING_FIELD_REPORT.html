@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AiVI Field Report</title>
+  <style>
+    :root {
+      --paper: #f4eee1;
+      --paper-2: #ece2d1;
+      --ink: #11161d;
+      --muted: #5d6673;
+      --blue: #2a5c8e;
+      --red: #cb5a40;
+      --line: rgba(17, 22, 29, 0.1);
+      --shadow: 0 24px 50px rgba(24, 30, 38, 0.12);
+      --radius-xl: 28px;
+      --radius-lg: 22px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Segoe UI", "Aptos", sans-serif;
+      background: linear-gradient(180deg, #f2eadc 0%, #f9f5ee 100%);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .page {
+      width: min(1220px, calc(100% - 36px));
+      margin: 0 auto;
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 24px 0 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand img {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+    }
+
+    .brand-copy span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      min-height: 700px;
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--line);
+      background: #11161d;
+      box-shadow: var(--shadow);
+    }
+
+    .hero img {
+      width: 100%;
+      height: 100%;
+      min-height: 700px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(12, 17, 22, 0.84) 0%, rgba(12, 17, 22, 0.54) 34%, rgba(12, 17, 22, 0.14) 70%),
+        linear-gradient(180deg, rgba(12, 17, 22, 0.08) 0%, rgba(12, 17, 22, 0.46) 100%);
+    }
+
+    .hero-copy {
+      position: absolute;
+      right: 34px;
+      bottom: 34px;
+      z-index: 1;
+      width: min(430px, calc(100% - 68px));
+      padding: 22px 24px;
+      border-radius: var(--radius-lg);
+      background: rgba(247, 241, 232, 0.7);
+      border: 1px solid rgba(17, 22, 29, 0.08);
+      backdrop-filter: blur(14px);
+    }
+
+    .eyebrow {
+      color: var(--red);
+      font: 700 0.8rem/1 "Segoe UI", sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      font-family: "Bahnschrift", "Segoe UI Variable Display", sans-serif;
+      letter-spacing: -0.03em;
+    }
+
+    h1 {
+      margin-top: 14px;
+      font-size: clamp(3rem, 7vw, 5.1rem);
+      line-height: 0.93;
+      max-width: 9ch;
+    }
+
+    .lead {
+      margin: 14px 0 0;
+      color: var(--muted);
+      max-width: 31ch;
+      line-height: 1.62;
+      font-size: 1.02rem;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .button {
+      min-height: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 18px;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+
+    .button-primary {
+      color: #fff;
+      background: var(--blue);
+    }
+
+    .button-secondary {
+      color: var(--ink);
+      border: 1px solid rgba(17, 22, 29, 0.12);
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    section {
+      padding: 30px 0 12px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .section-head p {
+      margin: 0;
+      max-width: 32ch;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    h2 {
+      font-size: clamp(2.05rem, 4vw, 3rem);
+    }
+
+    .feature-strip,
+    .story-grid,
+    .proof-grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    .feature-strip {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .story-grid {
+      grid-template-columns: 1.08fr 0.92fr;
+    }
+
+    .proof-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .panel,
+    .shot {
+      overflow: hidden;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.72);
+      box-shadow: var(--shadow);
+    }
+
+    .panel {
+      padding: 22px;
+    }
+
+    .panel h3 {
+      font-size: 1.1rem;
+      margin-bottom: 8px;
+    }
+
+    .panel p,
+    .shot-body p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.62;
+    }
+
+    .shot img {
+      width: 100%;
+      display: block;
+      object-fit: cover;
+      background: #11161d;
+    }
+
+    .shot-large img {
+      height: 520px;
+    }
+
+    .shot-medium img {
+      height: 320px;
+    }
+
+    .shot-body {
+      padding: 16px 18px 18px;
+    }
+
+    .shot-body strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .note {
+      margin: 34px 0 52px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.93rem;
+    }
+
+    @media (max-width: 980px) {
+      .feature-strip,
+      .story-grid,
+      .proof-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        min-height: 560px;
+      }
+
+      .hero img {
+        min-height: 560px;
+      }
+
+      .hero-copy {
+        left: 20px;
+        right: 20px;
+        width: auto;
+        bottom: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="nav">
+      <div class="brand">
+        <img src="../dist/wporg-svn-staging-1.0.24/assets/icon-256x256.png" alt="AiVI icon">
+        <div class="brand-copy">
+          <strong>AiVI</strong>
+          <span>Field Report</span>
+        </div>
+      </div>
+      <nav class="nav-links">
+        <a href="#workflow">Workflow</a>
+        <a href="#proof">Proof</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <img src="file:///C:/Users/Administrator/Downloads/Hero.png" alt="AiVI product hero">
+      <div class="hero-copy">
+        <span class="eyebrow">Publisher-first positioning</span>
+        <h1>Calmer, cleaner, and easier to trust.</h1>
+        <p class="lead">This version keeps the same spacious layout but softens the tone for a more publisher-friendly landing page.</p>
+        <div class="actions">
+          <a class="button button-primary" href="#workflow">See workflow</a>
+          <a class="button button-secondary" href="#proof">View proof</a>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="feature-strip">
+        <article class="panel"><h3>Lighter</h3><p>The page feels more like a trusted brief than a dark product showcase.</p></article>
+        <article class="panel"><h3>Readable</h3><p>It still lets the screenshots breathe and keeps the copy short.</p></article>
+        <article class="panel"><h3>Approachable</h3><p>Probably the safest direction for a broad WordPress audience.</p></article>
+      </div>
+    </section>
+
+    <section id="workflow">
+      <div class="section-head">
+        <h2>Lead with the product</h2>
+        <p>Same Obsidian-style pacing, but with a softer editorial tone.</p>
+      </div>
+      <div class="story-grid">
+        <article class="shot shot-large">
+          <img src="../assets/img/docs/user-guide-open-sidebar.jpg" alt="Open AiVI in WordPress">
+          <div class="shot-body">
+            <strong>Open AiVI in the editor</strong>
+            <p>Bring the workflow directly into WordPress.</p>
+          </div>
+        </article>
+        <article class="panel">
+          <h3>Why this section works</h3>
+          <p>The image gets room first, and the text only explains what the viewer needs to know. That keeps the page from feeling busy.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="proof">
+      <div class="section-head">
+        <h2>Support it with quieter proof</h2>
+        <p>Two supporting screenshots keep the page confident without shrinking everything into tiny cards.</p>
+      </div>
+      <div class="proof-grid">
+        <article class="shot shot-medium">
+          <img src="../assets/img/docs/user-guide-analysis-progress.jpg" alt="AiVI analysis progress">
+          <div class="shot-body">
+            <strong>See progress clearly</strong>
+            <p>Watch the analysis flow instead of guessing what is happening.</p>
+          </div>
+        </article>
+        <article class="shot shot-medium">
+          <img src="../assets/img/docs/user-guide-open-overlay.jpg" alt="AiVI overlay editor">
+          <div class="shot-body">
+            <strong>Revise in context</strong>
+            <p>Use the overlay workflow without cluttering the story.</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <div class="note">Field Report now keeps the Obsidian spacing while staying calmer and more broadly accessible.</div>
+  </div>
+</body>
+</html>

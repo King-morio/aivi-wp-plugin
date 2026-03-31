@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AiVI Operator Console</title>
+  <style>
+    :root {
+      --bg: #05111f;
+      --panel: #0b1828;
+      --panel-soft: rgba(10, 24, 40, 0.88);
+      --text: #eaf4ff;
+      --muted: #97abc3;
+      --blue: #4ca9ff;
+      --teal: #36e0cf;
+      --amber: #ffbf4d;
+      --line: rgba(76, 169, 255, 0.18);
+      --shadow: 0 30px 70px rgba(0, 0, 0, 0.32);
+      --radius-xl: 28px;
+      --radius-lg: 22px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: "Segoe UI", "Aptos", sans-serif;
+      background:
+        radial-gradient(circle at 12% 10%, rgba(76, 169, 255, 0.18), transparent 24%),
+        radial-gradient(circle at 85% 0%, rgba(54, 224, 207, 0.13), transparent 22%),
+        linear-gradient(180deg, #05111f 0%, #08192c 100%);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .page {
+      width: min(1220px, calc(100% - 36px));
+      margin: 0 auto;
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 24px 0 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand img {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      box-shadow: 0 0 24px rgba(76, 169, 255, 0.16);
+    }
+
+    .brand-copy span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      min-height: 720px;
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--line);
+      background: #08131f;
+      box-shadow: var(--shadow);
+    }
+
+    .hero img {
+      width: 100%;
+      height: 100%;
+      min-height: 720px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(5, 12, 19, 0.88) 0%, rgba(5, 12, 19, 0.58) 32%, rgba(5, 12, 19, 0.12) 66%, rgba(5, 12, 19, 0.26) 100%),
+        linear-gradient(180deg, rgba(5, 12, 19, 0.06) 0%, rgba(5, 12, 19, 0.48) 100%);
+    }
+
+    .hero-copy {
+      position: absolute;
+      right: 34px;
+      bottom: 34px;
+      z-index: 1;
+      width: min(450px, calc(100% - 68px));
+      padding: 22px 24px;
+      border-radius: var(--radius-lg);
+      background: rgba(9, 20, 33, 0.44);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--amber);
+      font: 700 0.78rem/1 "Segoe UI", sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--amber);
+      box-shadow: 0 0 18px rgba(255, 191, 77, 0.4);
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      font-family: "Bahnschrift", "Segoe UI Variable Display", sans-serif;
+      letter-spacing: -0.03em;
+    }
+
+    h1 {
+      margin-top: 14px;
+      font-size: clamp(3rem, 7vw, 5.2rem);
+      line-height: 0.92;
+      max-width: 9ch;
+    }
+
+    .lead {
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: 1.02rem;
+      line-height: 1.65;
+      max-width: 34ch;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .button {
+      min-height: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 18px;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+
+    .button-primary {
+      color: #041420;
+      background: linear-gradient(135deg, var(--teal), #8af1e6);
+    }
+
+    .button-secondary {
+      color: var(--text);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    section {
+      padding: 30px 0 12px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .section-head p {
+      margin: 0;
+      max-width: 32ch;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    h2 {
+      font-size: clamp(2.1rem, 4vw, 3rem);
+    }
+
+    .feature-strip,
+    .story-grid,
+    .proof-grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    .feature-strip {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .story-grid {
+      grid-template-columns: 1.08fr 0.92fr;
+    }
+
+    .proof-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .panel,
+    .shot {
+      overflow: hidden;
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--panel-soft);
+      box-shadow: var(--shadow);
+    }
+
+    .panel {
+      padding: 22px;
+    }
+
+    .panel h3 {
+      font-size: 1.1rem;
+      margin-bottom: 8px;
+    }
+
+    .panel p,
+    .shot-body p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.62;
+    }
+
+    .shot img {
+      width: 100%;
+      display: block;
+      object-fit: cover;
+      background: #08131f;
+    }
+
+    .shot-large img {
+      height: 520px;
+    }
+
+    .shot-medium img {
+      height: 320px;
+    }
+
+    .shot-body {
+      padding: 16px 18px 18px;
+    }
+
+    .shot-body strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .note {
+      margin: 34px 0 52px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--muted);
+      font-size: 0.93rem;
+    }
+
+    @media (max-width: 980px) {
+      .feature-strip,
+      .story-grid,
+      .proof-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        min-height: 560px;
+      }
+
+      .hero img {
+        min-height: 560px;
+      }
+
+      .hero-copy {
+        left: 20px;
+        right: 20px;
+        width: auto;
+        bottom: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="nav">
+      <div class="brand">
+        <img src="../dist/wporg-svn-staging-1.0.24/assets/icon-256x256.png" alt="AiVI icon">
+        <div class="brand-copy">
+          <strong>AiVI</strong>
+          <span>Operator Console</span>
+        </div>
+      </div>
+      <nav class="nav-links">
+        <a href="#workflow">Workflow</a>
+        <a href="#proof">Proof</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <img src="file:///C:/Users/Administrator/Downloads/Hero.png" alt="AiVI product hero">
+      <div class="hero-copy">
+        <span class="eyebrow">Inside the editor</span>
+        <h1>Sharper product energy, with room to breathe.</h1>
+        <p class="lead">This is the punchiest version, but it now follows the same image-led spacing and cleaner rhythm.</p>
+        <div class="actions">
+          <a class="button button-primary" href="#workflow">See workflow</a>
+          <a class="button button-secondary" href="#proof">View proof</a>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="feature-strip">
+        <article class="panel"><h3>Stronger</h3><p>The hero feels more cinematic and product-forward.</p></article>
+        <article class="panel"><h3>Cleaner</h3><p>The page now relies on image space instead of dense copy blocks.</p></article>
+        <article class="panel"><h3>Faster</h3><p>It lands the product story quickly, then gets out of the way.</p></article>
+      </div>
+    </section>
+
+    <section id="workflow">
+      <div class="section-head">
+        <h2>Start with the strongest view</h2>
+        <p>One full screenshot leads, then the rest of the flow gets room underneath it.</p>
+      </div>
+      <div class="story-grid">
+        <article class="shot shot-large">
+          <img src="../assets/img/docs/user-guide-run-analysis.jpg" alt="Run analysis">
+          <div class="shot-body">
+            <strong>Run analysis in the editor</strong>
+            <p>Start the review flow without breaking the writing context.</p>
+          </div>
+        </article>
+        <article class="panel">
+          <h3>Why this section works</h3>
+          <p>The layout borrows the Obsidian pacing but stays more energetic through color and contrast instead of more words.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="proof">
+      <div class="section-head">
+        <h2>Then support it below</h2>
+        <p>Two spacious follow-up panels feel stronger than a cramped multi-card gallery.</p>
+      </div>
+      <div class="proof-grid">
+        <article class="shot shot-medium">
+          <img src="../assets/img/docs/user-guide-analysis-progress.jpg" alt="Analysis progress">
+          <div class="shot-body">
+            <strong>Track progress clearly</strong>
+            <p>See the analysis state build up in real time.</p>
+          </div>
+        </article>
+        <article class="shot shot-medium">
+          <img src="../assets/img/docs/user-guide-review-results.jpg" alt="Review results">
+          <div class="shot-body">
+            <strong>Work through grouped findings</strong>
+            <p>Keep the outcome visible and actionable.</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <div class="note">Operator Console now keeps its punch while following the same roomier, less noisy structure.</div>
+  </div>
+</body>
+</html>

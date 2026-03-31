@@ -12,6 +12,7 @@
         overlayContent: null,
         overlayRail: null,
         overlayRailViewport: null,
+        overlayFixAssist: null,
         overlayShell: null,
         overlayDocTitle: null,
         blockMenu: null,
@@ -26,6 +27,7 @@
         issueMap: null,
         suggestions: {},
         metaStatus: '',
+        metaStatusSource: '',
         isStale: false,
         lastBlocksKey: '',
         inlinePanel: null,
@@ -47,7 +49,16 @@
         beforeUnloadHandler: null,
         documentMetaCache: new Map(),
         editorRevealCleanupTimer: null,
-        overlayApplyRuntime: null
+        overlayApplyRuntime: null,
+        fixAssistSourceItemMap: null,
+        fixAssistIssueRecords: [],
+        activeFixAssistIssueKey: '',
+        activeFixAssistIssue: null,
+        fixAssistOpenIssueKey: '',
+        fixAssistExpandedIssueKey: '',
+        fixAssistNotes: new Map(),
+        fixAssistSeenIssueKeys: new Set(),
+        fixAssistDismissHandler: null
     };
 
     function debugLog(level, message, data) {
@@ -327,6 +338,7 @@
         const desiredHeight = Math.max(state.overlayRail.scrollHeight, state.overlayViewport.scrollHeight) + panelChrome;
         const resolvedHeight = Math.min(viewportLimit, Math.max(460, Math.ceil(desiredHeight)));
         state.overlayPanel.style.height = `${resolvedHeight}px`;
+        positionFixAssistPanel();
         syncReviewRailScrollControls();
     }
 
@@ -417,6 +429,7 @@
             state.overlayContent = null;
             state.overlayRail = null;
             state.overlayRailViewport = null;
+            state.overlayFixAssist = null;
             state.overlayDocTitle = null;
             state.blockMenu = null;
             state.blockMenuNodeRef = '';
@@ -463,12 +476,15 @@
         const docTitle = context.doc.createElement('h1');
         docTitle.className = 'aivi-overlay-doc-title';
         docHeader.appendChild(docTitle);
+        const fixAssist = context.doc.createElement('aside');
+        fixAssist.className = 'aivi-overlay-fix-assist';
         const canvas = context.doc.createElement('div');
         canvas.className = 'aivi-overlay-canvas';
         stage.appendChild(docHeader);
         stage.appendChild(canvas);
 
         shell.appendChild(rail);
+        shell.appendChild(fixAssist);
         shell.appendChild(stage);
         content.appendChild(shell);
 
@@ -483,6 +499,7 @@
         state.overlayContent = canvas;
         state.overlayRail = rail;
         state.overlayRailViewport = null;
+        state.overlayFixAssist = fixAssist;
         state.overlayShell = shell;
         state.overlayDocTitle = docTitle;
         state.blockMenu = null;
@@ -497,6 +514,21 @@
                 hideInlinePanel();
             };
             state.contextDoc.addEventListener('click', state.inlineDismissHandler);
+        }
+        if (!state.fixAssistDismissHandler) {
+            state.fixAssistDismissHandler = (event) => {
+                if (!state.fixAssistOpenIssueKey) return;
+                const target = event.target;
+                if (target && (
+                    target.closest('.aivi-overlay-fix-assist-launch')
+                    || target.closest('.aivi-overlay-fix-assist')
+                    || target.closest('.aivi-overlay-fix-assist-popover')
+                )) {
+                    return;
+                }
+                setFixAssistOpenIssueKey('', 'outside_dismiss');
+            };
+            state.contextDoc.addEventListener('click', state.fixAssistDismissHandler);
         }
         if (!state.blockMenuDismissHandler) {
             state.blockMenuDismissHandler = (event) => {
@@ -546,6 +578,7 @@
         const managerStale = Boolean(window.AiviHighlightManager && window.AiviHighlightManager.isStale && window.AiviHighlightManager.isStale());
         state.isStale = isAutoStaleDetectionEnabled() ? managerStale : false;
         state.draftRestoreAttempted = false;
+        state.fixAssistSeenIssueKeys = new Set();
         setOverlayDirty(false);
         root.setAttribute('data-open', 'true');
         setOverlayScrollLock(true);
@@ -566,6 +599,14 @@
         }
         state.open = false;
         state.overlayApplyRuntime = null;
+        state.fixAssistIssueRecords = [];
+        state.activeFixAssistIssueKey = '';
+        state.activeFixAssistIssue = null;
+        clearFixAssistMetaStatus();
+        state.fixAssistOpenIssueKey = '';
+        state.fixAssistExpandedIssueKey = '';
+        state.fixAssistSeenIssueKeys = new Set();
+        Object.keys(state.suggestions || {}).forEach((key) => clearFixAssistPendingConsent(key));
         if (state.draftSaveTimer) {
             clearTimeout(state.draftSaveTimer);
             state.draftSaveTimer = null;
@@ -580,6 +621,10 @@
         if (state.blockMenuDismissHandler && state.contextDoc) {
             state.contextDoc.removeEventListener('mousedown', state.blockMenuDismissHandler, true);
             state.blockMenuDismissHandler = null;
+        }
+        if (state.fixAssistDismissHandler && state.contextDoc) {
+            state.contextDoc.removeEventListener('click', state.fixAssistDismissHandler);
+            state.fixAssistDismissHandler = null;
         }
         if (state.overlayScrollHandler && state.overlayViewport) {
             state.overlayViewport.removeEventListener('scroll', state.overlayScrollHandler);
@@ -704,7 +749,6 @@
         ({ checkName }) => `This segment needs revision for ${checkName}. Make the claim clearer and better supported for machine-readable answers.`,
         ({ checkName }) => `This portion relates to ${checkName}. Refine wording and evidence so AI answer systems can ground citations correctly.`
     ];
-    const OVERLAY_FIX_WITH_AI_ENABLED = false;
     const OVERLAY_DRAFT_VERSION = 2;
     const OVERLAY_EDITOR_PERSISTENCE_NOTE = 'Edit inside AiVI, then copy the revised text and paste it into the matching WordPress block. Close this panel anytime to return to the editor.';
 
@@ -743,6 +787,29 @@
             return text;
         }
         return buildInlineFallbackMessage(check);
+    }
+
+    const ANSWER_EXTRACTABILITY_CHECK_IDS = new Set([
+        'immediate_answer_placement',
+        'answer_sentence_concise',
+        'question_answer_alignment',
+        'clear_answer_formatting'
+    ]);
+
+    function resolveIssueCheckId(issueLike) {
+        if (!issueLike || typeof issueLike !== 'object') return '';
+        return normalizeText(
+            issueLike.checkId
+            || issueLike.check_id
+            || (issueLike.check && (issueLike.check.check_id || issueLike.check.id))
+            || issueLike.id
+            || ''
+        ).toLowerCase();
+    }
+
+    function isAnswerExtractabilityIssue(issueLike) {
+        const checkId = resolveIssueCheckId(issueLike);
+        return !!checkId && ANSWER_EXTRACTABILITY_CHECK_IDS.has(checkId);
     }
 
     function normalizeFixSteps(steps, fallbackStep) {
@@ -2035,6 +2102,30 @@
         return fallback;
     }
 
+    function resolvePreferredIssueSummaryText(issueLike, explanationPack, issueDisplayName) {
+        if (!issueLike || typeof issueLike !== 'object') return '';
+        const fallbackName = normalizeText(issueDisplayName || resolveIssueDisplayName(issueLike));
+        const candidates = [];
+        if (isAnswerExtractabilityIssue(issueLike) && explanationPack && explanationPack.what_failed) {
+            candidates.push(explanationPack.what_failed);
+        }
+        candidates.push(
+            issueLike.reviewSummary,
+            issueLike.review_summary,
+            issueLike.highlight && issueLike.highlight.review_summary,
+            issueLike.check && issueLike.check.review_summary,
+            issueLike.message,
+            issueLike.highlight && issueLike.highlight.message,
+            issueLike.check && issueLike.check.message,
+            issueLike.check && issueLike.check.explanation
+        );
+        for (let i = 0; i < candidates.length; i += 1) {
+            const normalized = sanitizeInlineIssueMessage(candidates[i] || '', { name: fallbackName });
+            if (normalized) return normalized;
+        }
+        return '';
+    }
+
     function buildGuidanceTextNode(text, extraClass) {
         if (!state.contextDoc) return null;
         const narrative = stripGuidanceScaffold(text || '');
@@ -2072,6 +2163,20 @@
         }
         if (window.AIVI_FEATURE_FLAGS && typeof window.AIVI_FEATURE_FLAGS.STABILITY_RELEASE_MODE === 'boolean') {
             return window.AIVI_FEATURE_FLAGS.STABILITY_RELEASE_MODE;
+        }
+        return false;
+    }
+
+    function isFixAssistGenerationEnabled() {
+        const cfg = getConfig();
+        if (typeof cfg.fixAssistGenerationEnabled === 'boolean') {
+            return cfg.fixAssistGenerationEnabled;
+        }
+        if (cfg.featureFlags && typeof cfg.featureFlags.FIX_ASSIST_GENERATION_ENABLED === 'boolean') {
+            return cfg.featureFlags.FIX_ASSIST_GENERATION_ENABLED;
+        }
+        if (window.AIVI_FEATURE_FLAGS && typeof window.AIVI_FEATURE_FLAGS.FIX_ASSIST_GENERATION_ENABLED === 'boolean') {
+            return window.AIVI_FEATURE_FLAGS.FIX_ASSIST_GENERATION_ENABLED;
         }
         return true;
     }
@@ -2842,6 +2947,642 @@
         state.overlayDocTitle.textContent = getOverlayDocumentTitle(blocks);
     }
 
+    function buildFixAssistIssueKey(issue, fallbackIndex) {
+        if (!issue || typeof issue !== 'object') return '';
+        const explicit = String(issue.issue_key || issue.key || '').trim();
+        if (explicit) return explicit;
+        const checkId = String(issue.check_id || issue.id || 'issue').trim() || 'issue';
+        const instanceIndex = Number.isInteger(issue.instance_index)
+            ? issue.instance_index
+            : (Number.isInteger(fallbackIndex) ? fallbackIndex : 0);
+        return `${checkId}:${instanceIndex}`;
+    }
+
+    function buildCanonicalFixAssistSourceKey(issue, fallbackIndex) {
+        return buildFixAssistIssueKey(issue, fallbackIndex);
+    }
+
+    function humanizeCheckIdentifier(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        return raw
+            .replace(/[_-]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .split(' ')
+            .map((part) => {
+                if (!part) return '';
+                if (/^[A-Z0-9]{2,}$/.test(part)) return part;
+                return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+            })
+            .join(' ');
+    }
+
+    function resolveIssueDisplayName(issueLike) {
+        if (!issueLike || typeof issueLike !== 'object') return 'Issue detected';
+        const candidates = [
+            issueLike.checkName,
+            issueLike.check_name,
+            issueLike.name,
+            issueLike.title,
+            issueLike.check && issueLike.check.name,
+            issueLike.check && issueLike.check.title,
+            issueLike.highlight && issueLike.highlight.check_name,
+            issueLike.highlight && issueLike.highlight.name
+        ];
+        for (let i = 0; i < candidates.length; i += 1) {
+            const normalized = normalizeText(candidates[i] || '');
+            if (normalized) return normalized;
+        }
+        const checkId = normalizeText(
+            issueLike.checkId
+            || issueLike.check_id
+            || (issueLike.check && (issueLike.check.check_id || issueLike.check.id))
+            || issueLike.id
+            || ''
+        );
+        const humanized = humanizeCheckIdentifier(checkId);
+        return humanized || 'Issue detected';
+    }
+
+    function resolveCopilotAnalyzerNote(issueLike, issueDisplayName, explanationPack) {
+        if (!issueLike || typeof issueLike !== 'object') return 'Issue detected.';
+        const fallbackName = normalizeText(issueDisplayName || resolveIssueDisplayName(issueLike));
+        const candidates = [
+            issueLike.issue_explanation,
+            issueLike.highlight && issueLike.highlight.issue_explanation,
+            issueLike.check && issueLike.check.issue_explanation,
+            explanationPack && explanationPack.issue_explanation,
+            explanationPack && explanationPack.what_failed,
+            issueLike.reviewSummary,
+            issueLike.review_summary,
+            issueLike.highlight && issueLike.highlight.review_summary,
+            issueLike.check && issueLike.check.review_summary,
+            issueLike.message,
+            issueLike.highlight && issueLike.highlight.message,
+            issueLike.check && issueLike.check.message,
+            issueLike.check && issueLike.check.explanation,
+            issueLike.highlight && issueLike.highlight.text,
+            issueLike.snippet
+        ];
+        for (let i = 0; i < candidates.length; i += 1) {
+            const normalized = sanitizeInlineIssueMessage(candidates[i] || '', { name: fallbackName });
+            if (normalized) return normalized;
+        }
+        return 'Issue detected.';
+    }
+
+    function buildFixAssistIssueRecord(issue, fallbackIndex) {
+        if (!issue || typeof issue !== 'object') return null;
+        const issueDisplayName = resolveIssueDisplayName(issue);
+        const issueKey = buildFixAssistIssueKey(issue, fallbackIndex);
+        const sourceKey = String(
+            issue.copilot_source_key
+            || issue.source_issue_key
+            || issue.issue_key
+            || issueKey
+            || ''
+        ).trim();
+        const preferredSummary = normalizeText(issue.review_summary || '');
+        const fallbackSummaryText = sanitizeInlineIssueMessage(
+            preferredSummary || issue.message || '',
+            { name: issueDisplayName }
+        ) || preferredSummary || '';
+        const explanationPack = resolveExplanationPack(
+            clonePlainObject(issue.explanation_pack),
+            {
+                what_failed: fallbackSummaryText || 'Issue detected.',
+                how_to_fix_step: issue.action_suggestion || 'Review this section directly in the editor.',
+                issue_explanation: issue.issue_explanation || ''
+            }
+        );
+        const summaryText = resolvePreferredIssueSummaryText(issue, explanationPack, issueDisplayName)
+            || fallbackSummaryText
+            || 'Issue detected.';
+        const detailText = resolveRecommendationDetailText(issue, explanationPack, summaryText);
+        const analyzerNote = resolveCopilotAnalyzerNote(issue, issueDisplayName, explanationPack);
+        const availability = buildFixAssistAvailability(issue);
+        const rewriteTarget = availability && availability.rewriteTarget
+            ? clonePlainObject(availability.rewriteTarget)
+            : clonePlainObject(issue.rewrite_target);
+        const nodeRefs = [];
+        [
+            issue.jump_node_ref,
+            issue.node_ref,
+            rewriteTarget && rewriteTarget.anchor_node_ref,
+            rewriteTarget && rewriteTarget.primary_repair_node_ref,
+            rewriteTarget && rewriteTarget.section_start_node_ref,
+            rewriteTarget && rewriteTarget.section_end_node_ref,
+            rewriteTarget && rewriteTarget.boundary_node_ref,
+            rewriteTarget && rewriteTarget.primary_node_ref
+        ].forEach((value) => {
+            const normalized = String(value || '').trim();
+            if (normalized) nodeRefs.push(normalized);
+        });
+        if (rewriteTarget && Array.isArray(rewriteTarget.repair_node_refs)) {
+            rewriteTarget.repair_node_refs.forEach((value) => {
+                const normalized = String(value || '').trim();
+                if (normalized) nodeRefs.push(normalized);
+            });
+        }
+        if (rewriteTarget && Array.isArray(rewriteTarget.node_refs)) {
+            rewriteTarget.node_refs.forEach((value) => {
+                const normalized = String(value || '').trim();
+                if (normalized) nodeRefs.push(normalized);
+            });
+        }
+        return {
+            key: issueKey,
+            sourceKey: sourceKey || issueKey,
+            checkId: String(issue.check_id || '').trim(),
+            checkName: issueDisplayName,
+            instanceIndex: Number.isFinite(Number(issue.instance_index)) ? Number(issue.instance_index) : (Number.isFinite(Number(fallbackIndex)) ? Number(fallbackIndex) : null),
+            summaryText,
+            detailText,
+            analyzerNote,
+            actionable: availability ? availability.actionable === true : !!(rewriteTarget && rewriteTarget.actionable === true),
+            rewriteTargetMode: String(rewriteTarget && rewriteTarget.mode ? rewriteTarget.mode : '').trim(),
+            rewriteOperation: String(rewriteTarget && rewriteTarget.operation ? rewriteTarget.operation : '').trim(),
+            fixAssistTriage: normalizeFixAssistTriage(issue.fix_assist_triage, availability || { actionable: !!(rewriteTarget && rewriteTarget.actionable === true), variantsAllowed: !!(rewriteTarget && rewriteTarget.actionable === true) }),
+            jumpNodeRef: String(
+                issue.jump_node_ref
+                || (rewriteTarget && rewriteTarget.primary_repair_node_ref)
+                || (rewriteTarget && rewriteTarget.primary_node_ref)
+                || issue.node_ref
+                || ''
+            ).trim(),
+            nodeRefs: Array.from(new Set(nodeRefs)),
+            reviewSummary: preferredSummary,
+            issueExplanation: normalizeText(issue.issue_explanation || ''),
+            explanationPack
+        };
+    }
+
+    function buildFixAssistIssueRecordFromInlineItem(item) {
+        if (!item || typeof item !== 'object') return null;
+        const issueDisplayName = resolveIssueDisplayName(item);
+        const issueKey = String(item.key || buildFixAssistIssueKey({
+            check_id: item.check && (item.check.check_id || item.check.id),
+            instance_index: item.highlight && item.highlight.instance_index
+        }, 0)).trim();
+        const fallbackSummaryText = sanitizeInlineIssueMessage(
+            item.highlight?.message || item.check?.explanation || item.check?.title || item.check?.name || 'Issue detected',
+            { name: issueDisplayName }
+        ) || '';
+        const explanationPack = resolveExplanationPack(
+            firstObject(
+                item.highlight && item.highlight.explanation_pack,
+                item.check && item.check.explanation_pack,
+                item && item.explanation_pack
+            ),
+            {
+                what_failed: fallbackSummaryText || 'Issue detected.',
+                how_to_fix_step: (item && item.check && item.check.action_suggestion)
+                    || (item && item.repair_intent && item.repair_intent.instruction)
+                    || '',
+                issue_explanation: item.issue_explanation || item.highlight?.issue_explanation || item.check?.issue_explanation || ''
+            }
+        );
+        const summaryText = resolvePreferredIssueSummaryText(item, explanationPack, issueDisplayName)
+            || fallbackSummaryText
+            || 'Issue detected.';
+        const detailText = resolveRecommendationDetailText(
+            {
+                issue_explanation: item.issue_explanation || item.highlight?.issue_explanation || item.check?.issue_explanation || '',
+                review_summary: item.review_summary || item.highlight?.review_summary || item.check?.review_summary || ''
+            },
+            explanationPack,
+            summaryText
+        );
+        const analyzerNote = resolveCopilotAnalyzerNote(item, issueDisplayName, explanationPack);
+        const availability = buildFixAssistAvailability(item);
+        const rewriteContext = availability && availability.rewriteContext ? availability.rewriteContext : resolveItemRewriteContext(item);
+        const rewriteTarget = availability && availability.rewriteTarget
+            ? availability.rewriteTarget
+            : (rewriteContext && rewriteContext.rewrite_target ? rewriteContext.rewrite_target : null);
+        const nodeRefs = [];
+        [
+            item.highlight && (item.highlight.node_ref || item.highlight.nodeRef),
+            rewriteTarget && rewriteTarget.anchor_node_ref,
+            rewriteTarget && rewriteTarget.primary_repair_node_ref,
+            rewriteTarget && rewriteTarget.section_start_node_ref,
+            rewriteTarget && rewriteTarget.section_end_node_ref,
+            rewriteTarget && rewriteTarget.boundary_node_ref,
+            rewriteTarget && rewriteTarget.primary_node_ref
+        ].forEach((value) => {
+            const normalized = String(value || '').trim();
+            if (normalized) nodeRefs.push(normalized);
+        });
+        if (rewriteTarget && Array.isArray(rewriteTarget.repair_node_refs)) {
+            rewriteTarget.repair_node_refs.forEach((value) => {
+                const normalized = String(value || '').trim();
+                if (normalized) nodeRefs.push(normalized);
+            });
+        }
+        if (rewriteTarget && Array.isArray(rewriteTarget.node_refs)) {
+            rewriteTarget.node_refs.forEach((value) => {
+                const normalized = String(value || '').trim();
+                if (normalized) nodeRefs.push(normalized);
+            });
+        }
+        return {
+            key: issueKey,
+            sourceKey: String(item.copilot_source_key || item.source_issue_key || item.issue_key || issueKey).trim(),
+            checkId: String(item.check?.check_id || item.check?.id || '').trim(),
+            checkName: issueDisplayName,
+            instanceIndex: Number.isFinite(Number(item.highlight && item.highlight.instance_index))
+                ? Number(item.highlight.instance_index)
+                : null,
+            summaryText,
+            detailText,
+            analyzerNote,
+            actionable: availability ? availability.actionable === true : !!(rewriteTarget && rewriteTarget.actionable === true),
+            rewriteTargetMode: String(rewriteTarget && rewriteTarget.mode ? rewriteTarget.mode : '').trim(),
+            rewriteOperation: String(rewriteTarget && rewriteTarget.operation ? rewriteTarget.operation : '').trim(),
+            fixAssistTriage: normalizeFixAssistTriage(
+                firstObject(
+                    item && item.fix_assist_triage,
+                    item && item.highlight && item.highlight.fix_assist_triage,
+                    item && item.check && item.check.fix_assist_triage
+                ),
+                availability || { actionable: !!(rewriteTarget && rewriteTarget.actionable === true), variantsAllowed: !!(rewriteTarget && rewriteTarget.actionable === true) }
+            ),
+            jumpNodeRef: String(
+                (rewriteTarget && rewriteTarget.primary_repair_node_ref)
+                || (rewriteTarget && rewriteTarget.primary_node_ref)
+                || (item.highlight && (item.highlight.node_ref || item.highlight.nodeRef))
+                || ''
+            ).trim(),
+            nodeRefs: Array.from(new Set(nodeRefs)),
+            reviewSummary: normalizeText(item.review_summary || item.highlight?.review_summary || item.check?.review_summary || ''),
+            issueExplanation: normalizeText(item.issue_explanation || item.highlight?.issue_explanation || item.check?.issue_explanation || ''),
+            explanationPack
+        };
+    }
+
+    function renderFixAssistPanel() {
+        if (!state.overlayFixAssist || !state.contextDoc) return;
+        const panel = state.overlayFixAssist;
+        panel.innerHTML = '';
+        panel.hidden = true;
+        panel.removeAttribute('data-open');
+        panel.removeAttribute('data-placement');
+        panel.style.left = '';
+        panel.style.top = '';
+        panel.style.width = '';
+        panel.style.maxWidth = '';
+        panel.style.height = '';
+        panel.style.visibility = '';
+        panel.style.setProperty('--aivi-fix-assist-arrow-left', '36px');
+        const issueKey = String(state.fixAssistOpenIssueKey || '').trim();
+        if (!issueKey) return;
+        const issue = Array.isArray(state.fixAssistIssueRecords)
+            ? state.fixAssistIssueRecords.find((record) => record && record.key === issueKey)
+            : null;
+        if (!issue) return;
+        const bubble = state.contextDoc.createElement('div');
+        bubble.className = 'aivi-overlay-fix-assist-bubble';
+        const card = buildFixAssistRailPopover(issue);
+        if (!card) return;
+        bubble.appendChild(card);
+        panel.appendChild(bubble);
+        panel.hidden = false;
+        panel.setAttribute('data-open', 'true');
+        panel.style.visibility = 'hidden';
+        positionFixAssistPanel();
+        panel.style.visibility = '';
+    }
+
+    function findFixAssistAnchorItem(issueKey) {
+        if (!state.overlayRail || !issueKey) return null;
+        const escaped = escapeAttributeSelectorValue(issueKey);
+        if (!escaped) return null;
+        return state.overlayRail.querySelector(`.aivi-overlay-review-item[data-fix-assist-key="${escaped}"]`);
+    }
+
+    function positionFixAssistPanel() {
+        if (!state.overlayFixAssist || state.overlayFixAssist.hidden || !state.overlayShell || !state.overlayRail) return;
+        const issueKey = String(state.fixAssistOpenIssueKey || '').trim();
+        if (!issueKey) return;
+        const anchorItem = findFixAssistAnchorItem(issueKey);
+        const bubble = state.overlayFixAssist.querySelector('.aivi-overlay-fix-assist-bubble');
+        const card = state.overlayFixAssist.querySelector('.aivi-overlay-fix-assist-popover');
+        if (!anchorItem || !bubble || !card) {
+            state.overlayFixAssist.hidden = true;
+            state.overlayFixAssist.removeAttribute('data-open');
+            return;
+        }
+
+        const view = state.contextDoc.defaultView || window;
+        const shellRect = state.overlayShell.getBoundingClientRect();
+        const railRect = state.overlayRail.getBoundingClientRect();
+        const anchorRect = anchorItem.getBoundingClientRect();
+        const shellWidth = Math.max(0, shellRect.width);
+        const railWidth = Math.max(0, railRect.width);
+        if (!shellWidth || !railWidth) return;
+
+        const inset = 10;
+        const railLeft = railRect.left - shellRect.left;
+        const railTop = railRect.top - shellRect.top;
+        const bubbleWidth = Math.max(300, Math.floor(railWidth - (inset * 2)));
+        const bubbleHeight = Math.max(
+            260,
+            Math.min(
+                Math.floor(railRect.height - (inset * 2)),
+                Math.floor((view.innerHeight || 900) - 140)
+            )
+        );
+        const left = Math.max(railLeft + inset, Math.min(railLeft + inset, shellWidth - bubbleWidth - inset));
+        const top = railTop + inset;
+        const body = card.querySelector('.aivi-overlay-fix-assist-popover-body');
+
+        state.overlayFixAssist.style.left = `${Math.round(left)}px`;
+        state.overlayFixAssist.style.top = `${Math.round(top)}px`;
+        state.overlayFixAssist.style.width = `${bubbleWidth}px`;
+        state.overlayFixAssist.style.maxWidth = `${bubbleWidth}px`;
+        state.overlayFixAssist.style.height = `${bubbleHeight}px`;
+        state.overlayFixAssist.setAttribute('data-placement', 'rail');
+        card.style.maxHeight = '';
+        if (body) {
+            body.style.maxHeight = '';
+        }
+    }
+
+    function syncFixAssistSelection() {
+        if (state.overlayRail) {
+            const activeKey = String(state.activeFixAssistIssueKey || '').trim();
+            const items = state.overlayRail.querySelectorAll('.aivi-overlay-review-item[data-fix-assist-key]');
+            items.forEach((item) => {
+                const isActive = !!activeKey && item.getAttribute('data-fix-assist-key') === activeKey;
+                item.classList.toggle('is-fix-assist-active', isActive);
+                item.setAttribute('data-fix-assist-open', isActive && state.fixAssistOpenIssueKey === activeKey ? 'true' : 'false');
+                const launch = item.querySelector('.aivi-overlay-fix-assist-launch');
+                if (launch) {
+                    launch.setAttribute('aria-expanded', isActive && state.fixAssistOpenIssueKey === activeKey ? 'true' : 'false');
+                }
+            });
+        }
+        renderFixAssistPanel();
+        queueOverlayLayoutSync();
+    }
+
+    function setActiveFixAssistIssue(key, fallbackRecord, source) {
+        const activeKey = String(key || '').trim();
+        const nextIssue = activeKey
+            ? (state.fixAssistIssueRecords.find((record) => record && record.key === activeKey) || fallbackRecord || null)
+            : (fallbackRecord || null);
+        const nextKey = nextIssue && nextIssue.key ? String(nextIssue.key).trim() : '';
+        const changed = nextKey !== state.activeFixAssistIssueKey;
+        state.activeFixAssistIssueKey = nextKey;
+        state.activeFixAssistIssue = nextIssue || null;
+        if (changed) {
+            state.fixAssistExpandedIssueKey = '';
+            if (state.fixAssistOpenIssueKey !== nextKey) {
+                state.fixAssistOpenIssueKey = '';
+            }
+        }
+        syncFixAssistSelection();
+    }
+
+    function activateFixAssistIssueForItem(item) {
+        const fallbackRecord = buildFixAssistIssueRecordFromInlineItem(item);
+        if (!fallbackRecord) return;
+        const existingRecord = state.fixAssistIssueRecords.find((record) => record && record.key === fallbackRecord.key) || fallbackRecord;
+        setActiveFixAssistIssue(existingRecord.key, existingRecord, 'inline_highlight');
+    }
+
+    function syncFixAssistIssueFromNodeRef(nodeRef) {
+        const normalized = String(nodeRef || '').trim();
+        if (!normalized || !Array.isArray(state.fixAssistIssueRecords) || !state.fixAssistIssueRecords.length) return;
+        const match = state.fixAssistIssueRecords.find((record) => Array.isArray(record.nodeRefs) && record.nodeRefs.indexOf(normalized) !== -1);
+        if (match) {
+            setActiveFixAssistIssue(match.key, match, 'block_focus');
+        }
+    }
+
+    function buildFixAssistRailPopover(issue) {
+        if (!state.contextDoc || !issue) return null;
+        const popover = state.contextDoc.createElement('div');
+        popover.className = 'aivi-overlay-fix-assist-popover';
+        popover.addEventListener('click', (event) => {
+            event.stopPropagation();
+        });
+
+        const closeBtn = state.contextDoc.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'aivi-overlay-fix-assist-close';
+        closeBtn.setAttribute('aria-label', 'Close copilot');
+        closeBtn.textContent = '×';
+        closeBtn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            setFixAssistOpenIssueKey('', 'close_button');
+        });
+        popover.appendChild(closeBtn);
+
+        const availability = buildFixAssistAvailability(issue);
+        const triage = normalizeFixAssistTriage(issue.fixAssistTriage, availability);
+        const badge = resolveFixAssistBadge(triage);
+        const userNote = state.fixAssistNotes.get(issue.key) || '';
+        const generationEnabled = isFixAssistGenerationEnabled()
+            && !isStabilityReleaseModeEnabled()
+            && getGuardrailState().blockAi !== true;
+        const suggestionInfo = issue && issue.key && state.suggestions
+            ? state.suggestions[issue.key]
+            : null;
+        const hasVariants = !!(suggestionInfo && Array.isArray(suggestionInfo.variants) && suggestionInfo.variants.length);
+        const requiresConsentPrompt = !!(suggestionInfo && suggestionInfo.consent_required === true);
+        const displayMode = resolveFixAssistDisplayMode({
+            hasVariants,
+            requiresConsentPrompt
+        });
+        const shellBadge = resolveFixAssistShellBadge(triage, displayMode);
+        const titleText = resolveFixAssistShellTitle(issue);
+        const helperMessage = normalizeText(
+            (displayMode === 'helper' && suggestionInfo && suggestionInfo.status && !hasVariants
+                ? suggestionInfo.status
+                : '')
+            || (displayMode === 'helper' && userNote ? userNote : '')
+            || buildFixAssistHelperText(issue, triage, availability)
+        );
+        const shellNote = buildFixAssistShellNote(displayMode, triage);
+
+        const head = state.contextDoc.createElement('div');
+        head.className = 'aivi-overlay-fix-assist-popover-head';
+
+        const top = state.contextDoc.createElement('div');
+        top.className = 'aivi-overlay-fix-assist-popover-top';
+        const brand = state.contextDoc.createElement('div');
+        brand.className = 'aivi-overlay-fix-assist-popover-brand';
+        const brandIcon = buildFixAssistIconNode('aivi-overlay-fix-assist-popover-icon');
+        if (brandIcon) {
+            brand.appendChild(brandIcon);
+        }
+        const brandText = state.contextDoc.createElement('span');
+        brandText.className = 'aivi-overlay-fix-assist-popover-brand-text';
+        brandText.textContent = 'Copilot';
+        brand.appendChild(brandText);
+
+        const topActions = state.contextDoc.createElement('div');
+        topActions.className = 'aivi-overlay-fix-assist-popover-top-actions';
+
+        const stateBadge = state.contextDoc.createElement('span');
+        stateBadge.className = 'aivi-overlay-fix-assist-state';
+        stateBadge.setAttribute('data-state', shellBadge.theme);
+        stateBadge.textContent = shellBadge.text;
+
+        const title = state.contextDoc.createElement('div');
+        title.className = 'aivi-overlay-fix-assist-popover-title';
+        title.textContent = titleText;
+
+        top.appendChild(brand);
+        topActions.appendChild(stateBadge);
+        top.appendChild(topActions);
+        head.appendChild(top);
+        head.appendChild(title);
+        popover.appendChild(head);
+
+        const body = state.contextDoc.createElement('div');
+        body.className = 'aivi-overlay-fix-assist-popover-body';
+
+        if (displayMode === 'helper' && helperMessage) {
+            const helper = state.contextDoc.createElement('div');
+            helper.className = 'aivi-overlay-fix-assist-helper';
+            helper.textContent = helperMessage;
+            body.appendChild(helper);
+        }
+
+        if (displayMode === 'consent') {
+            const helper = state.contextDoc.createElement('div');
+            helper.className = 'aivi-overlay-fix-assist-helper';
+            helper.textContent = normalizeText(
+                suggestionInfo && suggestionInfo.consent_message
+                    ? suggestionInfo.consent_message
+                    : buildFixAssistConsentMessage()
+            );
+            body.appendChild(helper);
+        }
+
+        if (shellNote) {
+            const note = state.contextDoc.createElement('div');
+            note.className = 'aivi-overlay-fix-assist-note';
+            note.textContent = shellNote;
+            body.appendChild(note);
+        }
+
+        const dock = state.contextDoc.createElement('div');
+        dock.className = 'aivi-overlay-fix-assist-popover-dock';
+
+        const variantsBtn = state.contextDoc.createElement('button');
+        variantsBtn.type = 'button';
+        variantsBtn.className = 'aivi-overlay-fix-assist-btn primary';
+        variantsBtn.textContent = hasVariants ? 'Regenerate variants' : 'Show 3 variants';
+        variantsBtn.addEventListener('click', async (event) => {
+            event.stopPropagation();
+            emitFixAssistTelemetry('overlay_fix_assist_help_requested', issue, {
+                source: 'fix_assist_popover',
+                request_kind: 'variants'
+            });
+            await beginFixAssistVariantRequestFlow(issue, null, availability, triage, 'fix_assist_popover');
+        });
+
+        const keepBtn = state.contextDoc.createElement('button');
+        keepBtn.type = 'button';
+        keepBtn.className = 'aivi-overlay-fix-assist-btn';
+        keepBtn.textContent = 'Keep as is';
+        keepBtn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            emitFixAssistTelemetry('overlay_fix_assist_keep_as_is_selected', issue, {
+                source: 'fix_assist_popover'
+            });
+            state.fixAssistExpandedIssueKey = '';
+            const note = triage.keep_as_is_note || ((availability && availability.actionable === true)
+                ? 'Marked as keep as is for now. AiVI can revisit this section later if you change it.'
+                : 'Marked as keep as is. This looks acceptable unless you want a different presentation style.');
+            state.fixAssistNotes.set(issue.key, note);
+            setFixAssistMetaStatus(note);
+            refreshReviewRailPreservingScroll();
+        });
+
+        if (displayMode === 'consent') {
+            const verifyBtn = state.contextDoc.createElement('button');
+            verifyBtn.type = 'button';
+            verifyBtn.className = 'aivi-overlay-fix-assist-btn primary';
+            verifyBtn.textContent = 'Verify first';
+            verifyBtn.addEventListener('click', async (event) => {
+                event.stopPropagation();
+                emitFixAssistTelemetry('overlay_fix_assist_help_requested', issue, {
+                    source: 'fix_assist_popover',
+                    request_kind: 'verify_first'
+                });
+                await requestFixAssistVariants(
+                    issue,
+                    null,
+                    availability && availability.rewriteContext ? availability.rewriteContext : resolveItemRewriteContext(issue),
+                    'fix_assist_popover',
+                    'verify_first'
+                );
+            });
+
+            const localBtn = state.contextDoc.createElement('button');
+            localBtn.type = 'button';
+            localBtn.className = 'aivi-overlay-fix-assist-btn';
+            localBtn.textContent = 'Stay local';
+            localBtn.addEventListener('click', async (event) => {
+                event.stopPropagation();
+                emitFixAssistTelemetry('overlay_fix_assist_help_requested', issue, {
+                    source: 'fix_assist_popover',
+                    request_kind: 'local_only'
+                });
+                await requestFixAssistVariants(
+                    issue,
+                    null,
+                    availability && availability.rewriteContext ? availability.rewriteContext : resolveItemRewriteContext(issue),
+                    'fix_assist_popover',
+                    'local_only'
+                );
+            });
+
+            const cancelBtn = state.contextDoc.createElement('button');
+            cancelBtn.type = 'button';
+            cancelBtn.className = 'aivi-overlay-fix-assist-btn';
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                clearFixAssistPendingConsent(issue.key);
+                state.fixAssistNotes.delete(issue.key);
+                setFixAssistMetaStatus('Copilot stayed on the current issue without starting a verification request.');
+                refreshReviewRailPreservingScroll();
+            });
+
+            dock.appendChild(verifyBtn);
+            dock.appendChild(localBtn);
+            dock.appendChild(cancelBtn);
+        } else {
+            if (generationEnabled) {
+                dock.appendChild(variantsBtn);
+            }
+            dock.appendChild(keepBtn);
+        }
+
+        if (displayMode === 'variants' && suggestionInfo && Array.isArray(suggestionInfo.variants) && suggestionInfo.variants.length) {
+            const summaryText = normalizeText(buildFixAssistStatusText(suggestionInfo, ''));
+            if (summaryText && summaryText.toLowerCase() !== 'variants ready.') {
+                const summary = state.contextDoc.createElement('div');
+                summary.className = 'aivi-overlay-fix-assist-note';
+                summary.textContent = summaryText;
+                body.appendChild(summary);
+            }
+            const variantsWrap = state.contextDoc.createElement('div');
+            variantsWrap.className = 'aivi-overlay-inline-variants aivi-overlay-fix-assist-variants';
+            renderVariants({ key: issue.key }, variantsWrap);
+            body.appendChild(variantsWrap);
+        }
+
+        popover.appendChild(body);
+        popover.appendChild(dock);
+        return popover;
+    }
+
     function renderReviewRail(recommendations) {
         if (!state.overlayRail || !state.contextDoc) return;
         const issues = Array.isArray(recommendations) ? recommendations : [];
@@ -2895,11 +3636,26 @@
         summary.appendChild(count);
         state.overlayRail.appendChild(summary);
 
+        const fixAssistIssueRecords = issues.map((issue, index) => buildFixAssistIssueRecord(issue, index)).filter(Boolean);
+        state.fixAssistIssueRecords = fixAssistIssueRecords;
+        const preservedIssue = state.activeFixAssistIssueKey
+            ? fixAssistIssueRecords.find((record) => record.key === state.activeFixAssistIssueKey)
+            : null;
+        state.activeFixAssistIssue = preservedIssue || fixAssistIssueRecords[0] || null;
+        state.activeFixAssistIssueKey = state.activeFixAssistIssue ? state.activeFixAssistIssue.key : '';
+        if (state.fixAssistOpenIssueKey && state.fixAssistOpenIssueKey !== state.activeFixAssistIssueKey) {
+            state.fixAssistOpenIssueKey = '';
+        }
+        if (state.fixAssistExpandedIssueKey && state.fixAssistExpandedIssueKey !== state.activeFixAssistIssueKey) {
+            state.fixAssistExpandedIssueKey = '';
+        }
+
         if (!issues.length) {
             const empty = state.contextDoc.createElement('div');
             empty.className = 'aivi-overlay-review-empty';
             empty.textContent = 'No failed or partial issues were released into this review pass.';
             state.overlayRail.appendChild(empty);
+            renderFixAssistPanel();
             queueOverlayLayoutSync();
             return;
         }
@@ -2908,27 +3664,82 @@
         viewport.className = 'aivi-overlay-review-viewport';
         const list = state.contextDoc.createElement('div');
         list.className = 'aivi-overlay-review-list';
-        issues.forEach((issue) => {
+        issues.forEach((issue, index) => {
             if (!issue) return;
+            const fixAssistRecord = fixAssistIssueRecords[index] || null;
             const item = state.contextDoc.createElement('div');
             item.className = 'aivi-overlay-review-item';
             const verdict = normalizeOverlayVerdictValue(issue.ui_verdict || issue.verdict) || 'fail';
             item.setAttribute('data-verdict', verdict);
+            if (fixAssistRecord && fixAssistRecord.key) {
+                item.setAttribute('data-fix-assist-key', fixAssistRecord.key);
+            }
             if (issue.jump_node_ref || issue.node_ref) {
                 item.setAttribute('data-jump-node-ref', issue.jump_node_ref || issue.node_ref || '');
+            }
+            if (fixAssistRecord && fixAssistRecord.key) {
+                item.setAttribute('data-fix-assist-open', state.fixAssistOpenIssueKey === fixAssistRecord.key ? 'true' : 'false');
             }
             const header = state.contextDoc.createElement('div');
             header.className = 'aivi-overlay-review-item-header';
             const name = state.contextDoc.createElement('div');
             name.className = 'aivi-overlay-review-item-name';
-            name.textContent = issue && issue.check_name ? issue.check_name : 'Untitled issue';
+            name.textContent = resolveIssueDisplayName(issue);
             const impactPill = buildOverlayImpactPill(issue);
+            let launchButton = null;
+            if (fixAssistRecord && fixAssistRecord.key) {
+                const controls = state.contextDoc.createElement('div');
+                controls.className = 'aivi-overlay-review-item-header-tools';
+                if (impactPill) {
+                    controls.appendChild(impactPill);
+                }
+                launchButton = state.contextDoc.createElement('button');
+                launchButton.type = 'button';
+                launchButton.className = 'aivi-overlay-fix-assist-launch';
+                launchButton.setAttribute('aria-label', `Open copilot for ${fixAssistRecord.checkName}`);
+                launchButton.setAttribute('aria-expanded', state.fixAssistOpenIssueKey === fixAssistRecord.key ? 'true' : 'false');
+                const launchIcon = buildFixAssistIconNode('aivi-overlay-fix-assist-launch-icon');
+                if (launchIcon) {
+                    launchButton.appendChild(launchIcon);
+                }
+                const launchLabel = state.contextDoc.createElement('span');
+                launchLabel.className = 'aivi-overlay-fix-assist-launch-label';
+                launchLabel.textContent = 'Copilot';
+                launchButton.appendChild(launchLabel);
+                launchButton.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    setActiveFixAssistIssue(fixAssistRecord.key, fixAssistRecord, 'launch_button');
+                    setFixAssistOpenIssueKey(
+                        state.fixAssistOpenIssueKey === fixAssistRecord.key ? '' : fixAssistRecord.key,
+                        'launch_button'
+                    );
+                });
+                controls.appendChild(launchButton);
+                header.appendChild(name);
+                header.appendChild(controls);
+            } else {
+                header.appendChild(name);
+                if (impactPill) {
+                    header.appendChild(impactPill);
+                }
+            }
+            const issueDisplayName = resolveIssueDisplayName(issue);
             const preferredSummary = normalizeText(issue.review_summary || '');
-            const sanitizedMessage = sanitizeInlineIssueMessage(
+            const fallbackSummaryText = sanitizeInlineIssueMessage(
                 preferredSummary || issue.message || '',
-                { name: issue.check_name || issue.check_id || '' }
+                { name: issueDisplayName }
+            ) || preferredSummary || '';
+            const explanationPack = resolveExplanationPack(
+                clonePlainObject(issue.explanation_pack),
+                {
+                    what_failed: fallbackSummaryText || 'Issue detected.',
+                    how_to_fix_step: issue.action_suggestion || 'Update the referenced section directly from the editor canvas.',
+                    issue_explanation: issue.issue_explanation || ''
+                }
             );
-            const summaryText = sanitizedMessage || preferredSummary || 'Issue detected.';
+            const summaryText = resolvePreferredIssueSummaryText(issue, explanationPack, issueDisplayName)
+                || fallbackSummaryText
+                || 'Issue detected.';
             const summary = state.contextDoc.createElement('div');
             summary.className = 'aivi-overlay-review-item-summary';
             summary.textContent = summaryText;
@@ -2947,14 +3758,6 @@
             details.className = 'aivi-overlay-review-details';
             details.hidden = true;
 
-            const explanationPack = resolveExplanationPack(
-                clonePlainObject(issue.explanation_pack),
-                {
-                    what_failed: summaryText,
-                    how_to_fix_step: issue.action_suggestion || 'Update the referenced section directly from the editor canvas.',
-                    issue_explanation: issue.issue_explanation || ''
-                }
-            );
             const detailText = resolveRecommendationDetailText(issue, explanationPack, summaryText);
             const explanationNode = buildGuidanceTextNode(detailText, 'aivi-overlay-guidance-recommendation');
             if (explanationNode) {
@@ -2981,6 +3784,9 @@
             }
 
             viewButton.addEventListener('click', () => {
+                if (fixAssistRecord) {
+                    setActiveFixAssistIssue(fixAssistRecord.key, fixAssistRecord, 'review_details');
+                }
                 if (!hasReviewDetails) return;
                 const nextHidden = !details.hidden;
                 details.hidden = nextHidden;
@@ -3000,6 +3806,9 @@
             const allowJump = !!jumpNodeRef && !syntheticReasons.has(normalizedFailureReason);
             if (allowJump) {
                 jumpButton.addEventListener('click', () => {
+                    if (fixAssistRecord) {
+                        setActiveFixAssistIssue(fixAssistRecord.key, fixAssistRecord, 'review_jump');
+                    }
                     const jumped = jumpToOverlayNode(jumpNodeRef);
                     if (!jumped) {
                         setMetaStatus('Could not locate block for this recommendation');
@@ -3010,16 +3819,20 @@
                 jumpButton.title = 'No reliable block target is available for this issue.';
             }
 
-            header.appendChild(name);
-            if (impactPill) {
-                header.appendChild(impactPill);
-            }
             item.appendChild(header);
             item.appendChild(summary);
             actions.appendChild(viewButton);
             actions.appendChild(jumpButton);
             item.appendChild(actions);
             item.appendChild(details);
+            item.addEventListener('click', (event) => {
+                if (event.target && typeof event.target.closest === 'function' && event.target.closest('button')) {
+                    return;
+                }
+                if (fixAssistRecord) {
+                    setActiveFixAssistIssue(fixAssistRecord.key, fixAssistRecord, 'review_item');
+                }
+            });
             list.appendChild(item);
         });
         viewport.appendChild(list);
@@ -3053,8 +3866,14 @@
         if (state.overlayRailScrollHandler && state.overlayRailViewport) {
             state.overlayRailViewport.removeEventListener('scroll', state.overlayRailScrollHandler);
         }
-        state.overlayRailScrollHandler = () => syncReviewRailScrollControls();
+        state.overlayRailScrollHandler = () => {
+            syncReviewRailScrollControls();
+            if (state.fixAssistOpenIssueKey) {
+                queueOverlayLayoutSync();
+            }
+        };
         state.overlayRailViewport.addEventListener('scroll', state.overlayRailScrollHandler, { passive: true });
+        syncFixAssistSelection();
         queueOverlayLayoutSync();
     }
 
@@ -3068,12 +3887,23 @@
         const text = cfg.text || {};
         const featureFlags = (cfg.featureFlags && typeof cfg.featureFlags === 'object') ? cfg.featureFlags : {};
         const stalePolicy = typeof cfg.stalePolicy === 'string' ? cfg.stalePolicy : 'manual_refresh';
+        const fixAssistGenerationEnabled = typeof cfg.fixAssistGenerationEnabled === 'boolean'
+            ? cfg.fixAssistGenerationEnabled
+            : (typeof featureFlags.FIX_ASSIST_GENERATION_ENABLED === 'boolean'
+                ? featureFlags.FIX_ASSIST_GENERATION_ENABLED
+                : true);
         const stabilityReleaseMode = typeof cfg.stabilityReleaseMode === 'boolean'
             ? cfg.stabilityReleaseMode
             : (typeof featureFlags.STABILITY_RELEASE_MODE === 'boolean'
                 ? featureFlags.STABILITY_RELEASE_MODE
-                : true);
-        return { restBase, nonce, backendConfigured, accountState, isEnabled, text, featureFlags, stalePolicy, stabilityReleaseMode };
+                : false);
+        const copilotIconUrl = typeof cfg.copilotIconUrl === 'string' ? cfg.copilotIconUrl : '';
+        return { restBase, nonce, backendConfigured, accountState, isEnabled, text, featureFlags, stalePolicy, fixAssistGenerationEnabled, stabilityReleaseMode, copilotIconUrl };
+    }
+
+    function getCopilotIconUrl() {
+        const cfg = getConfig();
+        return typeof cfg.copilotIconUrl === 'string' ? cfg.copilotIconUrl.trim() : '';
     }
 
     function getUiText() {
@@ -3610,12 +4440,40 @@
         return { start: sectionStart, end: sectionEnd };
     }
 
-    function buildIssueContextPacket(item, rewriteContext, blocks, manifest) {
+    function buildCopilotIssuePacket(item, rewriteContext, blocks, manifest) {
         const check = item && item.check ? item.check : {};
         const highlight = item && item.highlight ? item.highlight : {};
         const analysisRef = rewriteContext && rewriteContext.analysis_ref ? rewriteContext.analysis_ref : null;
         const rewriteTarget = rewriteContext && rewriteContext.rewrite_target ? rewriteContext.rewrite_target : null;
         const nodes = manifest && Array.isArray(manifest.nodes) ? manifest.nodes : [];
+        const issueDisplayName = resolveIssueDisplayName(item || check);
+        const fallbackSummaryText = sanitizeInlineIssueMessage(
+            normalizeText(
+                (item && (item.review_summary || item.message))
+                || (highlight && (highlight.review_summary || highlight.message))
+                || (check && (check.review_summary || check.message || check.explanation))
+                || ''
+            ),
+            { name: issueDisplayName }
+        ) || '';
+        const explanationPack = resolveExplanationPack(
+            firstObject(
+                item && item.explanation_pack,
+                highlight && highlight.explanation_pack,
+                check && check.explanation_pack
+            ),
+            {
+                what_failed: fallbackSummaryText || 'Issue detected.',
+                issue_explanation: (item && item.issue_explanation)
+                    || (highlight && highlight.issue_explanation)
+                    || (check && check.issue_explanation)
+                    || ''
+            }
+        );
+        const summaryText = resolvePreferredIssueSummaryText(item, explanationPack, issueDisplayName)
+            || fallbackSummaryText
+            || 'Issue detected.';
+        const analyzerNote = resolveCopilotAnalyzerNote(item, issueDisplayName, explanationPack);
         const primaryNodeRef = String(
             (rewriteTarget && rewriteTarget.primary_node_ref)
             || (highlight && (highlight.node_ref || highlight.nodeRef))
@@ -3666,14 +4524,16 @@
         ).trim();
 
         return {
+            issue_key: buildFixAssistIssueKey(item, item && Number.isFinite(Number(item.instanceIndex)) ? Number(item.instanceIndex) : null),
             run_id: analysisRef && analysisRef.run_id ? String(analysisRef.run_id) : '',
             check_id: analysisRef && analysisRef.check_id
                 ? String(analysisRef.check_id)
                 : String(check.check_id || check.id || ''),
-            check_name: String(check.name || check.check_name || ''),
+            check_name: issueDisplayName,
             category_id: String(check.category_id || ''),
             verdict: String(check.ui_verdict || check.verdict || ''),
-            message: String(highlight.message || check.message || check.explanation || '').slice(0, 500),
+            analyzer_note: analyzerNote.slice(0, 500),
+            message: summaryText.slice(0, 500),
             failure_reason: failureReason || null,
             snippet: String(highlight.snippet || highlight.text || '').slice(0, 500),
             node_ref: primaryNodeRef || null,
@@ -3683,6 +4543,16 @@
             instance_index: analysisRef && Number.isFinite(Number(analysisRef.instance_index))
                 ? Number(analysisRef.instance_index)
                 : (Number.isFinite(Number(highlight.instance_index)) ? Number(highlight.instance_index) : 0),
+            selected_issue: {
+                check_id: analysisRef && analysisRef.check_id
+                    ? String(analysisRef.check_id)
+                    : String(check.check_id || check.id || ''),
+                check_name: issueDisplayName,
+                instance_index: analysisRef && Number.isFinite(Number(analysisRef.instance_index))
+                    ? Number(analysisRef.instance_index)
+                    : (Number.isFinite(Number(highlight.instance_index)) ? Number(highlight.instance_index) : 0),
+                analyzer_note: analyzerNote.slice(0, 500)
+            },
             heading_chain: headingChain,
             surrounding_nodes: surrounding,
             section_range: {
@@ -3699,6 +4569,10 @@
         };
     }
 
+    function buildIssueContextPacket(item, rewriteContext, blocks, manifest) {
+        return buildCopilotIssuePacket(item, rewriteContext, blocks, manifest);
+    }
+
     function clonePlainObject(value) {
         if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
         try {
@@ -3708,12 +4582,452 @@
         }
     }
 
+    function buildFallbackFixAssistTriage(availability) {
+        const actionable = availability && typeof availability === 'object'
+            ? availability.actionable === true
+            : availability === true;
+        const variantsAllowed = availability && typeof availability === 'object'
+            ? availability.variantsAllowed === true
+            : actionable;
+        if (variantsAllowed) {
+            return {
+                state: 'rewrite_needed',
+                label: 'Rewrite needed',
+                summary: 'AiVI found the local section tied to this issue and can suggest focused variants.',
+                framing: 'Copilot will keep any suggestion anchored to this nearby section.',
+                copilot_mode: 'local_rewrite',
+                requires_web_consent: false,
+                variants_allowed: true,
+                keep_as_is_note: 'Marked as keep as is for now. AiVI still considers this worth revisiting before publication.'
+            };
+        }
+        return {
+            state: 'structural_guidance_only',
+            label: 'Manual review',
+            summary: actionable
+                ? 'This issue still needs a clearer local section before Copilot should suggest variants.'
+                : 'This issue is better handled through manual review before Copilot suggests variants.',
+            framing: actionable
+                ? 'Review the selected issue in the rail and adjust the section if needed. When it is ready, Copilot will stay scoped to that local text.'
+                : 'Review the selected issue in the rail, then return if the section changes enough for a local rewrite pass.',
+            copilot_mode: actionable ? 'local_rewrite' : 'limited_technical_guidance',
+            requires_web_consent: false,
+            variants_allowed: false,
+            keep_as_is_note: 'Marked as keep as is. This one is better handled through manual structural edits if you revisit it later.'
+        };
+    }
+
+    function normalizeFixAssistTriage(value, availability) {
+        const triage = clonePlainObject(value);
+        const fallback = buildFallbackFixAssistTriage(availability);
+        if (!triage) return fallback;
+        const allowedStates = new Set([
+            'rewrite_needed',
+            'optional_improvement',
+            'structural_guidance_only',
+            'leave_as_is'
+        ]);
+        const incomingState = allowedStates.has(String(triage.state || '').trim())
+            ? String(triage.state).trim()
+            : fallback.state;
+        const allowedModes = new Set([
+            'local_rewrite',
+            'structural_transform',
+            'schema_metadata_assist',
+            'web_backed_evidence_assist',
+            'limited_technical_guidance'
+        ]);
+        const incomingMode = allowedModes.has(String(triage.copilot_mode || '').trim())
+            ? String(triage.copilot_mode).trim()
+            : fallback.copilot_mode;
+        const shouldPromoteAvailability = availability && typeof availability === 'object'
+            && availability.variantsAllowed === true
+            && triage.variants_allowed !== true
+            && (incomingMode === 'local_rewrite' || incomingMode === 'structural_transform');
+        const shouldForceStructuralFallback = availability && typeof availability === 'object'
+            && availability.actionable !== true
+            && (triage.variants_allowed === true || incomingState === 'rewrite_needed');
+        const state = shouldForceStructuralFallback
+            ? fallback.state
+            : incomingState;
+        return {
+            state,
+            label: normalizeText((shouldForceStructuralFallback || incomingState === 'structural_guidance_only' && shouldPromoteAvailability) ? fallback.label : (triage.label || '')) || fallback.label,
+            summary: normalizeText((shouldForceStructuralFallback || incomingState === 'structural_guidance_only' && shouldPromoteAvailability) ? fallback.summary : (triage.summary || '')) || fallback.summary,
+            framing: normalizeText((shouldForceStructuralFallback || incomingState === 'structural_guidance_only' && shouldPromoteAvailability) ? fallback.framing : (triage.framing || '')) || fallback.framing,
+            copilot_mode: shouldForceStructuralFallback ? fallback.copilot_mode : incomingMode,
+            requires_web_consent: shouldForceStructuralFallback ? fallback.requires_web_consent : triage.requires_web_consent === true,
+            variants_allowed: availability && typeof availability === 'object'
+                ? availability.variantsAllowed === true
+                : triage.variants_allowed === true,
+            keep_as_is_note: normalizeText(shouldForceStructuralFallback ? fallback.keep_as_is_note : (triage.keep_as_is_note || '')) || fallback.keep_as_is_note
+        };
+    }
+
+    function resolveFixAssistSourceItem(issueLike) {
+        if (!issueLike || typeof issueLike !== 'object') return null;
+        if (issueLike.highlight || issueLike.check) return issueLike;
+        if (!(state.issueMap instanceof Map) || !state.issueMap.size) return null;
+        const sourceMap = state.fixAssistSourceItemMap instanceof Map ? state.fixAssistSourceItemMap : null;
+        const candidateKeys = [];
+        const explicitSourceKey = String(
+            issueLike.sourceKey
+            || issueLike.source_key
+            || issueLike.copilot_source_key
+            || issueLike.source_issue_key
+            || ''
+        ).trim();
+        if (explicitSourceKey) candidateKeys.push(explicitSourceKey);
+        const explicitKey = String(issueLike.key || issueLike.issue_key || '').trim();
+        if (explicitKey) candidateKeys.push(explicitKey);
+        const checkId = String(
+            issueLike.checkId
+            || issueLike.check_id
+            || issueLike.id
+            || ''
+        ).trim();
+        const instanceIndex = parseFixAssistInstanceIndex(issueLike);
+        if (checkId && Number.isFinite(instanceIndex)) {
+            candidateKeys.push(`${checkId}:${instanceIndex}`);
+        }
+        for (let i = 0; i < candidateKeys.length; i += 1) {
+            const key = candidateKeys[i];
+            if (sourceMap && key && sourceMap.has(key)) {
+                return sourceMap.get(key);
+            }
+            if (key && state.issueMap.has(key)) {
+                return state.issueMap.get(key);
+            }
+        }
+        const normalizedNodeRef = String(issueLike.jumpNodeRef || issueLike.jump_node_ref || issueLike.node_ref || '').trim();
+        const values = sourceMap ? Array.from(sourceMap.values()) : Array.from(state.issueMap.values());
+        for (let i = 0; i < values.length; i += 1) {
+            const item = values[i];
+            if (!item || typeof item !== 'object') continue;
+            const itemCheckId = String(item.check?.check_id || item.check?.id || item.check_id || '').trim();
+            const itemInstanceIndex = parseFixAssistInstanceIndex(item);
+            if (checkId && itemCheckId === checkId && Number.isFinite(instanceIndex) && itemInstanceIndex === instanceIndex) {
+                return item;
+            }
+            const itemNodeRef = String(item.resolvedNodeRef || item.highlight?.node_ref || item.highlight?.nodeRef || '').trim();
+            if (normalizedNodeRef && itemNodeRef && itemNodeRef === normalizedNodeRef) {
+                return item;
+            }
+        }
+        return null;
+    }
+
+    function buildFixAssistAvailability(issueLike, rewriteContextArg, sourceItemArg) {
+        const sourceItem = sourceItemArg || resolveFixAssistSourceItem(issueLike) || (issueLike && (issueLike.highlight || issueLike.check) ? issueLike : null);
+        const baseItem = sourceItem || issueLike || null;
+        const rewriteContext = rewriteContextArg || (baseItem ? resolveItemRewriteContext(baseItem) : null);
+        const rewriteTarget = rewriteContext && rewriteContext.rewrite_target ? rewriteContext.rewrite_target : null;
+        const resolverReason = String(rewriteTarget && rewriteTarget.resolver_reason || '').trim();
+        const scopeConfidence = Number(rewriteTarget && rewriteTarget.scope_confidence);
+        const localNodeRef = String(sourceItem && sourceItem.resolvedNodeRef || '').trim();
+        const actionable = !!(rewriteTarget && rewriteTarget.actionable === true);
+        const variantsAllowed = actionable && (
+            resolverReason.indexOf('ui_local_issue_context_') === 0
+            || !!localNodeRef
+            || (Number.isFinite(scopeConfidence) && scopeConfidence >= 0.75)
+        );
+        return {
+            sourceItem,
+            rewriteContext,
+            rewriteTarget,
+            actionable,
+            variantsAllowed,
+            resolverReason,
+            scopeConfidence,
+            localNodeRef
+        };
+    }
+
+    function resolveFixAssistBadge(triage) {
+        const state = triage && typeof triage === 'object' ? String(triage.state || '').trim() : '';
+        if (state === 'optional_improvement') {
+            return { theme: 'optional', text: triage.label || 'Optional' };
+        }
+        if (state === 'leave_as_is') {
+            return { theme: 'leave', text: triage.label || 'Leave as is' };
+        }
+        if (state === 'rewrite_needed') {
+            return { theme: 'ready', text: triage.label || 'Rewrite needed' };
+        }
+        if (state === 'structural_guidance_only') {
+            return { theme: 'guidance', text: triage.label || 'Guidance only' };
+        }
+        return { theme: 'waiting', text: 'Waiting' };
+    }
+
+    function resolveFixAssistShellBadge(triage, displayMode) {
+        const base = resolveFixAssistBadge(triage);
+        const state = triage && typeof triage === 'object' ? String(triage.state || '').trim() : '';
+        const copilotMode = triage && typeof triage === 'object'
+            ? String(triage.copilot_mode || '').trim()
+            : '';
+        if (copilotMode === 'web_backed_evidence_assist') {
+            return { theme: 'source', text: 'Source aware' };
+        }
+        if (state === 'rewrite_needed' || displayMode === 'variants') {
+            return { theme: 'ready', text: 'Rewrite ready' };
+        }
+        return base;
+    }
+
+    function resolveFixAssistShellTitle(issue) {
+        return normalizeText(
+            issue && (issue.checkName || issue.check_name || issue.name || issue.title || issue.checkId || issue.check_id || '')
+        ) || 'Issue detected';
+    }
+
+    function buildFixAssistShellNote(displayMode, triage) {
+        const copilotMode = triage && typeof triage === 'object'
+            ? String(triage.copilot_mode || '').trim()
+            : '';
+        const requiresWebConsent = !!(triage && typeof triage === 'object' && triage.requires_web_consent === true);
+        if (displayMode === 'consent' && requiresWebConsent) {
+            return 'Web verification is optional. If you want stronger source-aware variants, Copilot can check only closely related support for this issue.';
+        }
+        if (displayMode !== 'helper') {
+            return '';
+        }
+        if (copilotMode === 'web_backed_evidence_assist' && requiresWebConsent) {
+            return 'Web verification is optional. If you want stronger source-aware variants, Copilot can check only closely related support for this issue.';
+        }
+        return 'Copilot will stay with this issue and work only from the nearby text.';
+    }
+
+    function shouldRenderFixAssistBadge(triage) {
+        const state = triage && typeof triage === 'object' ? String(triage.state || '').trim() : '';
+        return state === 'optional_improvement' || state === 'leave_as_is';
+    }
+
+    function buildFixAssistRepairObjective(issue, triage, availability) {
+        const checkId = String(
+            issue && (issue.checkId || issue.check_id || issue.id)
+                ? (issue.checkId || issue.check_id || issue.id)
+                : ''
+        ).trim().toLowerCase();
+        const copilotMode = triage && typeof triage === 'object'
+            ? String(triage.copilot_mode || '').trim()
+            : '';
+        const requiresWebConsent = !!(triage && typeof triage === 'object' && triage.requires_web_consent === true);
+        if (checkId === 'immediate_answer_placement') {
+            return 'I can bring the direct answer to the front of this section without changing the rest of the article.';
+        }
+        if (checkId === 'answer_sentence_concise') {
+            return 'I can tighten the opening answer here so it stays clear, quotable, and easy to reuse.';
+        }
+        if (checkId === 'question_answer_alignment') {
+            return 'I can make the opening answer respond to the heading more directly and cleanly.';
+        }
+        if (checkId === 'clear_answer_formatting') {
+            return 'I can reshape this answer so the key points scan more cleanly without changing the meaning.';
+        }
+        if (checkId === 'heading_topic_fulfillment') {
+            return 'I can strengthen the support under this heading so the section delivers on its promise.';
+        }
+        if (checkId === 'intro_wordcount' || checkId === 'intro_readability') {
+            return 'I can tighten this introduction and keep the key point clear early in the section.';
+        }
+        if (copilotMode === 'web_backed_evidence_assist' && requiresWebConsent) {
+            return availability && availability.variantsAllowed === true
+                ? 'I can keep this claim careful, or verify nearby support first if you want stronger source-aware variants.'
+                : 'I can keep this claim careful and scoped while you decide whether to strengthen the support around it.';
+        }
+        if (copilotMode === 'web_backed_evidence_assist') {
+            return availability && availability.variantsAllowed === true
+                ? 'I can keep this claim careful and strengthen the wording using only the nearby text.'
+                : 'I can keep this claim careful and scoped while staying with the nearby text.';
+        }
+        if (copilotMode === 'schema_metadata_assist') {
+            return 'This needs a metadata or schema fix more than a wording change, so I will keep the next step practical and scoped.';
+        }
+        if (copilotMode === 'limited_technical_guidance') {
+            return 'This one needs a technical or settings-level fix more than a wording pass, so I will keep the help practical.';
+        }
+        if (copilotMode === 'structural_transform') {
+            return 'I can reshape this section so it reads more cleanly without changing the point it makes.';
+        }
+        if (availability && availability.variantsAllowed === true) {
+            return 'I can help repair this flagged section and keep the rewrite scoped to the nearby text only.';
+        }
+        return '';
+    }
+
+    function buildFixAssistHelperText(issue, triage, availability) {
+        const state = triage && typeof triage === 'object' ? String(triage.state || '').trim() : '';
+        const copilotMode = triage && typeof triage === 'object'
+            ? String(triage.copilot_mode || '').trim()
+            : '';
+        const requiresWebConsent = !!(triage && typeof triage === 'object' && triage.requires_web_consent === true);
+        const objective = buildFixAssistRepairObjective(issue, triage, availability);
+        if (state === 'leave_as_is') {
+            return objective || 'This section already reads clearly. I can still suggest alternatives if you want a different presentation.';
+        }
+        if (state === 'optional_improvement') {
+            return objective || 'This section is usable as written. I can still suggest a cleaner version if you want one.';
+        }
+        if (copilotMode === 'schema_metadata_assist') {
+            return objective || 'This issue needs a schema or metadata update more than a wording change. I can help you review the next step.';
+        }
+        if (copilotMode === 'web_backed_evidence_assist' && requiresWebConsent) {
+            return objective || 'I can keep this claim careful and help you decide whether to verify support before generating variants.';
+        }
+        if (copilotMode === 'web_backed_evidence_assist') {
+            return objective || 'I can keep this claim careful and strengthen the wording using only the nearby text.';
+        }
+        if (copilotMode === 'limited_technical_guidance') {
+            return objective || 'This issue needs a technical or settings-level fix more than a wording change.';
+        }
+        if (copilotMode === 'structural_transform' && availability && availability.variantsAllowed === true) {
+            return objective || 'I can suggest a cleaner structure for this section without changing the point it makes.';
+        }
+        if (availability && availability.variantsAllowed === true) {
+            return objective || 'I can suggest focused variants for this flagged section when you are ready.';
+        }
+        if (copilotMode === 'structural_transform') {
+            return 'This section still needs a manual structural pass before Copilot should suggest variants.';
+        }
+        return 'This section still needs a manual pass before Copilot should suggest variants.';
+    }
+
+    function resolveFixAssistDisplayMode(options) {
+        const source = options && typeof options === 'object' ? options : {};
+        if (source.requiresConsentPrompt === true) return 'consent';
+        if (source.hasVariants === true) return 'variants';
+        return 'helper';
+    }
+
+    function buildFixAssistIconNode(className) {
+        if (!state.contextDoc) return null;
+        const iconUrl = getCopilotIconUrl();
+        if (iconUrl) {
+            const img = state.contextDoc.createElement('img');
+            img.className = className || '';
+            img.src = iconUrl;
+            img.alt = '';
+            img.decoding = 'async';
+            return img;
+        }
+        const fallback = state.contextDoc.createElement('span');
+        fallback.className = className || '';
+        fallback.textContent = 'Ai';
+        return fallback;
+    }
+
+    function refreshReviewRailPreservingScroll() {
+        if (!state.overlayRail) return;
+        const scrollTop = state.overlayRailViewport ? state.overlayRailViewport.scrollTop : 0;
+        renderReviewRail(collectOverlayRecommendations(state.overlayContentData));
+        if (state.overlayRailViewport) {
+            state.overlayRailViewport.scrollTop = scrollTop;
+        }
+    }
+
+    function normalizeFixAssistVerificationIntent(value) {
+        const normalized = String(value || '').trim().toLowerCase();
+        return normalized === 'verify_first' || normalized === 'local_only'
+            ? normalized
+            : '';
+    }
+
+    function resolveFixAssistSuggestionKey(issueLike, sourceItemArg) {
+        const sourceItem = sourceItemArg && typeof sourceItemArg === 'object' ? sourceItemArg : null;
+        const candidates = [
+            issueLike && issueLike.key,
+            issueLike && issueLike.issue_key,
+            issueLike && issueLike.sourceKey,
+            issueLike && issueLike.source_key,
+            issueLike && issueLike.copilot_source_key,
+            sourceItem && sourceItem.issue_key,
+            sourceItem && sourceItem.key,
+            sourceItem && sourceItem.copilot_source_key
+        ];
+        for (let i = 0; i < candidates.length; i += 1) {
+            const normalized = String(candidates[i] || '').trim();
+            if (normalized) return normalized;
+        }
+        return '';
+    }
+
+    function clearFixAssistPendingConsent(issueKey) {
+        const key = String(issueKey || '').trim();
+        if (!key || !state.suggestions || !state.suggestions[key]) return;
+        const info = state.suggestions[key];
+        if (info && info.consent_required === true && (!Array.isArray(info.variants) || !info.variants.length)) {
+            delete state.suggestions[key];
+        }
+    }
+
+    function buildFixAssistConsentMessage() {
+        return 'I can do a quick web check first if you want stronger source-aware variants for this issue.';
+    }
+
+    function openFixAssistConsentPrompt(item, rewriteContextArg) {
+        const rewriteContext = rewriteContextArg || resolveItemRewriteContext(item);
+        const suggestionKey = resolveFixAssistSuggestionKey(item);
+        if (!suggestionKey) return;
+        state.fixAssistExpandedIssueKey = '';
+        state.suggestions[suggestionKey] = {
+            status: '',
+            variants: [],
+            consent_required: true,
+            consent_message: buildFixAssistConsentMessage(),
+            issue_key: suggestionKey,
+            verification_intent: '',
+            rewrite_target: rewriteContext && rewriteContext.rewrite_target ? rewriteContext.rewrite_target : null,
+            repair_intent: rewriteContext && rewriteContext.repair_intent ? rewriteContext.repair_intent : null,
+            analysis_ref: rewriteContext && rewriteContext.analysis_ref ? rewriteContext.analysis_ref : null,
+            fix_assist_triage: firstObject(
+                item && item.fix_assist_triage,
+                item && item.highlight && item.highlight.fix_assist_triage,
+                item && item.check && item.check.fix_assist_triage
+            )
+        };
+        refreshReviewRailPreservingScroll();
+        queueOverlayLayoutSync();
+    }
+
+    function setFixAssistOpenIssueKey(key, source) {
+        const previousKey = String(state.fixAssistOpenIssueKey || '').trim();
+        const nextKey = String(key || '').trim();
+        const changed = nextKey !== state.fixAssistOpenIssueKey;
+        if (changed && previousKey && previousKey !== nextKey) {
+            clearFixAssistPendingConsent(previousKey);
+        }
+        if (changed && previousKey !== nextKey) {
+            clearFixAssistMetaStatus();
+        }
+        state.fixAssistOpenIssueKey = nextKey;
+        if (changed && nextKey) {
+            const issue = Array.isArray(state.fixAssistIssueRecords)
+                ? state.fixAssistIssueRecords.find((record) => record && record.key === nextKey)
+                : null;
+            if (issue) {
+                maybeEmitFixAssistPanelSeen(issue, source || 'launch');
+            }
+        }
+        syncFixAssistSelection();
+    }
+
     function firstObject(...values) {
         for (let i = 0; i < values.length; i += 1) {
             const cloned = clonePlainObject(values[i]);
             if (cloned) return cloned;
         }
         return null;
+    }
+
+    function setFixAssistMetaStatus(text) {
+        setMetaStatus(text, 'fix_assist');
+    }
+
+    function clearFixAssistMetaStatus() {
+        if (state.metaStatusSource === 'fix_assist') {
+            setMetaStatus('');
+        }
     }
 
     function inferOperationFromMode(mode) {
@@ -3763,6 +5077,206 @@
             || joined.indexOf('numbered list') !== -1
             || joined.indexOf('convert') !== -1
             || joined.indexOf('steps') !== -1;
+    }
+
+    function findManifestNodeIndexByRef(nodes, ref) {
+        const normalizedRef = String(ref || '').trim();
+        if (!normalizedRef || !Array.isArray(nodes) || !nodes.length) return -1;
+        return nodes.findIndex((node) => String(node && node.ref || '').trim() === normalizedRef);
+    }
+
+    function collectIssueSearchTexts(item, repairIntent) {
+        const values = [
+            item && item.analyzerNote,
+            item && item.highlight && (item.highlight.snippet || item.highlight.text),
+            item && item.snippet,
+            item && item.check && item.check.first_instance_snippet,
+            item && item.highlight && item.highlight.message,
+            item && item.check && (item.check.message || item.check.explanation),
+            repairIntent && repairIntent.instruction,
+            repairIntent && repairIntent.rule_hint
+        ];
+        const seen = new Set();
+        return values
+            .map((value) => normalizeText(value || ''))
+            .filter((value) => value.length >= 12)
+            .filter((value) => {
+                const key = value.toLowerCase();
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            })
+            .slice(0, 8);
+    }
+
+    function findManifestNodeIndexBySearchTexts(nodes, searchTexts) {
+        if (!Array.isArray(nodes) || !nodes.length || !Array.isArray(searchTexts) || !searchTexts.length) return -1;
+        let bestIndex = -1;
+        let bestScore = 0;
+        const normalizedNodeTexts = nodes.map((node) => normalizeText(node && node.text || '').toLowerCase());
+        searchTexts.forEach((entry) => {
+            const target = normalizeText(entry || '').toLowerCase();
+            if (!target || target.length < 12) return;
+            const parts = target.split(/\s+/).filter((part) => part.length >= 4).slice(0, 12);
+            normalizedNodeTexts.forEach((nodeText, index) => {
+                if (!nodeText) return;
+                let score = 0;
+                if (nodeText.indexOf(target) !== -1) {
+                    score = 1000 + Math.min(target.length, 240);
+                } else if (target.indexOf(nodeText) !== -1 && nodeText.length >= 24) {
+                    score = 500 + Math.min(nodeText.length, 180);
+                } else if (parts.length) {
+                    const overlap = parts.filter((part) => nodeText.indexOf(part) !== -1).length;
+                    if (overlap >= 3) {
+                        score = overlap * 40 + Math.min(target.length, 160);
+                    }
+                }
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestIndex = index;
+                }
+            });
+        });
+        return bestScore > 0 ? bestIndex : -1;
+    }
+
+    function resolveLocalRepairAnchorIndex(nodes, anchorIndex, sectionBounds) {
+        if (!Array.isArray(nodes) || anchorIndex < 0 || anchorIndex >= nodes.length) return -1;
+        const start = sectionBounds && Number.isFinite(sectionBounds.start) ? sectionBounds.start : anchorIndex;
+        const end = sectionBounds && Number.isFinite(sectionBounds.end) ? sectionBounds.end : anchorIndex;
+        const anchorNode = nodes[anchorIndex];
+        if (anchorNode && !isSectionBoundaryNodeForContext(anchorNode)) {
+            return anchorIndex;
+        }
+        for (let idx = Math.max(anchorIndex + 1, start); idx <= end; idx += 1) {
+            const node = nodes[idx];
+            if (!node) continue;
+            const text = normalizeText(node.text || '');
+            if (!text) continue;
+            if (!isSectionBoundaryNodeForContext(node)) {
+                return idx;
+            }
+        }
+        return anchorIndex;
+    }
+
+    function buildLocalRewriteContextFromIssue(item, meta) {
+        if (!item || typeof item !== 'object') return null;
+        const blocks = getBlocks();
+        const manifest = buildLiveManifest(blocks);
+        const nodes = manifest && Array.isArray(manifest.nodes) ? manifest.nodes : [];
+        if (!nodes.length) return null;
+
+        const resolvedTarget = meta && meta.resolvedTarget ? meta.resolvedTarget : null;
+        const repairIntent = meta && meta.repairIntent ? meta.repairIntent : null;
+        const analysisRef = meta && meta.analysisRef ? meta.analysisRef : null;
+        const hasOffsetRange = !!(item
+            && item.highlight
+            && Number.isFinite(item.highlight.start)
+            && Number.isFinite(item.highlight.end)
+            && Number(item.highlight.end) > Number(item.highlight.start));
+        const hasStructuralRewriteHint = isStructuralRewriteMode(resolvedTarget && resolvedTarget.mode)
+            || isStructuralRewriteOperation(resolvedTarget && resolvedTarget.operation)
+            || hasStructuralRewriteIntentHints(repairIntent);
+
+        let anchorIndex = -1;
+        const localDirectRefs = [
+            item && item.highlight && (item.highlight.node_ref || item.highlight.nodeRef),
+            item && item.resolvedNodeSource !== 'signature_hint' ? item.resolvedNodeRef : ''
+        ];
+        for (let i = 0; i < localDirectRefs.length; i += 1) {
+            anchorIndex = findManifestNodeIndexByRef(nodes, localDirectRefs[i]);
+            if (anchorIndex >= 0) break;
+        }
+
+        const searchTexts = collectIssueSearchTexts(item, repairIntent);
+        let locatorSource = anchorIndex >= 0 ? 'live_node_ref' : '';
+        if (anchorIndex < 0) {
+            anchorIndex = findManifestNodeIndexBySearchTexts(nodes, searchTexts);
+            if (anchorIndex >= 0) locatorSource = 'issue_note_search';
+        }
+        if (anchorIndex < 0) {
+            const analyzerHintRefs = [
+                item && item.resolvedNodeSource === 'signature_hint' ? item.resolvedNodeRef : '',
+                resolvedTarget && resolvedTarget.anchor_node_ref,
+                resolvedTarget && resolvedTarget.primary_repair_node_ref,
+                resolvedTarget && resolvedTarget.primary_node_ref
+            ];
+            for (let i = 0; i < analyzerHintRefs.length; i += 1) {
+                anchorIndex = findManifestNodeIndexByRef(nodes, analyzerHintRefs[i]);
+                if (anchorIndex >= 0) {
+                    locatorSource = 'analyzer_hint';
+                    break;
+                }
+            }
+        }
+        if (anchorIndex < 0) return null;
+
+        const maxSectionNodes = resolvedTarget && Number.isFinite(Number(resolvedTarget.rewrite_context_window))
+            ? Math.max(4, Math.min(12, Number(resolvedTarget.rewrite_context_window) * 3))
+            : 8;
+        const sectionBounds = resolveSectionBounds(nodes, anchorIndex, maxSectionNodes) || { start: anchorIndex, end: anchorIndex };
+        const repairIndex = resolveLocalRepairAnchorIndex(nodes, anchorIndex, sectionBounds);
+        const anchorNode = nodes[anchorIndex] || null;
+        const repairNode = nodes[repairIndex] || anchorNode;
+        if (!repairNode) return null;
+
+        const sectionNodes = nodes.slice(sectionBounds.start, sectionBounds.end + 1);
+        const repairSliceStart = Math.max(0, repairIndex - sectionBounds.start);
+        const repairNodeRefs = sectionNodes
+            .slice(repairSliceStart)
+            .map((node) => String(node && node.ref || '').trim())
+            .filter(Boolean);
+        const prefersSection = hasStructuralRewriteHint
+            || (anchorNode && isSectionBoundaryNodeForContext(anchorNode))
+            || sectionNodes.length > 1;
+        const targetText = normalizeText(
+            (item && item.highlight && (item.highlight.snippet || item.highlight.text))
+            || (repairNode && repairNode.text)
+            || ''
+        );
+
+        return {
+            rewrite_target: {
+                actionable: true,
+                mode: prefersSection ? 'section' : 'inline_span',
+                operation: prefersSection
+                    ? String((resolvedTarget && resolvedTarget.operation) || 'replace_block')
+                    : 'replace_span',
+                anchor_node_ref: String(anchorNode && anchorNode.ref || '').trim(),
+                primary_repair_node_ref: String(repairNode && repairNode.ref || '').trim(),
+                primary_node_ref: String(repairNode && repairNode.ref || '').trim(),
+                repair_node_refs: prefersSection ? repairNodeRefs : [String(repairNode && repairNode.ref || '').trim()].filter(Boolean),
+                node_refs: prefersSection
+                    ? sectionNodes.map((node) => String(node && node.ref || '').trim()).filter(Boolean)
+                    : [String(repairNode && repairNode.ref || '').trim()].filter(Boolean),
+                target_text: targetText,
+                quote: targetText ? { exact: targetText } : null,
+                start: prefersSection ? null : (hasOffsetRange ? Number(item.highlight.start) : null),
+                end: prefersSection ? null : (hasOffsetRange ? Number(item.highlight.end) : null),
+                heading_node_ref: anchorNode && isSectionBoundaryNodeForContext(anchorNode)
+                    ? String(anchorNode.ref || '').trim()
+                    : (resolvedTarget && resolvedTarget.heading_node_ref ? String(resolvedTarget.heading_node_ref) : null),
+                section_start_node_ref: sectionNodes[0] ? String(sectionNodes[0].ref || '').trim() : null,
+                section_end_node_ref: sectionNodes.length ? String(sectionNodes[sectionNodes.length - 1].ref || '').trim() : null,
+                boundary_type: sectionBounds.end < nodes.length - 1 && nodes[sectionBounds.end + 1]
+                    ? (isHeadingNodeType(nodes[sectionBounds.end + 1].type) ? 'heading' : 'pseudo_heading')
+                    : 'document_end',
+                boundary_node_ref: sectionBounds.end < nodes.length - 1 && nodes[sectionBounds.end + 1]
+                    ? String(nodes[sectionBounds.end + 1].ref || '').trim()
+                    : null,
+                scope_confidence: locatorSource === 'live_node_ref'
+                    ? 0.94
+                    : (locatorSource === 'issue_note_search' ? 0.84 : 0.68),
+                resolver_reason: locatorSource === 'live_node_ref'
+                    ? 'ui_local_issue_context_node_ref'
+                    : (locatorSource === 'issue_note_search'
+                        ? 'ui_local_issue_context_search'
+                        : 'ui_analyzer_hint_fallback')
+            },
+            repair_intent: repairIntent || null,
+            analysis_ref: analysisRef || null
+        };
     }
 
     function resolveItemRewriteContext(item) {
@@ -3835,15 +5349,51 @@
         ) && !hasStructuralRewriteHint;
 
         let target = null;
-        if (resolvedTarget) {
+        const localContext = buildLocalRewriteContextFromIssue(item, {
+            resolvedTarget,
+            repairIntent,
+            analysisRef
+        });
+        if (localContext && localContext.rewrite_target) {
+            target = { ...localContext.rewrite_target };
+            if (resolvedTarget) {
+                if (!target.operation && resolvedTarget.operation) {
+                    target.operation = String(resolvedTarget.operation);
+                }
+                if (!target.heading_node_ref && resolvedTarget.heading_node_ref) {
+                    target.heading_node_ref = String(resolvedTarget.heading_node_ref);
+                }
+            }
+        } else if (resolvedTarget) {
             target = { ...resolvedTarget };
-            if (!target.primary_node_ref) {
-                target.primary_node_ref = (item && item.highlight && (item.highlight.node_ref || item.highlight.nodeRef))
+            if (!target.anchor_node_ref) {
+                target.anchor_node_ref = (item && item.highlight && (item.highlight.node_ref || item.highlight.nodeRef))
+                    || (item && item.resolvedNodeRef)
+                    || target.primary_repair_node_ref
+                    || target.primary_node_ref
+                    || '';
+            }
+            if (!target.primary_repair_node_ref) {
+                target.primary_repair_node_ref = target.primary_node_ref
+                    || (item && item.highlight && (item.highlight.node_ref || item.highlight.nodeRef))
                     || (item && item.resolvedNodeRef)
                     || '';
             }
+            if (!target.primary_node_ref) {
+                target.primary_node_ref = target.primary_repair_node_ref
+                    || (item && item.highlight && (item.highlight.node_ref || item.highlight.nodeRef))
+                    || (item && item.resolvedNodeRef)
+                    || '';
+            }
+            if (!Array.isArray(target.repair_node_refs) || !target.repair_node_refs.length) {
+                target.repair_node_refs = Array.isArray(target.node_refs) && target.node_refs.length
+                    ? target.node_refs.slice()
+                    : (target.primary_repair_node_ref ? [target.primary_repair_node_ref] : []);
+            }
             if (!Array.isArray(target.node_refs) || !target.node_refs.length) {
-                target.node_refs = target.primary_node_ref ? [target.primary_node_ref] : [];
+                target.node_refs = Array.isArray(target.repair_node_refs) && target.repair_node_refs.length
+                    ? target.repair_node_refs.slice()
+                    : (target.primary_node_ref ? [target.primary_node_ref] : []);
             }
             if (!target.target_text) {
                 target.target_text = item && item.highlight
@@ -3876,9 +5426,16 @@
                 actionable: true,
                 mode: 'inline_span',
                 operation: 'replace_span',
+                anchor_node_ref: (item && item.highlight && (item.highlight.node_ref || item.highlight.nodeRef))
+                    || (item && item.resolvedNodeRef)
+                    || '',
+                primary_repair_node_ref: (item && item.highlight && (item.highlight.node_ref || item.highlight.nodeRef))
+                    || (item && item.resolvedNodeRef)
+                    || '',
                 primary_node_ref: (item && item.highlight && (item.highlight.node_ref || item.highlight.nodeRef))
                     || (item && item.resolvedNodeRef)
                     || '',
+                repair_node_refs: [],
                 node_refs: [],
                 target_text: item && item.highlight
                     ? String(item.highlight.snippet || item.highlight.text || '').trim()
@@ -3890,6 +5447,9 @@
                 end: item && item.highlight && Number.isFinite(item.highlight.end) ? Number(item.highlight.end) : null,
                 resolver_reason: 'ui_inline_fallback'
             };
+            if (target.primary_repair_node_ref) {
+                target.repair_node_refs = [target.primary_repair_node_ref];
+            }
             if (target.primary_node_ref) {
                 target.node_refs = [target.primary_node_ref];
             }
@@ -4241,7 +5801,10 @@
 
     function collectOverlayRecommendations(overlayContentData) {
         if (!overlayContentData || typeof overlayContentData !== 'object') return [];
-        const source = Array.isArray(overlayContentData.recommendations)
+        const actionableFindings = Array.isArray(overlayContentData.v2_findings)
+            ? overlayContentData.v2_findings
+            : [];
+        const recommendationFallback = Array.isArray(overlayContentData.recommendations)
             ? overlayContentData.recommendations
             : (Array.isArray(overlayContentData.unhighlightable_issues)
                 ? overlayContentData.unhighlightable_issues
@@ -4268,7 +5831,66 @@
             if (checkId && snippet) return `${checkId}:${snippet.slice(0, 120)}`;
             return checkId || snippet.slice(0, 120);
         };
-        return source.concat(clientSuppressed).filter((issue) => {
+        const actionableByKey = new Map();
+        actionableFindings.forEach((issue) => {
+            const dedupKey = buildRecommendationDedupKey(issue);
+            if (!dedupKey || actionableByKey.has(dedupKey)) return;
+            actionableByKey.set(dedupKey, issue);
+        });
+        const mergeReviewRailIssue = (issue, actionableIssue) => {
+            if (!issue || typeof issue !== 'object') return null;
+            const merged = { ...issue };
+            const canonicalSource = actionableIssue && typeof actionableIssue === 'object'
+                ? actionableIssue
+                : issue;
+            const canonicalSourceKey = buildCanonicalFixAssistSourceKey(canonicalSource);
+            merged.issue_key = String(issue.issue_key || canonicalSource.issue_key || buildFixAssistIssueKey(issue)).trim();
+            merged.copilot_source_key = String(issue.copilot_source_key || canonicalSourceKey || '').trim() || merged.issue_key;
+            if (!merged.check_id && canonicalSource.check_id) {
+                merged.check_id = canonicalSource.check_id;
+            }
+            if (!Number.isFinite(Number(merged.instance_index)) && Number.isFinite(Number(canonicalSource.instance_index))) {
+                merged.instance_index = Number(canonicalSource.instance_index);
+            }
+            if (!actionableIssue || actionableIssue === issue) return merged;
+            if (!merged.check_name && actionableIssue.check_name) {
+                merged.check_name = actionableIssue.check_name;
+            }
+            if (!merged.name && actionableIssue.name) {
+                merged.name = actionableIssue.name;
+            }
+            [
+                'rewrite_target',
+                'repair_intent',
+                'analysis_ref',
+                'fix_assist_triage'
+            ].forEach((field) => {
+                if (actionableIssue[field]) {
+                    merged[field] = actionableIssue[field];
+                }
+            });
+            [
+                'review_summary',
+                'issue_explanation',
+                'explanation_pack',
+                'jump_node_ref',
+                'node_ref',
+                'snippet',
+                'signature'
+            ].forEach((field) => {
+                if ((merged[field] === undefined || merged[field] === null || merged[field] === '') && actionableIssue[field]) {
+                    merged[field] = actionableIssue[field];
+                }
+            });
+            return merged;
+        };
+        const source = recommendationFallback.length
+            ? recommendationFallback
+            : actionableFindings;
+        return source.concat(clientSuppressed).map((issue) => {
+            const dedupKey = buildRecommendationDedupKey(issue);
+            return mergeReviewRailIssue(issue, dedupKey ? actionableByKey.get(dedupKey) : null);
+        }).filter((issue) => {
             if (!issue || typeof issue !== 'object') return false;
             const verdict = normalizeOverlayVerdictValue(issue.ui_verdict || issue.verdict);
             if (verdict === 'pass') return false;
@@ -4337,6 +5959,7 @@
     function buildIssueIndex(blocks) {
         const items = extractIssuesFromReport();
         state.issueMap = new Map();
+        state.fixAssistSourceItemMap = new Map();
         const highlightsByRef = new Map();
         if (!items.length) {
             return { items, highlightsByRef };
@@ -4352,11 +5975,14 @@
         });
         items.forEach((item) => {
             const highlight = item.highlight || {};
+            const canonicalKey = buildCanonicalFixAssistSourceKey(item);
             let ref = highlight.node_ref || highlight.nodeRef || '';
+            let refSource = ref ? 'node_ref' : '';
             const sig = typeof highlight.signature === 'string' ? highlight.signature : '';
             if (!ref && sig && signatureMap.has(sig)) {
                 const block = signatureMap.get(sig);
                 ref = block && block.node_ref ? block.node_ref : ref;
+                refSource = ref ? 'signature_hint' : refSource;
             }
             if (!ref) {
                 const snippet = highlight.snippet || highlight.text || '';
@@ -4365,11 +5991,16 @@
                     const match = nodes.find((n) => normalizeText(n.text).toLowerCase().includes(target));
                     if (match) {
                         ref = match.ref;
+                        refSource = 'text_overlap';
                     }
                 }
             }
             item.resolvedNodeRef = ref;
+            item.resolvedNodeSource = refSource || '';
             state.issueMap.set(item.key, item);
+            if (canonicalKey) {
+                state.fixAssistSourceItemMap.set(canonicalKey, item);
+            }
             if (ref) {
                 if (!highlightsByRef.has(ref)) highlightsByRef.set(ref, []);
                 highlightsByRef.get(ref).push(item);
@@ -4490,6 +6121,49 @@
             return;
         }
         window.AiviHighlightTelemetry.log(eventName, payload);
+    }
+
+    function parseFixAssistInstanceIndex(issueLike) {
+        if (issueLike && Number.isFinite(Number(issueLike.instanceIndex))) {
+            return Number(issueLike.instanceIndex);
+        }
+        const key = String(issueLike && issueLike.key ? issueLike.key : '').trim();
+        const match = key.match(/:(\d+)$/);
+        return match ? Number(match[1]) : null;
+    }
+
+    function buildFixAssistTelemetryPayload(issueLike, extras) {
+        const issue = issueLike && typeof issueLike === 'object' ? issueLike : {};
+        const triage = firstObject(
+            issue.fixAssistTriage,
+            issue.fix_assist_triage,
+            issue.highlight && issue.highlight.fix_assist_triage,
+            issue.check && issue.check.fix_assist_triage
+        );
+        const payload = {
+            run_id: (state.lastReport && state.lastReport.run_id) || '',
+            issue_key: String(issue.key || '').trim(),
+            check_id: String(issue.checkId || issue.check_id || issue.check?.check_id || issue.check?.id || '').trim(),
+            instance_index: parseFixAssistInstanceIndex(issue),
+            triage_state: triage && triage.state ? String(triage.state) : '',
+            actionable: issue.actionable === true,
+            rewrite_target_mode: String(issue.rewriteTargetMode || '').trim(),
+            rewrite_operation: String(issue.rewriteOperation || '').trim()
+        };
+        return Object.assign(payload, extras && typeof extras === 'object' ? extras : {});
+    }
+
+    function emitFixAssistTelemetry(eventName, issueLike, extras) {
+        emitHighlightTelemetry(eventName, buildFixAssistTelemetryPayload(issueLike, extras));
+    }
+
+    function maybeEmitFixAssistPanelSeen(issueLike, source) {
+        if (!issueLike || !issueLike.key) return;
+        if (state.fixAssistSeenIssueKeys.has(issueLike.key)) return;
+        state.fixAssistSeenIssueKeys.add(issueLike.key);
+        emitFixAssistTelemetry('overlay_fix_assist_panel_seen', issueLike, {
+            source: String(source || 'selection').trim() || 'selection'
+        });
     }
 
     function buildParagraphDataList(container) {
@@ -4971,6 +6645,7 @@
         if (!wrapper) return;
         const panel = wrapper.querySelector('.aivi-overlay-inline-panel');
         if (!panel) return;
+        activateFixAssistIssueForItem(item);
         hideInlinePanel();
         state.inlinePanel = panel;
         state.inlineItemKey = item.key;
@@ -5006,6 +6681,7 @@
         const guardrail = getGuardrailState();
         const isFallback = item && item.isFallback === true;
         const stabilityReleaseMode = isStabilityReleaseModeEnabled();
+        const generationEnabled = isFixAssistGenerationEnabled() && !stabilityReleaseMode;
         const schemaAssist = item && item.isRecommendation === true
             ? resolveSchemaAssist(item)
             : null;
@@ -5043,11 +6719,10 @@
         fixBtn.textContent = 'Fix with AI';
         const rewriteContext = resolveItemRewriteContext(item);
         const hasTarget = rewriteContext.rewrite_target && rewriteContext.rewrite_target.actionable === true;
-        if (!OVERLAY_FIX_WITH_AI_ENABLED) {
+        if (!generationEnabled) {
             fixBtn.disabled = true;
             fixBtn.style.display = 'none';
             fixBtn.style.cursor = 'not-allowed';
-            fixBtn.title = 'Disabled in Stability Release Mode';
         } else if (stabilityReleaseMode || !hasTarget || guardrail.blockAi || isFallback) {
             fixBtn.disabled = true;
             fixBtn.style.background = '#94a3b8';
@@ -5213,7 +6888,7 @@
         }
         panel.appendChild(status);
         panel.appendChild(variantsWrap);
-        if (!OVERLAY_FIX_WITH_AI_ENABLED || stabilityReleaseMode) {
+        if (!generationEnabled) {
             if (!schemaAssist) {
                 status.textContent = '';
             } else {
@@ -5235,50 +6910,274 @@
 
     async function handleInlineFix(item, panel, rewriteContextArg) {
         const statusEl = panel.querySelector('.aivi-overlay-inline-status');
-        if (!OVERLAY_FIX_WITH_AI_ENABLED) {
+        emitFixAssistTelemetry('overlay_fix_assist_help_requested', item, {
+            source: 'inline_panel',
+            request_kind: 'variants'
+        });
+        const availability = buildFixAssistAvailability(item, rewriteContextArg);
+        const triage = normalizeFixAssistTriage(item.fixAssistTriage, availability);
+        await beginFixAssistVariantRequestFlow(item, statusEl, availability, triage, 'inline_panel', rewriteContextArg);
+    }
+
+    function formatFixAssistCreditCount(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) return '';
+        try {
+            return new Intl.NumberFormat().format(Math.max(0, Math.floor(numeric)));
+        } catch (e) {
+            return String(Math.max(0, Math.floor(numeric)));
+        }
+    }
+
+    function buildFixAssistVerificationSummary(info) {
+        const verification = info && typeof info === 'object' && info.verification_result && typeof info.verification_result === 'object'
+            ? info.verification_result
+            : null;
+        if (!verification) return '';
+        const status = String(verification.status || '').trim().toLowerCase();
+        const explicitMessage = normalizeText(verification.message || '');
+        if (explicitMessage) {
+            return explicitMessage;
+        }
+        if (status === 'support_found') {
+            return 'AiVI found closely related support and used it carefully while shaping these variants.';
+        }
+        if (status === 'weak_support') {
+            return 'AiVI found only limited supporting material, so these variants keep the wording measured and do not claim more than the support allows.';
+        }
+        if (status === 'no_verifiable_support') {
+            return 'AiVI did not find verifiable support close to this claim. These variants keep the wording measured and avoid unsupported certainty.';
+        }
+        if (status === 'verification_unavailable') {
+            return 'AiVI could not complete web verification just now, so these variants stay local and carefully framed.';
+        }
+        if (status === 'verification_skipped') {
+            return 'AiVI kept this pass local and framed the variants without web verification.';
+        }
+        return '';
+    }
+
+    function createFixAssistGenerationRequestId(item) {
+        const base = String(item && item.key ? item.key : 'fix-assist').trim() || 'fix-assist';
+        const randomPart = Math.random().toString(36).slice(2, 10);
+        return `${base}:${Date.now()}:${randomPart}`;
+    }
+
+    function buildFixAssistStatusText(info, fallbackMessage) {
+        if (!info || typeof info !== 'object') {
+            return String(fallbackMessage || '').trim();
+        }
+        const billing = info.billing_summary && typeof info.billing_summary === 'object'
+            ? info.billing_summary
+            : null;
+        const verificationSummary = buildFixAssistVerificationSummary(info);
+        if (billing && billing.billing_status === 'blocked') {
+            return 'Copilot cannot generate variants for this account right now. Check credits or plan access, then try again.';
+        }
+        if (Array.isArray(info.variants) && info.variants.length) {
+            return verificationSummary
+                ? `Variants ready. ${verificationSummary}`.trim()
+                : 'Variants ready.';
+        }
+        if (verificationSummary) {
+            return verificationSummary;
+        }
+        return String(info.status || fallbackMessage || '').trim();
+    }
+
+    async function beginFixAssistVariantRequestFlow(item, statusEl, availabilityArg, triageArg, source, rewriteContextArg) {
+        const availability = availabilityArg || buildFixAssistAvailability(item, rewriteContextArg);
+        const triage = triageArg || normalizeFixAssistTriage(item.fixAssistTriage, availability);
+        const generationEnabled = isFixAssistGenerationEnabled()
+            && !isStabilityReleaseModeEnabled()
+            && getGuardrailState().blockAi !== true;
+        let note = 'Copilot is ready.';
+
+        state.fixAssistExpandedIssueKey = '';
+
+        if (triage.variants_allowed !== true) {
+            note = 'This section still needs clearer local grounding before Copilot should draft variants. Open the issue details or jump to the related block, and Copilot will stay tightly scoped there.';
+        } else if (triage.requires_web_consent === true && generationEnabled) {
+            openFixAssistConsentPrompt(item, rewriteContextArg || (availability && availability.rewriteContext ? availability.rewriteContext : null));
+            if (item && item.key) {
+                setActiveFixAssistIssue(item.key, item, 'fix_assist_consent');
+                setFixAssistOpenIssueKey(item.key, 'fix_assist_consent');
+            }
+            note = 'Choose whether to verify nearby support first or keep this pass local to the article.';
+            if (statusEl) statusEl.textContent = note;
+            setFixAssistMetaStatus(note);
+            return null;
+        } else if (triage.state === 'leave_as_is') {
+            note = 'This section already looks clear and extractible. Variants are optional if you want a tighter alternative.';
+        } else if (triage.state === 'optional_improvement') {
+            note = 'This section is usable as written. Variants are optional if you want a cleaner alternative.';
+        }
+
+        if (triage.variants_allowed === true && generationEnabled) {
+            const sourceItem = availability && availability.sourceItem ? availability.sourceItem : resolveFixAssistSourceItem(item);
+            if (sourceItem) {
+                state.fixAssistNotes.set(item.key, 'Generating 3 variants now.');
+                refreshReviewRailPreservingScroll();
+                const liveAvailability = buildFixAssistAvailability(sourceItem, rewriteContextArg);
+                return requestFixAssistVariants(
+                    item,
+                    statusEl,
+                    liveAvailability && liveAvailability.rewriteContext ? liveAvailability.rewriteContext : resolveItemRewriteContext(sourceItem),
+                    source,
+                    ''
+                );
+            }
+            emitFixAssistTelemetry('overlay_fix_assist_generation_failed', item, {
+                source: String(source || 'unknown'),
+                reason: 'local_issue_context_unavailable'
+            });
+            note = 'AiVI could not resolve this issue to a clear local section for variants yet.';
+        }
+
+        state.fixAssistNotes.set(item.key, note);
+        if (statusEl) statusEl.textContent = note;
+        setFixAssistMetaStatus(note);
+        refreshReviewRailPreservingScroll();
+        return null;
+    }
+
+    async function requestFixAssistVariants(item, statusEl, rewriteContextArg, source, verificationIntentArg) {
+        if (!isFixAssistGenerationEnabled()) {
             if (statusEl) {
                 statusEl.textContent = '';
             }
-            return;
+            return null;
         }
         if (isStabilityReleaseModeEnabled()) {
             if (statusEl) {
                 statusEl.textContent = '';
             }
-            return;
+            return null;
         }
         const guardrail = getGuardrailState();
         if (guardrail.blockAi) {
-            setMetaStatus(guardrail.message || 'AI unavailable');
-            return;
+            setFixAssistMetaStatus(guardrail.message || 'AI unavailable');
+            return null;
         }
-        const rewriteContext = rewriteContextArg || resolveItemRewriteContext(item);
-        const variantsWrap = panel.querySelector('.aivi-overlay-inline-variants');
-        state.suggestions[item.key] = {
-            status: 'Generating...',
+        const sourceItem = resolveFixAssistSourceItem(item) || item;
+        const issueKey = resolveFixAssistSuggestionKey(item, sourceItem);
+        if (!issueKey) {
+            const failureMessage = 'AiVI could not keep this Copilot request attached to the selected issue. Please re-open the issue and try again.';
+            emitFixAssistTelemetry('overlay_fix_assist_generation_failed', item, {
+                source: String(source || 'unknown'),
+                reason: 'missing_issue_key'
+            });
+            if (statusEl) statusEl.textContent = failureMessage;
+            setFixAssistMetaStatus(failureMessage);
+            return null;
+        }
+        const verificationIntent = normalizeFixAssistVerificationIntent(
+            verificationIntentArg
+            || (state.suggestions[issueKey] && state.suggestions[issueKey].verification_intent)
+            || ''
+        );
+        const rewriteContext = rewriteContextArg || resolveItemRewriteContext(sourceItem);
+        const generationRequestId = createFixAssistGenerationRequestId({ key: issueKey });
+        state.suggestions[issueKey] = {
+            status: verificationIntent === 'verify_first'
+                ? 'Generating 3 variants. AiVI will do a quick verification pass first.'
+                : 'Generating 3 variants.',
             variants: [],
+            consent_required: false,
+            consent_message: '',
+            issue_key: issueKey,
+            verification_intent: verificationIntent || '',
+            verification_result: null,
             rewrite_target: rewriteContext.rewrite_target || null,
             repair_intent: rewriteContext.repair_intent || null,
-            analysis_ref: rewriteContext.analysis_ref || null
+            analysis_ref: rewriteContext.analysis_ref || null,
+            generation_request_id: generationRequestId,
+            fix_assist_triage: firstObject(
+                sourceItem && sourceItem.fix_assist_triage,
+                sourceItem && sourceItem.highlight && sourceItem.highlight.fix_assist_triage,
+                sourceItem && sourceItem.check && sourceItem.check.fix_assist_triage,
+                item && item.fix_assist_triage,
+                item && item.highlight && item.highlight.fix_assist_triage,
+                item && item.check && item.check.fix_assist_triage
+            )
         };
-        if (statusEl) statusEl.textContent = 'Generating...';
+        if (statusEl) statusEl.textContent = state.suggestions[issueKey].status;
+        if (state.activeFixAssistIssueKey === issueKey) {
+            refreshReviewRailPreservingScroll();
+        }
+        emitFixAssistTelemetry('overlay_fix_assist_request_prepare', item, {
+            source: String(source || 'unknown'),
+            request_kind: verificationIntent || 'variants',
+            generation_request_id: generationRequestId,
+            issue_key: issueKey,
+            has_source_item: !!sourceItem,
+            has_highlight: !!(sourceItem && sourceItem.highlight),
+            has_check: !!(sourceItem && sourceItem.check),
+            has_rewrite_context: !!rewriteContext,
+            has_rewrite_target: !!(rewriteContext && rewriteContext.rewrite_target),
+            verification_intent: verificationIntent || ''
+        });
         const blocks = getBlocks();
         const manifest = buildLiveManifest(blocks);
         const rewriteTarget = rewriteContext.rewrite_target && typeof rewriteContext.rewrite_target === 'object'
             ? rewriteContext.rewrite_target
             : null;
+        const sourceHighlight = sourceItem && sourceItem.highlight && typeof sourceItem.highlight === 'object'
+            ? sourceItem.highlight
+            : null;
+        const sourceCheck = sourceItem && sourceItem.check && typeof sourceItem.check === 'object'
+            ? sourceItem.check
+            : null;
         const suggestionText = String(
             (rewriteTarget && rewriteTarget.target_text)
             || (rewriteTarget && rewriteTarget.quote && rewriteTarget.quote.exact)
-            || item.highlight.snippet
-            || item.highlight.text
+            || (sourceHighlight && sourceHighlight.snippet)
+            || (sourceHighlight && sourceHighlight.text)
             || ''
         ).trim();
+        if (!suggestionText) {
+            const failureMessage = 'AiVI could not prepare the selected section for variants yet. Please re-open the issue and try again.';
+            state.suggestions[issueKey] = {
+                status: failureMessage,
+                variants: [],
+                issue_key: issueKey,
+                rewrite_target: rewriteContext && rewriteContext.rewrite_target ? rewriteContext.rewrite_target : null,
+                repair_intent: rewriteContext && rewriteContext.repair_intent ? rewriteContext.repair_intent : null,
+                analysis_ref: rewriteContext && rewriteContext.analysis_ref ? rewriteContext.analysis_ref : null,
+                generation_request_id: generationRequestId,
+                billing_summary: null,
+                verification_intent: verificationIntent || '',
+                verification_result: null,
+                fix_assist_triage: firstObject(
+                    sourceItem && sourceItem.fix_assist_triage,
+                    sourceHighlight && sourceHighlight.fix_assist_triage,
+                    sourceCheck && sourceCheck.fix_assist_triage,
+                    item && item.fix_assist_triage
+                )
+            };
+            emitFixAssistTelemetry('overlay_fix_assist_generation_failed', item, {
+                source: String(source || 'unknown'),
+                generation_request_id: generationRequestId,
+                issue_key: issueKey,
+                reason: 'request_context_missing_suggestion_text',
+                has_source_item: !!sourceItem,
+                has_highlight: !!sourceHighlight,
+                has_check: !!sourceCheck,
+                verification_intent: verificationIntent || ''
+            });
+            if (statusEl) statusEl.textContent = failureMessage;
+            setFixAssistMetaStatus(failureMessage);
+            if (state.activeFixAssistIssueKey === issueKey) {
+                refreshReviewRailPreservingScroll();
+            }
+            return state.suggestions[issueKey];
+        }
         const suggestion = {
             text: suggestionText,
             node_ref: (rewriteTarget && rewriteTarget.primary_node_ref)
-                || item.highlight.node_ref
-                || item.highlight.nodeRef
+                || (sourceHighlight && sourceHighlight.node_ref)
+                || (sourceHighlight && sourceHighlight.nodeRef)
+                || (sourceItem && sourceItem.resolvedNodeRef)
                 || item.resolvedNodeRef
                 || ''
         };
@@ -5286,69 +7185,223 @@
         if (suggestion.text) {
             payload.suggestion = suggestion;
         }
-        const suggestionId = item.highlight.suggestion_id || item.check.suggestion_id || '';
+        const suggestionId = (sourceHighlight && sourceHighlight.suggestion_id)
+            || (sourceCheck && sourceCheck.suggestion_id)
+            || '';
         if (suggestionId) payload.suggestion_id = suggestionId;
         if (rewriteContext.analysis_ref) payload.analysis_ref = rewriteContext.analysis_ref;
         if (rewriteContext.rewrite_target) payload.rewrite_target = rewriteContext.rewrite_target;
         if (rewriteContext.repair_intent) payload.repair_intent = rewriteContext.repair_intent;
-        payload.issue_context = buildIssueContextPacket(item, rewriteContext, blocks, manifest);
-        const result = await callRest('/rewrite', 'POST', payload);
-        if (!result.ok || !result.data || result.data.ok === false) {
-            state.suggestions[item.key] = {
-                status: 'Error',
+        const fixAssistTriage = firstObject(
+            sourceItem && sourceItem.fix_assist_triage,
+            sourceHighlight && sourceHighlight.fix_assist_triage,
+            sourceCheck && sourceCheck.fix_assist_triage,
+            item && item.fix_assist_triage,
+            item && item.highlight && item.highlight.fix_assist_triage,
+            item && item.check && item.check.fix_assist_triage
+        );
+        if (fixAssistTriage) payload.fix_assist_triage = fixAssistTriage;
+        payload.generation_request_id = generationRequestId;
+        if (verificationIntent) {
+            payload.verification_intent = verificationIntent;
+            payload.options = {
+                verification_intent: verificationIntent
+            };
+        }
+        payload.copilot_issue = buildCopilotIssuePacket(sourceItem, rewriteContext, blocks, manifest);
+        payload.issue_context = payload.copilot_issue;
+        emitFixAssistTelemetry('overlay_fix_assist_request_dispatch', item, {
+            source: String(source || 'unknown'),
+            request_kind: verificationIntent || 'variants',
+            generation_request_id: generationRequestId,
+            issue_key: issueKey,
+            has_manifest: !!manifest,
+            has_suggestion: !!payload.suggestion,
+            has_analysis_ref: !!payload.analysis_ref,
+            has_rewrite_target: !!payload.rewrite_target,
+            has_repair_intent: !!payload.repair_intent,
+            has_copilot_issue: !!payload.copilot_issue,
+            verification_intent: verificationIntent || ''
+        });
+        let result;
+        try {
+            result = await callRest('/rewrite', 'POST', payload);
+        } catch (error) {
+            const failureMessage = 'Copilot could not generate variants this time. Please try again in a moment.';
+            state.suggestions[issueKey] = {
+                status: failureMessage,
                 variants: [],
+                issue_key: issueKey,
                 rewrite_target: rewriteContext.rewrite_target || null,
                 repair_intent: rewriteContext.repair_intent || null,
-                analysis_ref: rewriteContext.analysis_ref || null
+                analysis_ref: rewriteContext.analysis_ref || null,
+                generation_request_id: generationRequestId,
+                billing_summary: null,
+                verification_intent: verificationIntent || '',
+                verification_result: null,
+                fix_assist_triage: fixAssistTriage || null
             };
-            if (statusEl) statusEl.textContent = 'Error';
-            return;
+            emitFixAssistTelemetry('overlay_fix_assist_generation_failed', item, {
+                source: String(source || 'unknown'),
+                generation_request_id: generationRequestId,
+                issue_key: issueKey,
+                reason: error && error.message ? String(error.message) : 'network_error'
+            });
+            if (statusEl) statusEl.textContent = failureMessage;
+            setFixAssistMetaStatus(failureMessage);
+            if (state.activeFixAssistIssueKey === issueKey) {
+                refreshReviewRailPreservingScroll();
+            }
+            return state.suggestions[issueKey];
+        }
+        if (!result.ok || !result.data || result.data.ok === false) {
+            const failureMessage = String(
+                (result && result.data && result.data.message)
+                || (result && result.data && result.data.error)
+                || 'Unable to generate variants right now.'
+            ).trim();
+            state.suggestions[issueKey] = {
+                status: failureMessage,
+                variants: [],
+                issue_key: issueKey,
+                rewrite_target: rewriteContext.rewrite_target || null,
+                repair_intent: rewriteContext.repair_intent || null,
+                analysis_ref: rewriteContext.analysis_ref || null,
+                generation_request_id: generationRequestId,
+                billing_summary: result && result.data && result.data.billing_summary ? result.data.billing_summary : null,
+                verification_intent: verificationIntent || '',
+                verification_result: result && result.data ? (result.data.verification_result || null) : null,
+                fix_assist_triage: fixAssistTriage || null
+            };
+            emitFixAssistTelemetry('overlay_fix_assist_generation_failed', item, {
+                source: String(source || 'unknown'),
+                generation_request_id: generationRequestId,
+                issue_key: issueKey,
+                reason: String((result && result.data && (result.data.error || result.data.message)) || 'generation_failed').trim(),
+                billing_status: result && result.data && result.data.billing_summary ? String(result.data.billing_summary.billing_status || '') : ''
+            });
+            if (statusEl) statusEl.textContent = failureMessage;
+            setFixAssistMetaStatus(failureMessage);
+            if (state.activeFixAssistIssueKey === issueKey) {
+                refreshReviewRailPreservingScroll();
+            }
+            return state.suggestions[issueKey];
         }
         const responseSuggestionId = result.data.suggestion_id || suggestionId || '';
         const variants = Array.isArray(result.data.variants) ? result.data.variants : [];
-        state.suggestions[item.key] = {
+        state.suggestions[issueKey] = {
             suggestion_id: responseSuggestionId,
             variants,
             original: suggestion.text,
-            status: 'Variants ready',
+            status: '',
+            issue_key: issueKey,
             rewrite_target: rewriteContext.rewrite_target || null,
             repair_intent: rewriteContext.repair_intent || null,
-            analysis_ref: rewriteContext.analysis_ref || null
+            analysis_ref: rewriteContext.analysis_ref || null,
+            generation_request_id: result.data.generation_request_id || generationRequestId,
+            billing_summary: result.data.billing_summary || null,
+            verification_intent: normalizeFixAssistVerificationIntent(result.data.verification_intent || verificationIntent || ''),
+            verification_result: result.data.verification_result || null,
+            fix_assist_triage: result.data.fix_assist_triage || fixAssistTriage || null,
+            fix_assist_contract: result.data.fix_assist_contract || null
         };
-        if (statusEl) statusEl.textContent = 'Variants ready';
-        if (variantsWrap) {
-            renderVariants(item, variantsWrap);
+        state.suggestions[issueKey].status = buildFixAssistStatusText(
+            state.suggestions[issueKey],
+            variants.length ? 'Variants ready.' : 'No variants returned.'
+        );
+        emitFixAssistTelemetry('overlay_fix_assist_variants_generated', item, {
+            source: String(source || 'unknown'),
+            generation_request_id: state.suggestions[issueKey].generation_request_id || generationRequestId,
+            issue_key: issueKey,
+            variants_count: variants.length,
+            credits_used: Number(
+                state.suggestions[issueKey].billing_summary && state.suggestions[issueKey].billing_summary.credits_used
+            ) || 0,
+            verification_status: state.suggestions[issueKey].verification_result
+                ? String(state.suggestions[issueKey].verification_result.status || '')
+                : '',
+            verification_provider: state.suggestions[issueKey].verification_result
+                ? String(state.suggestions[issueKey].verification_result.provider || '')
+                : ''
+        });
+        if (statusEl) statusEl.textContent = state.suggestions[issueKey].status;
+        setFixAssistMetaStatus(source === 'fix_assist_popover'
+            ? state.suggestions[issueKey].status
+            : 'Variants ready. Copy one into WordPress if you want to use it.');
+        if (state.activeFixAssistIssueKey === issueKey) {
+            refreshReviewRailPreservingScroll();
         }
+        return state.suggestions[issueKey];
     }
+
+    function normalizeFixAssistVariantText(text, rewriteTarget) {
+        const raw = String(text || '').trim();
+        if (!raw) return '';
+        const applyMode = resolveRewriteApplyMode(rewriteTarget);
+        if (applyMode !== 'convert_to_list' && applyMode !== 'convert_to_steps') {
+            return raw;
+        }
+        if (!/<(ul|ol|li)\b/i.test(raw)) {
+            return raw;
+        }
+        const container = state.contextDoc ? state.contextDoc.createElement('div') : document.createElement('div');
+        container.innerHTML = raw;
+        const items = Array.from(container.querySelectorAll('li'))
+            .map((node) => normalizeText(node.textContent || ''))
+            .filter(Boolean);
+        if (!items.length) {
+            return raw;
+        }
+        if (applyMode === 'convert_to_steps') {
+            return items.map((item, index) => `${index + 1}. ${item}`).join('\n');
+        }
+        return items.map((item) => `- ${item}`).join('\n');
+    }
+
     function renderVariants(item, wrap) {
         wrap.innerHTML = '';
         const info = state.suggestions[item.key];
         if (!info || !Array.isArray(info.variants) || !info.variants.length) return;
         info.variants.forEach((variant, idx) => {
             const card = state.contextDoc.createElement('div');
-            card.style.cssText = 'border:1px solid #d7dfec;border-radius:10px;padding:9px;background:#fbfdff;display:flex;flex-direction:column;gap:7px;';
+            card.className = 'aivi-overlay-fix-assist-variant-card';
+            const header = state.contextDoc.createElement('div');
+            header.className = 'aivi-overlay-fix-assist-variant-head';
+            const label = state.contextDoc.createElement('div');
+            label.className = 'aivi-overlay-fix-assist-variant-label';
+            label.textContent = variant.label || `Variant ${idx + 1}`;
             const vtext = state.contextDoc.createElement('div');
-            vtext.style.cssText = 'font-size:13px;color:#172740;line-height:1.55;';
-            vtext.textContent = variant.text || '';
+            vtext.className = 'aivi-overlay-fix-assist-variant-text';
+            vtext.textContent = normalizeFixAssistVariantText(variant.text || '', info.rewrite_target || null);
+            const explanation = state.contextDoc.createElement('div');
+            explanation.className = 'aivi-overlay-fix-assist-variant-explanation';
+            explanation.textContent = variant.explanation ? String(variant.explanation) : '';
             const row = state.contextDoc.createElement('div');
-            row.style.cssText = 'display:flex;gap:8px;align-items:center;';
+            row.className = 'aivi-overlay-fix-assist-variant-actions';
             const copyBtn = state.contextDoc.createElement('button');
             copyBtn.type = 'button';
-            copyBtn.style.cssText = 'border:1px solid #0f8b5f;background:#0f8b5f;color:#fff;padding:6px 11px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:"Manrope","Segoe UI",sans-serif;';
-            copyBtn.textContent = 'Copy';
+            copyBtn.className = 'aivi-overlay-fix-assist-btn primary';
+            copyBtn.textContent = 'Copy variant';
             copyBtn.addEventListener('click', () => handleAccept(item, idx));
             const rejectBtn = state.contextDoc.createElement('button');
             rejectBtn.type = 'button';
-            rejectBtn.style.cssText = 'border:1px solid #d14343;background:#fff;color:#b91c1c;padding:6px 11px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:"Manrope","Segoe UI",sans-serif;';
-            rejectBtn.textContent = 'Reject';
+            rejectBtn.className = 'aivi-overlay-fix-assist-btn';
+            rejectBtn.textContent = 'Dismiss';
             rejectBtn.addEventListener('click', () => handleReject(item, idx));
-            const meta = state.contextDoc.createElement('div');
-            meta.style.cssText = 'font-size:12px;color:#5e6f86;margin-left:auto;font-weight:600;';
-            meta.textContent = variant.explanation ? String(variant.explanation) : '';
+            header.appendChild(label);
+            if (Number.isFinite(Number(variant.confidence))) {
+                const confidence = state.contextDoc.createElement('div');
+                confidence.className = 'aivi-overlay-fix-assist-variant-confidence';
+                confidence.textContent = `${Math.round(Number(variant.confidence) * 100)}%`;
+                header.appendChild(confidence);
+            }
             row.appendChild(copyBtn);
             row.appendChild(rejectBtn);
-            row.appendChild(meta);
+            card.appendChild(header);
             card.appendChild(vtext);
+            if (explanation.textContent) {
+                card.appendChild(explanation);
+            }
             card.appendChild(row);
             wrap.appendChild(card);
         });
@@ -5359,7 +7412,7 @@
         if (!info) return;
         const variant = info.variants[idx];
         if (!variant) return;
-        const text = String(variant.text || '').trim();
+        const text = normalizeFixAssistVariantText(variant.text || '', info.rewrite_target || null);
         if (!text) {
             info.status = 'Nothing to copy';
             renderBlocks(true);
@@ -5377,6 +7430,13 @@
             await navigator.clipboard.writeText(text);
             info.status = 'Copied for paste';
             setMetaStatus('Copied revised text. Paste it into the matching WordPress block, then review and update the post.');
+            emitFixAssistTelemetry('overlay_fix_assist_variant_copied', item, {
+                source: 'variant_copy',
+                generation_request_id: info.generation_request_id || '',
+                variant_index: idx,
+                variant_label: String(variant.label || `Variant ${idx + 1}`),
+                credits_used: Number(info.billing_summary && info.billing_summary.credits_used) || 0
+            });
         } catch (e) {
             info.status = 'Copy failed';
             setMetaStatus('Copy failed. Copy the revised text manually from AiVI.');
@@ -5875,6 +7935,7 @@
     function setActiveEditableBody(body, nodeRef) {
         state.activeEditableBody = body || null;
         state.activeEditableNodeRef = nodeRef || '';
+        syncFixAssistIssueFromNodeRef(nodeRef);
         if (!state.overlayContent) return;
         const active = state.overlayContent.querySelectorAll('.aivi-overlay-block-editing');
         active.forEach((el) => el.classList.remove('aivi-overlay-block-editing'));
@@ -6147,21 +8208,24 @@
             itemWrap.className = 'aivi-overlay-recommendation-item';
             const checkName = state.contextDoc.createElement('div');
             checkName.className = 'aivi-overlay-recommendation-check';
-            checkName.textContent = issue.check_name || issue.check_id || 'Unknown check';
+            const issueDisplayName = resolveIssueDisplayName(issue);
+            checkName.textContent = issueDisplayName;
             const preferredSummary = normalizeText(issue.review_summary || '');
-            const sanitizedMessage = sanitizeInlineIssueMessage(
+            const fallbackSummaryText = sanitizeInlineIssueMessage(
                 preferredSummary || issue.message || '',
-                { name: issue.check_name || issue.check_id || '' }
-            );
-            const summaryText = sanitizedMessage || preferredSummary || 'Issue detected but could not be anchored.';
+                { name: issueDisplayName }
+            ) || preferredSummary || '';
             const explanationPack = resolveExplanationPack(
                 clonePlainObject(issue.explanation_pack),
                 {
-                    what_failed: summaryText,
+                    what_failed: fallbackSummaryText || 'Issue detected but could not be anchored.',
                     how_to_fix_step: issue.action_suggestion || 'Review this section manually and update the related sentence.',
                     issue_explanation: issue.issue_explanation || ''
                 }
             );
+            const summaryText = resolvePreferredIssueSummaryText(issue, explanationPack, issueDisplayName)
+                || fallbackSummaryText
+                || 'Issue detected but could not be anchored.';
             const detailText = resolveRecommendationDetailText(issue, explanationPack, summaryText);
             const snippet = state.contextDoc.createElement('div');
             snippet.className = 'aivi-overlay-recommendation-snippet';
@@ -6572,8 +8636,11 @@
         return button;
     }
 
-    function setMetaStatus(text) {
+    function setMetaStatus(text, source) {
         state.metaStatus = text || '';
+        state.metaStatusSource = state.metaStatus
+            ? (typeof source === 'string' && source ? source : 'general')
+            : '';
         const el = state.overlayPanel ? state.overlayPanel.querySelector('#aivi-overlay-rail-status') : null;
         if (el) {
             el.textContent = state.metaStatus;
@@ -7053,7 +9120,7 @@
                 background:linear-gradient(180deg,rgba(37,99,235,.05),transparent 24%), #f5f6f8;
             }
             .aivi-overlay-shell{
-                display:grid;grid-template-columns:minmax(320px,360px) minmax(0,1fr);gap:14px;align-items:stretch;height:100%;min-height:0;
+                display:grid;grid-template-columns:minmax(320px,360px) minmax(0,1fr);gap:14px;align-items:stretch;height:100%;min-height:0;position:relative;overflow:visible;
             }
             .aivi-overlay-review-rail{
                 padding:14px;border:1px solid rgba(23,26,33,.08);border-radius:24px;background:#fff;
@@ -7092,11 +9159,13 @@
             .aivi-overlay-review-scroll-btn{width:34px;height:34px;border:1px solid #dee3ea;border-radius:999px;background:#fff;color:#171a21;font-size:15px;font-weight:800;line-height:1;cursor:pointer;box-shadow:0 8px 18px rgba(23,26,33,.08);}
             .aivi-overlay-review-scroll-btn:hover{background:#f5f8fd;}
             .aivi-overlay-review-scroll-btn[disabled]{opacity:.4;cursor:default;box-shadow:none;}
-            .aivi-overlay-review-preview-item,.aivi-overlay-review-item{padding:12px 14px;border:1px solid #dee3ea;border-radius:18px;background:#fbfbfc;}
+            .aivi-overlay-review-preview-item,.aivi-overlay-review-item{position:relative;padding:12px 14px;border:1px solid #dee3ea;border-radius:18px;background:#fbfbfc;overflow:visible;}
+            .aivi-overlay-review-item.is-fix-assist-active{border-color:#c8d6ee;background:linear-gradient(180deg,#ffffff 0%,#f6f9ff 100%);box-shadow:0 14px 30px rgba(29,78,216,.08);}
             .aivi-overlay-review-item[data-verdict="fail"]{border-color:#f0c6c6;box-shadow:inset 3px 0 0 #d14343;}
             .aivi-overlay-review-item[data-verdict="partial"]{border-color:#efd6a4;box-shadow:inset 3px 0 0 #b56a07;}
             .aivi-overlay-review-preview-name,.aivi-overlay-review-item-name{font-size:14px;font-weight:700;line-height:1.35;color:#171a21;flex:1 1 auto;min-width:0;}
             .aivi-overlay-review-item-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+            .aivi-overlay-review-item-header-tools{display:flex;align-items:center;gap:8px;flex:0 0 auto;min-width:0;}
             .aivi-overlay-review-impact-pill{display:inline-flex;align-items:center;justify-content:center;padding:4px 9px;border-radius:999px;border:1px solid #dee3ea;background:#fff;color:#4b5563;font-size:11px;font-weight:700;line-height:1.1;white-space:nowrap;flex:0 0 auto;}
             .aivi-overlay-review-impact-pill[data-tier="high"]{background:#fff1ef;border-color:#f3c2c7;color:#7c2532;}
             .aivi-overlay-review-impact-pill[data-tier="recommended"]{background:#fff6dd;border-color:#e2b86a;color:#8a4b00;}
@@ -7109,6 +9178,58 @@
             }
             .aivi-overlay-review-btn:hover{background:#f5f8fd;}
             .aivi-overlay-review-btn[disabled]{opacity:.5;cursor:not-allowed;}
+            .aivi-overlay-fix-assist-launch{
+                display:inline-flex;align-items:center;gap:7px;padding:6px 10px;border-radius:999px;border:1px solid #bfd0f5;background:#eef4ff;color:#1d4ed8;
+                font-size:11px;font-weight:800;line-height:1;text-transform:none;cursor:pointer;font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;
+                box-shadow:0 6px 14px rgba(29,78,216,.08);white-space:nowrap;
+            }
+            .aivi-overlay-fix-assist-launch:hover{background:#e6efff;}
+            .aivi-overlay-fix-assist-launch-icon{
+                width:17px;height:17px;border-radius:999px;object-fit:cover;display:block;flex:0 0 auto;
+            }
+            .aivi-overlay-fix-assist-launch-label{display:inline-block;}
+            .aivi-overlay-fix-assist{
+                position:absolute;z-index:30;pointer-events:none;min-width:0;overflow:visible;
+            }
+            .aivi-overlay-fix-assist-bubble{
+                position:relative;pointer-events:auto;height:100%;
+            }
+            .aivi-overlay-fix-assist-popover{
+                position:relative;width:100%;height:100%;min-height:0;border:1px solid #c7d2e5;border-radius:20px;
+                background:#f8fafe;box-shadow:0 26px 54px rgba(16,31,56,.20);overflow:hidden;display:flex;flex-direction:column;
+            }
+            .aivi-overlay-fix-assist-popover::after{display:none;}
+            .aivi-overlay-fix-assist-close{
+                position:absolute;top:10px;right:12px;width:30px;height:30px;border:0;border-radius:999px;background:linear-gradient(180deg,#f86f64 0%,#e2443b 100%);color:#fff;cursor:pointer;
+                font-size:0;font-weight:900;line-height:1;box-shadow:0 8px 16px rgba(226,68,59,.32);z-index:2;
+            }
+            .aivi-overlay-fix-assist-close::before{content:"x";color:#fff;font-size:14px;font-weight:900;line-height:1;}
+            .aivi-overlay-fix-assist-popover-head{
+                background:linear-gradient(90deg,#142f66 0%,#1f4a9a 58%,#285fc8 100%);
+                padding:14px 16px 16px;color:#fff;position:relative;display:flex;flex-direction:column;gap:12px;flex:0 0 auto;
+            }
+            .aivi-overlay-fix-assist-popover-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+            .aivi-overlay-fix-assist-popover-top-actions{display:flex;align-items:center;gap:8px;padding-right:40px;}
+            .aivi-overlay-fix-assist-popover-brand{display:inline-flex;align-items:center;gap:8px;min-width:0;color:rgba(255,255,255,.96);}
+            .aivi-overlay-fix-assist-popover-icon{
+                width:18px;height:18px;border-radius:999px;object-fit:cover;display:block;flex:0 0 auto;background:#fff;
+            }
+            .aivi-overlay-fix-assist-popover-brand-text{
+                font-size:12px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.96);font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;
+            }
+            .aivi-overlay-fix-assist-popover-title{
+                margin:0;font-size:29px;font-weight:700;line-height:1.02;color:#ffffff;letter-spacing:-.01em;
+                font-family:"Newsreader",Georgia,serif;
+            }
+            .aivi-overlay-fix-assist-popover-body{
+                flex:1 1 auto;display:flex;flex-direction:column;gap:14px;min-height:0;overflow:auto;padding:18px 16px 10px;scrollbar-width:thin;scrollbar-color:#b9c2d0 transparent;
+            }
+            .aivi-overlay-fix-assist-popover-body::-webkit-scrollbar{width:10px;}
+            .aivi-overlay-fix-assist-popover-body::-webkit-scrollbar-thumb{background:#b9c2d0;border-radius:999px;border:2px solid transparent;background-clip:padding-box;}
+            .aivi-overlay-fix-assist-popover-body::-webkit-scrollbar-track{background:transparent;}
+            .aivi-overlay-fix-assist-popover-dock{
+                margin-top:auto;border-top:1px solid #e6ecf5;padding:12px 14px;background:#fcfdff;display:flex;gap:8px;flex-wrap:wrap;flex:0 0 auto;
+            }
                 .aivi-overlay-review-details{margin-top:12px;display:flex;flex-direction:column;gap:10px;}
                 .aivi-overlay-review-details[hidden]{display:none !important;}
                 .aivi-overlay-review-schema-assist{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid #d9e3f1;border-radius:14px;background:#ffffff;}
@@ -7150,6 +9271,59 @@
                 margin:0;font-size:clamp(38px,4.2vw,60px);font-weight:700;line-height:1.04;color:#171a21;letter-spacing:-.03em;
                 font-family:"Newsreader",Georgia,serif;
             }
+            .aivi-overlay-fix-assist-card{
+                display:flex;flex-direction:column;gap:12px;padding:14px 16px;border:1px solid #d9e3f1;border-radius:18px;
+                background:rgba(255,252,245,.94);backdrop-filter:blur(8px);box-shadow:0 16px 34px rgba(15,23,42,.08);
+            }
+            .aivi-overlay-fix-assist-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+            .aivi-overlay-fix-assist-kicker{
+                font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#6b7280;
+                font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;
+            }
+            .aivi-overlay-fix-assist-state{
+                display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:7px 11px;border:1px solid #e9cf9f;
+                background:#f7ead2;color:#905c1e;font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;
+                font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;
+            }
+            .aivi-overlay-fix-assist-state[data-state="ready"]{border-color:#e9cf9f;background:#f7ead2;color:#905c1e;}
+            .aivi-overlay-fix-assist-state[data-state="optional"]{border-color:#ddd7f3;background:#f7f4ff;color:#55409a;}
+            .aivi-overlay-fix-assist-state[data-state="leave"]{border-color:#cfe8da;background:#f2fbf5;color:#1f6b46;}
+            .aivi-overlay-fix-assist-state[data-state="guidance"]{border-color:#efd6a4;background:#fff3df;color:#8a4b00;}
+            .aivi-overlay-fix-assist-state[data-state="waiting"]{border-color:#dee3ea;background:#fbfbfc;color:#5b6980;}
+            .aivi-overlay-fix-assist-state[data-state="source"]{border-color:#bfd0f5;background:#eef4ff;color:#1d4ed8;}
+            .aivi-overlay-fix-assist-helper{
+                font-size:15px;line-height:1.72;color:#5d6b86;overflow-wrap:anywhere;word-break:normal;max-width:290px;
+                padding:0;
+            }
+            .aivi-overlay-fix-assist-btn{
+                border:1px solid #c8d5ed;background:#fff;color:#213c69;padding:10px 14px;border-radius:999px;font-size:13px;font-weight:800;cursor:pointer;
+                font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;line-height:1.2;
+            }
+            .aivi-overlay-fix-assist-btn.primary{border-color:#1f56c8;background:linear-gradient(180deg,#2e6eed 0%,#1f56c8 100%);color:#fff;box-shadow:0 10px 16px rgba(31,86,200,.24);}
+            .aivi-overlay-fix-assist-btn:hover{background:#f7f9fd;}
+            .aivi-overlay-fix-assist-btn.primary:hover{background:linear-gradient(180deg,#2c68de 0%,#1d4eb7 100%);}
+            .aivi-overlay-fix-assist-note{
+                font-size:13px;line-height:1.62;color:#55627d;border-left:3px solid rgba(43,99,222,.22);padding:4px 0 4px 12px;background:linear-gradient(90deg,rgba(43,99,222,.05),transparent 72%);
+            }
+            .aivi-overlay-fix-assist-variants{display:flex;flex-direction:column;gap:12px;}
+            .aivi-overlay-fix-assist-variant-card{
+                border:1px solid #d7e0ee;border-radius:14px;padding:12px 12px 10px;background:#ffffff;display:flex;flex-direction:column;gap:10px;box-shadow:0 14px 28px rgba(16,31,56,.12);
+            }
+            .aivi-overlay-fix-assist-variant-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+            .aivi-overlay-fix-assist-variant-label{
+                font-size:12px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:#1e55c3;
+                font-family:"Manrope","Segoe UI",-apple-system,system-ui,sans-serif;
+            }
+            .aivi-overlay-fix-assist-variant-confidence{
+                font-size:12px;font-weight:800;letter-spacing:.04em;color:#52647f;background:#f1f5fb;border:1px solid #d4dceb;border-radius:999px;padding:5px 9px;
+            }
+            .aivi-overlay-fix-assist-variant-text{
+                font-size:15px;line-height:1.68;color:#2c3853;white-space:pre-wrap;overflow-wrap:anywhere;
+            }
+            .aivi-overlay-fix-assist-variant-explanation{
+                font-size:13px;line-height:1.56;color:#66748f;
+            }
+            .aivi-overlay-fix-assist-variant-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-top:2px;}
             .aivi-overlay-canvas{display:flex;flex-direction:column;gap:8px;width:min(100%,940px);margin:0 auto;padding:0 0 12px;min-width:0;}
             .aivi-overlay-canvas h1,.aivi-overlay-canvas h2,.aivi-overlay-canvas h3{
                 font-family:"Newsreader",Georgia,serif;
@@ -7346,6 +9520,8 @@
                 .aivi-overlay-content{padding:10px;}
                 .aivi-overlay-shell{grid-template-columns:1fr;height:auto;}
                 .aivi-overlay-review-rail{height:auto;max-height:none;overflow:visible;}
+                .aivi-overlay-fix-assist{position:relative;left:auto !important;top:auto !important;width:100% !important;max-width:none !important;margin:0 0 12px;pointer-events:auto;}
+                .aivi-overlay-fix-assist-popover::after{display:none;}
                 .aivi-overlay-review-viewport{max-height:40vh;}
                 .aivi-overlay-stage{padding-left:0;border-left:0;overflow:visible;}
             }

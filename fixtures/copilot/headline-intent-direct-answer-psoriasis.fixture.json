@@ -1,0 +1,27 @@
+{
+  "fixture_id": "headline-intent-direct-answer-psoriasis",
+  "title": "Headline intent direct-answer fixture",
+  "description": "A title phrased as a direct question that should become a title-level intent cue, not a strict question anchor.",
+  "expected": {
+    "anchor_count": 0,
+    "section_intent_cue_text": "What Is Psoriasis?",
+    "section_intent_cue_source": "title",
+    "section_intent_cue_kind": "question_like"
+  },
+  "manifest": {
+    "title": "What Is Psoriasis?",
+    "block_map": [
+      {
+        "node_ref": "block-1",
+        "block_type": "core/paragraph",
+        "text": "Psoriasis is a chronic inflammatory skin condition that causes skin cells to build up too quickly, often creating thick, scaly patches."
+      },
+      {
+        "node_ref": "block-2",
+        "block_type": "core/paragraph",
+        "text": "It can affect different parts of the body and may flare at different times depending on triggers, treatment, and overall disease severity."
+      }
+    ],
+    "plain_text": "What Is Psoriasis?\n\nPsoriasis is a chronic inflammatory skin condition that causes skin cells to build up too quickly, often creating thick, scaly patches.\n\nIt can affect different parts of the body and may flare at different times depending on triggers, treatment, and overall disease severity."
+  }
+}

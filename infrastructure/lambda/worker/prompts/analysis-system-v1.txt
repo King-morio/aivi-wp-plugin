@@ -45,13 +45,16 @@ You must evaluate exactly {{AI_CHECK_COUNT}} check_ids in this request.
 11. **Cross-Check Independence**: Evaluate each check independently against its own definition. Do not fail one check solely because another related check failed. Reuse evidence only when it genuinely supports the specific check being reported.
 12. **Deterministic Separation**: Deterministic checks are executed outside this AI analyzer and are intentionally excluded from Definitions. Do not invent or return findings for any check_id not present in Definitions.
 13. **Question-Anchor Gate**: For these checks only - immediate_answer_placement, answer_sentence_concise, question_answer_alignment, clear_answer_formatting:
-    - Treat them as strict question-anchor checks.
-    - Use ONLY strict question anchors listed in `<question_anchors>`.
-    - Evaluate from the strict question anchor to the first answer segment that directly addresses that anchor.
+    - Treat them as answer-extractability checks that prefer strict question anchors but may use bounded section-intent cues when no true strict anchor exists.
+    - Use ONLY strict question anchors listed in `<question_anchors>.anchors`.
+    - Do not treat rhetorical hook questions, self-assessment prompts, CTA-style questions, or broad thematic lead-ins as strict anchors.
+    - If `anchor_count` > 0, evaluate from the selected strict question anchor to the first answer segment that directly addresses that anchor.
     - Separate the direct answer from setup, caveats, and later support. Broad topical framing is not itself a direct answer.
-    - If `anchor_count` is 0, return `partial` for every gated check and treat answer-extractability as unproven rather than successful.
+    - Treat page titles, H1s, and headlines as local intent cues by default, not as strict question anchors.
+    - If `anchor_count` is 0 and `section_intent_cue_count` > 0, use only the local section-intent cue from `<question_anchors>.section_intent_cues` to inspect the bounded section surface: title or heading cue, first answer paragraph, next support paragraph or visible list/table, then stop at the next heading or pseudo heading.
+    - If neither strict anchors nor section-intent cues exist, return `partial` for every gated check and treat answer-extractability as unproven rather than successful.
     - If `anchor_count` > 1 and verdict is fail/partial, include `question_anchor_text` exactly matching one anchor text.
-    - Never infer question anchors from topical headings like "Speed Optimization" or "How to ...".
+    - Never infer strict question anchors from topical headings, pseudo headings, or generic theme statements.
 14. **Answer-Family Interpretation**:
     - `immediate_answer_placement`: count to the start of the first direct answer, not to supporting context that appears before it.
     - After selecting a strict question anchor, reset the word count at the end of that anchor and ignore any prose that appears before it.

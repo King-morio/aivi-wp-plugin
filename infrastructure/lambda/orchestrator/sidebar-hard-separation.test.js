@@ -207,6 +207,7 @@ describe('Sidebar-Payload Hard Separation', () => {
 
             // Should have only allowed fields
             expect(issue).toHaveProperty('check_id');
+            expect(issue).toHaveProperty('check_name');
             expect(issue).toHaveProperty('name');
             expect(issue).toHaveProperty('ui_verdict');
             expect(issue).toHaveProperty('instances');

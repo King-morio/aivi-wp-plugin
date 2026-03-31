@@ -1,0 +1,93 @@
+{
+  "fixture_id": "immediate-answer-placement-buried-prose",
+  "title": "Immediate Answer Placement gate fixture",
+  "description": "A buried-answer prose section that Copilot must rewrite into direct, reusable openings without inventing facts.",
+  "check_id": "immediate_answer_placement",
+  "check_name": "Immediate Answer Placement",
+  "generation_mode": "live_model_required",
+  "acceptance": {
+    "required_variant_count": 3,
+    "must_pass_all_variants": true
+  },
+  "copilot_issue": {
+    "issue_key": "immediate_answer_placement:0",
+    "check_id": "immediate_answer_placement",
+    "check_name": "Immediate Answer Placement",
+    "instance_index": 0,
+    "analyzer_note": "The section reaches the answer only after setup instead of leading with it.",
+    "node_ref": "block-1",
+    "snippet": "Solar eclipses happen for a number of reasons tied to orbital motion, observation position, and the relationship between the Earth, Moon, and Sun. Because these bodies move continuously and because the Moon's path is tilted relative to Earth's orbit, the exact geometry has to line up very precisely. When that alignment happens, the Moon passes between Earth and the Sun, blocking all or part of the Sun from view.",
+    "target_mode": "section",
+    "target_operation": "replace_block",
+    "target_node_refs": [
+      "block-1"
+    ],
+    "heading_chain": [
+      "What causes a solar eclipse?"
+    ],
+    "section_range": {
+      "start_ref": "block-1",
+      "end_ref": "block-1",
+      "node_count": 1
+    },
+    "section_nodes": [
+      {
+        "ref": "block-1",
+        "type": "core/paragraph",
+        "text": "Solar eclipses happen for a number of reasons tied to orbital motion, observation position, and the relationship between the Earth, Moon, and Sun. Because these bodies move continuously and because the Moon's path is tilted relative to Earth's orbit, the exact geometry has to line up very precisely. When that alignment happens, the Moon passes between Earth and the Sun, blocking all or part of the Sun from view."
+      }
+    ],
+    "section_text": "Solar eclipses happen for a number of reasons tied to orbital motion, observation position, and the relationship between the Earth, Moon, and Sun. Because these bodies move continuously and because the Moon's path is tilted relative to Earth's orbit, the exact geometry has to line up very precisely. When that alignment happens, the Moon passes between Earth and the Sun, blocking all or part of the Sun from view.",
+    "selected_issue": {
+      "check_id": "immediate_answer_placement",
+      "check_name": "Immediate Answer Placement",
+      "instance_index": 0,
+      "analyzer_note": "The section reaches the answer only after setup instead of leading with it."
+    }
+  },
+  "rewrite_target": {
+    "actionable": true,
+    "mode": "section",
+    "operation": "replace_block",
+    "anchor_node_ref": "block-1",
+    "primary_repair_node_ref": "block-1",
+    "primary_node_ref": "block-1",
+    "repair_node_refs": [
+      "block-1"
+    ],
+    "node_refs": [
+      "block-1"
+    ],
+    "target_text": "Solar eclipses happen for a number of reasons tied to orbital motion, observation position, and the relationship between the Earth, Moon, and Sun. Because these bodies move continuously and because the Moon's path is tilted relative to Earth's orbit, the exact geometry has to line up very precisely. When that alignment happens, the Moon passes between Earth and the Sun, blocking all or part of the Sun from view.",
+    "quote": {
+      "exact": "Solar eclipses happen for a number of reasons tied to orbital motion, observation position, and the relationship between the Earth, Moon, and Sun. Because these bodies move continuously and because the Moon's path is tilted relative to Earth's orbit, the exact geometry has to line up very precisely. When that alignment happens, the Moon passes between Earth and the Sun, blocking all or part of the Sun from view."
+    },
+    "section_start_node_ref": "block-1",
+    "section_end_node_ref": "block-1",
+    "boundary_type": "document_end",
+    "boundary_node_ref": null,
+    "scope_confidence": 0.94,
+    "resolver_reason": "m5_fixture"
+  },
+  "repair_intent": {
+    "check_id": "immediate_answer_placement",
+    "check_name": "Immediate Answer Placement",
+    "instruction": "Lead with a direct answer sentence, then keep any setup or supporting detail after it.",
+    "rule_hint": "Place one direct answer sentence immediately after the question heading, then move setup or caveats after it."
+  },
+  "manifest": {
+    "nodes": [
+      {
+        "ref": "block-0",
+        "type": "core/heading",
+        "text": "What causes a solar eclipse?"
+      },
+      {
+        "ref": "block-1",
+        "type": "core/paragraph",
+        "text": "Solar eclipses happen for a number of reasons tied to orbital motion, observation position, and the relationship between the Earth, Moon, and Sun. Because these bodies move continuously and because the Moon's path is tilted relative to Earth's orbit, the exact geometry has to line up very precisely. When that alignment happens, the Moon passes between Earth and the Sun, blocking all or part of the Sun from view."
+      }
+    ],
+    "plain_text": "What causes a solar eclipse?\n\nSolar eclipses happen for a number of reasons tied to orbital motion, observation position, and the relationship between the Earth, Moon, and Sun. Because these bodies move continuously and because the Moon's path is tilted relative to Earth's orbit, the exact geometry has to line up very precisely. When that alignment happens, the Moon passes between Earth and the Sun, blocking all or part of the Sun from view."
+  }
+}

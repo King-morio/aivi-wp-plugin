@@ -142,8 +142,10 @@ class Assets
             'isEnabled' => Admin_Settings::is_enabled(),
             'webLookupsEnabled' => Admin_Settings::are_web_lookups_enabled(),
             'featureFlags' => Admin_Settings::get_feature_flags(),
+            'copilotIconUrl' => esc_url_raw(AIVI_PLUGIN_URL . 'assets/img/aivi-icon.png'),
+            'fixAssistGenerationEnabled' => true,
             // Stability Release Mode is overlay-local and intentionally does not alter sidebar messaging.
-            'stabilityReleaseMode' => true,
+            'stabilityReleaseMode' => false,
             'stabilityReleaseModeVersion' => 'v1',
             'autoRunOnLoad' => false,
             'aiHighlightSourcePriority' => array('analyzer'),

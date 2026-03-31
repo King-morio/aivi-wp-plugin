@@ -27,6 +27,9 @@ const TELEMETRY_EVENTS = {
     REWRITE_REQUESTED: 'rewrite_requested',
     REWRITE_COMPLETED: 'rewrite_completed',
     REWRITE_FAILED: 'rewrite_failed',
+    COPILOT_VARIANTS_GENERATED: 'copilot_variants_generated',
+    COPILOT_GENERATION_FAILED: 'copilot_generation_failed',
+    COPILOT_GENERATION_SETTLED: 'copilot_generation_settled',
     APPLY_SUGGESTION_COMPLETED: 'apply_suggestion_completed',
     APPLY_SUGGESTION_FAILED: 'apply_suggestion_failed'
 };
@@ -218,6 +221,18 @@ const emitRewriteFailed = (metadata = {}) => {
     return emitTelemetry(TELEMETRY_EVENTS.REWRITE_FAILED, metadata);
 };
 
+const emitCopilotVariantsGenerated = (metadata = {}) => {
+    return emitTelemetry(TELEMETRY_EVENTS.COPILOT_VARIANTS_GENERATED, metadata);
+};
+
+const emitCopilotGenerationFailed = (metadata = {}) => {
+    return emitTelemetry(TELEMETRY_EVENTS.COPILOT_GENERATION_FAILED, metadata);
+};
+
+const emitCopilotGenerationSettled = (metadata = {}) => {
+    return emitTelemetry(TELEMETRY_EVENTS.COPILOT_GENERATION_SETTLED, metadata);
+};
+
 const emitApplySuggestionCompleted = (metadata = {}) => {
     return emitTelemetry(TELEMETRY_EVENTS.APPLY_SUGGESTION_COMPLETED, metadata);
 };
@@ -242,6 +257,9 @@ module.exports = {
     emitRewriteRequested,
     emitRewriteCompleted,
     emitRewriteFailed,
+    emitCopilotVariantsGenerated,
+    emitCopilotGenerationFailed,
+    emitCopilotGenerationSettled,
     emitApplySuggestionCompleted,
     emitApplySuggestionFailed
 };

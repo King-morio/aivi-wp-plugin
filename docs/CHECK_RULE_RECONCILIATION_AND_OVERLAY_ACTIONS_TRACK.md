@@ -42,7 +42,7 @@ Implication for AiVI:
 7. `metadata_checks` has no document-level fill UI yet, and the write-back target is unresolved.
 8. `semantic_html_usage` has overlay generation plumbing nearby, but backend schema-assist wiring does not yet support that check.
 9. `intro_schema_suggestion` already has deterministic draft support; any plan should reuse that instead of rebuilding a second path.
-10. FAQ and HowTo rule changes touch prompt, check definitions, preflight detection, schema-assist generation, scoring neutrality, and rail rendering. They must move together.
+10. FAQ and HowTo rule changes touch prompt, preflight detection, schema-assist generation, scoring neutrality, and rail rendering. They must move together.
 
 ## Milestones
 

@@ -24,6 +24,11 @@ const runtimeContractPath = path.resolve(__dirname, '../shared/schemas/check-run
 const promptTemplatePath = path.resolve(__dirname, 'prompts/analysis-system-v1.txt');
 
 const loadJson = (filePath) => JSON.parse(String(fs.readFileSync(filePath, 'utf8')).replace(/^\uFEFF/, ''));
+const copilotFixtureRoot = path.resolve(__dirname, '../../../fixtures/copilot');
+
+const headlineIntentDirectAnswerFixture = loadJson(path.join(copilotFixtureRoot, 'headline-intent-direct-answer-psoriasis.fixture.json'));
+const headlineIntentBroadMultiAnswerFixture = loadJson(path.join(copilotFixtureRoot, 'headline-intent-broad-multi-answer-digital-tools.fixture.json'));
+const headlineIntentStructuredSurfaceFixture = loadJson(path.join(copilotFixtureRoot, 'headline-intent-structured-surface-resume-donts.fixture.json'));
 
 describe('worker regression guards', () => {
     test('Mistral chunk requests use schema-enforced output and smaller default chunks', () => {
@@ -308,8 +313,8 @@ describe('worker regression guards', () => {
         expect(__testHooks.isStrictQuestionAnchorText('How to improve website speed')).toBe(false);
         expect(__testHooks.isStrictQuestionAnchorText('What is website performance?')).toBe(true);
         expect(__testHooks.isStrictQuestionAnchorText('What is website performance')).toBe(true);
-        expect(__testHooks.isStrictQuestionAnchorText('What Changed This Year')).toBe(true);
-        expect(__testHooks.isStrictQuestionAnchorText('How teams improve delivery speed')).toBe(true);
+        expect(__testHooks.isStrictQuestionAnchorText('What Changed This Year')).toBe(false);
+        expect(__testHooks.isStrictQuestionAnchorText('How teams improve delivery speed')).toBe(false);
     });
 
     test('worker prompt keeps answer-family interpretation rules compact and separate from FAQ candidacy guidance', () => {
@@ -325,6 +330,8 @@ describe('worker regression guards', () => {
         expect(prompt).toMatch(/one or two clear sentences can pass/i);
         expect(prompt).toMatch(/do not tell the user to force it into one sentence/i);
         expect(prompt).toMatch(/If the verdict is `pass`, set `explanation` to an empty string/i);
+        expect(prompt).toMatch(/section-intent cues/i);
+        expect(prompt).toMatch(/rhetorical hook questions/i);
         expect(prompt).toMatch(/Dense inline Q&A should not be classified as "not a FAQ candidate"/i);
         expect(prompt).toMatch(/Do not return `pass` merely because the answers appear in prose instead of separated pairs/i);
         expect(gateSection).not.toMatch(/faq_structure_opportunity/);
@@ -369,7 +376,7 @@ describe('worker regression guards', () => {
         })).toThrow(/failed_schema/i);
     });
 
-    test('question-anchor payload includes only strict anchors from manifest', () => {
+    test('question-anchor payload keeps strict anchors separate from heading intent cues', () => {
         const payload = __testHooks.buildQuestionAnchorPayload({
             block_map: [
                 { node_ref: 'b0', block_type: 'core/heading', text: 'Speed Optimization' },
@@ -381,13 +388,64 @@ describe('worker regression guards', () => {
         });
 
         expect(payload.strict_mode).toBe(true);
-        expect(payload.anchor_count).toBe(3);
-        expect(payload.anchors.map((item) => item.text)).toContain('What is website performance?');
+        expect(payload.anchor_count).toBe(1);
         expect(payload.anchors.map((item) => item.text)).toContain('What is crawl budget?');
-        expect(payload.anchors.map((item) => item.text)).toContain('What Changed This Year');
+        expect(payload.anchors.map((item) => item.text)).not.toContain('What is website performance?');
+        expect(payload.anchors.map((item) => item.text)).not.toContain('What Changed This Year');
+        expect(payload.section_intent_cue_count).toBe(2);
+        expect(payload.section_intent_cues.map((item) => item.text)).toEqual(expect.arrayContaining([
+            'What is website performance?',
+            'What Changed This Year'
+        ]));
     });
 
-    test('question-anchor guardrail accepts relaxed heading anchors for adjacent answer paragraphs in multi-anchor sections', () => {
+    test('question-anchor payload promotes title-level intent cues without inflating strict anchors', () => {
+        const payload = __testHooks.buildQuestionAnchorPayload({
+            title: 'How Digital Tools Help Students Manage Exam Revision',
+            block_map: [
+                {
+                    node_ref: 'intro-1',
+                    block_type: 'core/paragraph',
+                    text: 'Do you ever feel overwhelmed trying to revise for several exams at once?'
+                },
+                {
+                    node_ref: 'intro-2',
+                    block_type: 'core/paragraph',
+                    text: 'Many students find revision stressful when several subjects compete for attention.'
+                },
+                {
+                    node_ref: 'intro-3',
+                    block_type: 'core/paragraph',
+                    text: 'Digital tools can make revision more manageable, efficient, and easier to organize.'
+                }
+            ]
+        });
+
+        expect(payload.anchor_count).toBe(0);
+        expect(payload.anchors).toEqual([]);
+        expect(payload.section_intent_cues.map((item) => item.text)).toContain('How Digital Tools Help Students Manage Exam Revision');
+        expect(payload.section_intent_cues.find((item) => item.text === 'How Digital Tools Help Students Manage Exam Revision')?.source).toBe('title');
+    });
+
+    test('headline intent fixtures keep titles as bounded cues without inflating strict anchors', () => {
+        [
+            headlineIntentDirectAnswerFixture,
+            headlineIntentBroadMultiAnswerFixture,
+            headlineIntentStructuredSurfaceFixture
+        ].forEach((fixture) => {
+            const payload = __testHooks.buildQuestionAnchorPayload(fixture.manifest);
+            const expected = fixture.expected || {};
+            const matchingCue = payload.section_intent_cues.find((item) => item.text === expected.section_intent_cue_text);
+
+            expect(payload.anchor_count).toBe(expected.anchor_count);
+            expect(payload.anchors).toEqual([]);
+            expect(matchingCue).toBeDefined();
+            expect(matchingCue?.source).toBe(expected.section_intent_cue_source);
+            expect(matchingCue?.kind).toBe(expected.section_intent_cue_kind);
+        });
+    });
+
+    test('question-anchor guardrail preserves bounded section-intent sections when strict anchors are absent', () => {
         const manifest = {
             block_map: [
                 { node_ref: 'h-1', block_type: 'core/heading', text: 'Why teams miss crawl budget' },
@@ -407,12 +465,13 @@ describe('worker regression guards', () => {
         };
 
         const payload = __testHooks.buildQuestionAnchorPayload(manifest);
-        expect(payload.anchor_count).toBe(2);
-        expect(payload.anchors.map((item) => item.text)).toEqual(expect.arrayContaining([
+        expect(payload.anchor_count).toBe(0);
+        expect(payload.section_intent_cue_count).toBe(2);
+        expect(payload.section_intent_cues.map((item) => item.text)).toEqual(expect.arrayContaining([
             'Why teams miss crawl budget',
             'What causes crawl delays?'
         ]));
-        expect(payload.anchors.map((item) => item.text)).not.toContain('Overview of crawl budget changes');
+        expect(payload.section_intent_cues.map((item) => item.text)).not.toContain('Overview of crawl budget changes');
 
         const decision = __testHooks.evaluateQuestionAnchorGuardrail({
             checkId: 'question_answer_alignment',
@@ -429,6 +488,31 @@ describe('worker regression guards', () => {
         expect(decision.verdict).toBe('partial');
         expect(decision.adjusted).toBe(false);
         expect(decision.reason).toBeNull();
+    });
+
+    test('question-anchor payload filters rhetorical hook questions out of strict anchors', () => {
+        const payload = __testHooks.buildQuestionAnchorPayload({
+            block_map: [
+                {
+                    node_ref: 'intro-1',
+                    block_type: 'core/paragraph',
+                    text: 'Do you find yourself struggling to write college essays?'
+                },
+                {
+                    node_ref: 'intro-2',
+                    block_type: 'core/paragraph',
+                    text: "Do you feel like you don't have enough time to get them done?"
+                },
+                {
+                    node_ref: 'intro-3',
+                    block_type: 'core/paragraph',
+                    text: "If you're looking for a way to make the process of writing college essays easier, why not give modern gadgets a try?"
+                }
+            ]
+        });
+
+        expect(payload.anchor_count).toBe(0);
+        expect(payload.anchors).toEqual([]);
     });
 
     test('question-anchor guardrail downgrades gated failures when strict anchors are absent', () => {
@@ -552,7 +636,6 @@ describe('worker regression guards', () => {
         });
 
         expect(payload.anchor_count).toBeGreaterThan(1);
-        expect(payload.anchor_node_text_lookup['block-1']).toContain('depending on bucket size');
         expect(payload.anchor_node_text_lookup['block-2']).toContain('depending on bucket size');
         expect(decision.verdict).toBe('pass');
         expect(decision.adjusted).toBe(false);
@@ -791,8 +874,9 @@ describe('worker regression guards', () => {
             }
         ];
 
-        expect(questionAnchorPayload.anchor_count).toBe(1);
-        expect(questionAnchorPayload.anchors.map((item) => item.text)).toContain('What Changed This Year');
+        expect(questionAnchorPayload.anchor_count).toBe(0);
+        expect(questionAnchorPayload.section_intent_cue_count).toBe(1);
+        expect(questionAnchorPayload.section_intent_cues.map((item) => item.text)).toContain('What Changed This Year');
 
         const converted = __testHooks.convertFindingsToChecks(
             findings,

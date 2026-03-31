@@ -1,0 +1,93 @@
+{
+  "fixture_id": "heading-topic-fulfillment-totality-duration",
+  "title": "Heading topic fulfillment gate fixture",
+  "description": "A heading support section that contains the needed duration facts but does not fulfill the heading promise clearly enough until later in the prose.",
+  "check_id": "heading_topic_fulfillment",
+  "check_name": "Heading Topic Fulfillment",
+  "generation_mode": "live_model_required",
+  "acceptance": {
+    "required_variant_count": 3,
+    "must_pass_all_variants": true
+  },
+  "copilot_issue": {
+    "issue_key": "heading_topic_fulfillment:0",
+    "check_id": "heading_topic_fulfillment",
+    "check_name": "Heading Topic Fulfillment",
+    "instance_index": 0,
+    "analyzer_note": "The section mentions timing but does not fulfill the heading promise clearly enough at the start of the support.",
+    "node_ref": "block-1",
+    "snippet": "Timing varies with eclipse geometry and where you stand in the path of totality. In most events, totality lasts only a few minutes, and the theoretical maximum is about 7 minutes 30 seconds.",
+    "target_mode": "section",
+    "target_operation": "replace_block",
+    "target_node_refs": [
+      "block-1"
+    ],
+    "heading_chain": [
+      "How long can totality last during a solar eclipse?"
+    ],
+    "section_range": {
+      "start_ref": "block-1",
+      "end_ref": "block-1",
+      "node_count": 1
+    },
+    "section_nodes": [
+      {
+        "ref": "block-1",
+        "type": "core/paragraph",
+        "text": "Timing varies with eclipse geometry and where you stand in the path of totality. In most events, totality lasts only a few minutes, and the theoretical maximum is about 7 minutes 30 seconds."
+      }
+    ],
+    "section_text": "Timing varies with eclipse geometry and where you stand in the path of totality. In most events, totality lasts only a few minutes, and the theoretical maximum is about 7 minutes 30 seconds.",
+    "selected_issue": {
+      "check_id": "heading_topic_fulfillment",
+      "check_name": "Heading Topic Fulfillment",
+      "instance_index": 0,
+      "analyzer_note": "The section mentions timing but does not fulfill the heading promise clearly enough at the start of the support."
+    }
+  },
+  "rewrite_target": {
+    "actionable": true,
+    "mode": "section",
+    "operation": "replace_block",
+    "anchor_node_ref": "block-1",
+    "primary_repair_node_ref": "block-1",
+    "primary_node_ref": "block-1",
+    "repair_node_refs": [
+      "block-1"
+    ],
+    "node_refs": [
+      "block-1"
+    ],
+    "target_text": "Timing varies with eclipse geometry and where you stand in the path of totality. In most events, totality lasts only a few minutes, and the theoretical maximum is about 7 minutes 30 seconds.",
+    "quote": {
+      "exact": "Timing varies with eclipse geometry and where you stand in the path of totality. In most events, totality lasts only a few minutes, and the theoretical maximum is about 7 minutes 30 seconds."
+    },
+    "section_start_node_ref": "block-1",
+    "section_end_node_ref": "block-1",
+    "boundary_type": "document_end",
+    "boundary_node_ref": null,
+    "scope_confidence": 0.93,
+    "resolver_reason": "m5_fixture"
+  },
+  "repair_intent": {
+    "check_id": "heading_topic_fulfillment",
+    "check_name": "Heading Topic Fulfillment",
+    "instruction": "Answer the heading promise more directly before any secondary caveat.",
+    "rule_hint": "Lead with the actual duration answer, then keep the variability context after it."
+  },
+  "manifest": {
+    "nodes": [
+      {
+        "ref": "block-0",
+        "type": "core/heading",
+        "text": "How long can totality last during a solar eclipse?"
+      },
+      {
+        "ref": "block-1",
+        "type": "core/paragraph",
+        "text": "Timing varies with eclipse geometry and where you stand in the path of totality. In most events, totality lasts only a few minutes, and the theoretical maximum is about 7 minutes 30 seconds."
+      }
+    ],
+    "plain_text": "How long can totality last during a solar eclipse?\n\nTiming varies with eclipse geometry and where you stand in the path of totality. In most events, totality lasts only a few minutes, and the theoretical maximum is about 7 minutes 30 seconds."
+  }
+}

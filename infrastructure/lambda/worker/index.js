@@ -1371,6 +1371,28 @@ const RELAXED_HEADING_QUESTION_VERB_CUES = new Set([
     'improves', 'improve', 'supports', 'support', 'reduces', 'reduce', 'increases', 'increase', 'updated', 'update',
     'miss', 'misses', 'missed', 'drives', 'drive', 'shifts', 'shift'
 ]);
+const RHETORICAL_HOOK_AUXILIARIES = new Set(['do', 'does', 'did', 'are', 'have', 'has', 'had']);
+const RHETORICAL_HOOK_CUES = new Set([
+    'find', 'yourself', 'feel', 'feeling', 'struggle', 'struggling', 'wonder', 'wondering',
+    'looking', 'ready', 'trying', 'ever', 'overwhelmed', 'confused', 'stuck', 'time'
+]);
+const STRUCTURED_SURFACE_INTENT_PATTERNS = [
+    /^what not to\b/i,
+    /^what to\b/i,
+    /^types?\b/i,
+    /^ways?\b/i,
+    /^steps?\b/i,
+    /^mistakes?\b/i,
+    /^pros(?:\s+and\s+|\s*&\s*)cons\b/i,
+    /^compare\b/i,
+    /^comparison\b/i,
+    /^differences?\b/i,
+    /\bversus\b/i,
+    /\bvs\.?\b/i,
+    /^checklist\b/i,
+    /^table\b/i,
+    /^options?\b/i
+];
 
 const NON_QUESTION_TOPIC_PATTERNS = [
     /^how to\b/i,
@@ -1412,18 +1434,64 @@ const normalizeQuestionAnchorText = (value) => {
         .trim();
 };
 
+const tokenizeIntentCueText = (value) => normalizeQuestionAnchorText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s'-]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+const isLikelyRhetoricalHookQuestionText = (value) => {
+    const normalized = normalizeQuestionAnchorText(value);
+    if (!normalized || !normalized.endsWith('?')) {
+        return false;
+    }
+    if (/^if you're looking for\b/i.test(normalized) || /^if you are looking for\b/i.test(normalized)) {
+        return true;
+    }
+    if (/\bwhy not\b/i.test(normalized)) {
+        return true;
+    }
+    const tokens = tokenizeIntentCueText(normalized);
+    if (tokens.length < 3) {
+        return false;
+    }
+    if (!RHETORICAL_HOOK_AUXILIARIES.has(tokens[0]) || tokens[1] !== 'you') {
+        return false;
+    }
+    return tokens.slice(2).some((token) => RHETORICAL_HOOK_CUES.has(token));
+};
+
+const isQuestionLikeIntentCueText = (value) => {
+    const normalized = normalizeQuestionAnchorText(value);
+    if (!normalized) return false;
+    if (isLikelyRhetoricalHookQuestionText(normalized)) {
+        return false;
+    }
+    if (normalized.endsWith('?')) {
+        return true;
+    }
+    return isRelaxedQuestionLikeHeadingText(normalized);
+};
+
+const isStructuredSurfaceIntentCueText = (value) => {
+    const normalized = normalizeQuestionAnchorText(value);
+    if (!normalized) return false;
+    return STRUCTURED_SURFACE_INTENT_PATTERNS.some((pattern) => pattern.test(normalized));
+};
+
 const isStrictQuestionAnchorText = (value) => {
     const normalized = normalizeQuestionAnchorText(value);
     if (!normalized || normalized.length < 5) {
+        return false;
+    }
+    if (isLikelyRhetoricalHookQuestionText(normalized)) {
         return false;
     }
     if (NON_QUESTION_TOPIC_PATTERNS.some((pattern) => pattern.test(normalized))) {
         return false;
     }
     if (normalized.endsWith('?')) {
-        return true;
-    }
-    if (isRelaxedQuestionLikeHeadingText(normalized)) {
         return true;
     }
     return STRICT_QUESTION_PREFIX_PATTERNS.some((pattern) => pattern.test(normalized));
@@ -1435,6 +1503,28 @@ const isHeadingLikeBlockType = (blockType) => {
     }
     const normalized = blockType.toLowerCase();
     return normalized.includes('heading') || /\/h[1-6]$/.test(normalized);
+};
+
+const isPseudoHeadingLikeText = (value) => {
+    const normalized = normalizeQuestionAnchorText(value);
+    if (!normalized || normalized.length < 6 || normalized.length > 120) {
+        return false;
+    }
+    if (/[.!?]$/.test(normalized) && !normalized.endsWith('?')) {
+        return false;
+    }
+    return isQuestionLikeIntentCueText(normalized) || isStructuredSurfaceIntentCueText(normalized);
+};
+
+const isPseudoHeadingCandidateBlock = (block, normalizedText) => {
+    const blockType = typeof block?.block_type === 'string' ? block.block_type.toLowerCase().trim() : '';
+    if (isHeadingLikeBlockType(blockType)) {
+        return false;
+    }
+    if (blockType && blockType !== 'core/paragraph' && blockType !== 'core/freeform' && blockType !== 'core/html') {
+        return false;
+    }
+    return isPseudoHeadingLikeText(normalizedText);
 };
 
 const splitTextSentencesWithOffsets = (text) => {
@@ -1493,18 +1583,9 @@ const buildStrictQuestionAnchors = (manifest, maxAnchors = 24) => {
         const nodeRef = block.node_ref || `block-${i}`;
         const signature = block.signature || null;
         const isHeading = isHeadingLikeBlockType(block.block_type);
+        const isPseudoHeading = isPseudoHeadingCandidateBlock(block, normalizedText);
 
-        if (isHeading) {
-            if (isStrictQuestionAnchorText(normalizedText)) {
-                pushAnchor({
-                    node_ref: nodeRef,
-                    signature,
-                    source: 'heading',
-                    start: 0,
-                    end: normalizedText.length,
-                    text: normalizedText
-                });
-            }
+        if (isHeading || isPseudoHeading) {
             continue;
         }
 
@@ -1527,8 +1608,90 @@ const buildStrictQuestionAnchors = (manifest, maxAnchors = 24) => {
     return anchors;
 };
 
+const buildSectionIntentCues = (manifest, maxCues = 24) => {
+    const blockMap = Array.isArray(manifest?.block_map) ? manifest.block_map : [];
+    const cues = [];
+    const seen = new Set();
+
+    const pushCue = (cue) => {
+        if (!cue) return;
+        const text = normalizeQuestionAnchorText(cue.text);
+        if (!text) return;
+        const dedupeKey = `${String(cue.kind || '').trim()}|${text.toLowerCase()}`;
+        if (seen.has(dedupeKey)) return;
+        seen.add(dedupeKey);
+        cues.push({
+            node_ref: cue.node_ref || null,
+            signature: cue.signature || null,
+            source: cue.source || 'heading',
+            kind: cue.kind || 'question_like',
+            text
+        });
+    };
+
+    const titleText = normalizeQuestionAnchorText(manifest?.title || manifest?.post_title || '');
+    if (titleText) {
+        if (isQuestionLikeIntentCueText(titleText)) {
+            pushCue({
+                node_ref: '__document_title__',
+                signature: null,
+                source: 'title',
+                kind: 'question_like',
+                text: titleText
+            });
+        } else if (isStructuredSurfaceIntentCueText(titleText)) {
+            pushCue({
+                node_ref: '__document_title__',
+                signature: null,
+                source: 'title',
+                kind: 'structured_surface',
+                text: titleText
+            });
+        }
+    }
+
+    for (let i = 0; i < blockMap.length; i += 1) {
+        if (cues.length >= maxCues) break;
+        const block = blockMap[i];
+        if (!block || typeof block !== 'object') continue;
+        const text = typeof block.text === 'string' ? block.text : (typeof block.text_content === 'string' ? block.text_content : '');
+        const normalizedText = normalizeQuestionAnchorText(text);
+        if (!normalizedText) continue;
+        const nodeRef = block.node_ref || `block-${i}`;
+        const signature = block.signature || null;
+        const isHeading = isHeadingLikeBlockType(block.block_type);
+        const isPseudoHeading = isPseudoHeadingCandidateBlock(block, normalizedText);
+        if (!isHeading && !isPseudoHeading) {
+            continue;
+        }
+
+        if (isQuestionLikeIntentCueText(normalizedText)) {
+            pushCue({
+                node_ref: nodeRef,
+                signature,
+                source: isHeading ? 'heading' : 'pseudo_heading',
+                kind: 'question_like',
+                text: normalizedText
+            });
+            continue;
+        }
+        if (isStructuredSurfaceIntentCueText(normalizedText)) {
+            pushCue({
+                node_ref: nodeRef,
+                signature,
+                source: isHeading ? 'heading' : 'pseudo_heading',
+                kind: 'structured_surface',
+                text: normalizedText
+            });
+        }
+    }
+
+    return cues;
+};
+
 const buildQuestionAnchorPayload = (manifest) => {
     const anchors = buildStrictQuestionAnchors(manifest);
+    const sectionIntentCues = buildSectionIntentCues(manifest);
     const blockMap = Array.isArray(manifest?.block_map) ? manifest.block_map : [];
     const anchorNodeTextLookup = {};
     const anchorNodeRefs = new Set(
@@ -1561,6 +1724,8 @@ const buildQuestionAnchorPayload = (manifest) => {
         strict_mode: true,
         anchor_count: anchors.length,
         anchors,
+        section_intent_cue_count: sectionIntentCues.length,
+        section_intent_cues: sectionIntentCues,
         anchor_node_text_lookup: anchorNodeTextLookup
     };
 };
@@ -1579,6 +1744,7 @@ const evaluateQuestionAnchorGuardrail = ({ checkId, verdict, finding, questionAn
         ? questionAnchorPayload
         : { anchors: [] };
     const anchors = Array.isArray(payload.anchors) ? payload.anchors : [];
+    const sectionIntentCues = Array.isArray(payload.section_intent_cues) ? payload.section_intent_cues : [];
     const anchorNodeRefSet = new Set(
         anchors
             .map((anchor) => (typeof anchor?.node_ref === 'string' ? anchor.node_ref.trim() : ''))
@@ -1592,6 +1758,14 @@ const evaluateQuestionAnchorGuardrail = ({ checkId, verdict, finding, questionAn
             .map((anchor) => normalizeQuestionAnchorText(anchor?.text).toLowerCase())
             .filter(Boolean)
     );
+
+    if (normalizedAnchorSet.size === 0 && sectionIntentCues.length > 0) {
+        return {
+            verdict: normalizedVerdict,
+            adjusted: false,
+            reason: null
+        };
+    }
 
     if (normalizedAnchorSet.size === 0) {
         return {
@@ -3850,6 +4024,7 @@ const callMistralChunked = async (manifest, promptVersion, runId, options = {}) 
         ai_check_count: allAiCheckIds.length,
         ai_check_ids: allAiCheckIds,
         question_anchor_count: questionAnchorPayload.anchor_count || 0,
+        section_intent_cue_count: questionAnchorPayload.section_intent_cue_count || 0,
         runtime_contract_loaded: !!cachedRuntimeContract,
         runtime_contract_version: cachedRuntimeContract?.version || null
     });

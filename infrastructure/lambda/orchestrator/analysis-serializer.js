@@ -12,6 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 const { resolveRewriteTarget } = require('./rewrite-target-resolver');
+const { buildFixAssistTriage } = require('./fix-assist-triage');
 const { buildSchemaAssistDraft } = require('./schema-draft-builder');
 
 // Cached data
@@ -325,6 +326,32 @@ const normalizeRecommendationReason = (value, fallback = 'no_highlight_candidate
     if (reason === 'anchor_not_verified') return 'anchor_failed';
     return reason;
 };
+
+const buildSerializedFixAssistTriage = ({
+    checkId,
+    checkName,
+    verdict,
+    snippet,
+    message,
+    failureReason,
+    rewriteTarget,
+    repairIntent,
+    explanationPack,
+    reviewSummary,
+    issueExplanation
+}) => buildFixAssistTriage({
+    checkId,
+    checkName,
+    verdict,
+    snippet,
+    message,
+    failureReason,
+    rewriteTarget,
+    repairIntent,
+    explanationPack,
+    reviewSummary,
+    issueExplanation
+});
 const SYNTHETIC_FALLBACK_REASONS = new Set([
     'synthetic_fallback',
     'missing_ai_checks',
@@ -393,14 +420,24 @@ const resolveInlineIssueMessage = ({ checkId, checkData, preferredMessage, fallb
     const fallback = String(fallbackMessage || '').trim();
     const deterministic = isDeterministicCheckData(checkData);
     const reviewLead = deterministic ? clampGuidanceText(getDeterministicReviewLead(checkId), 220) : '';
+    const answerExtractabilityContext = {
+        checkId,
+        checkData,
+        guardrailReason: checkData?.guardrail_reason || ''
+    };
+    const normalizeUserMessage = (message) => {
+        if (!message) return '';
+        const sanitized = sanitizeGuardrailTextForUser(message, { ...answerExtractabilityContext, field: 'what_failed' });
+        return normalizeAnswerExtractabilityFailureText(sanitized, answerExtractabilityContext);
+    };
     if (preferred) {
         if (!deterministic || !isAggregateInlineMessage(preferred)) {
-            return preferred;
+            return normalizeUserMessage(preferred);
         }
     }
     if (fallback) {
         if (!deterministic || !isAggregateInlineMessage(fallback)) {
-            return fallback;
+            return normalizeUserMessage(fallback);
         }
     }
     if (deterministic && reviewLead) {
@@ -845,7 +882,11 @@ const INTERNAL_GUARDRAIL_EXPLANATION_PATTERNS = [
     /cannot be evaluated/i,
     /remains unproven/i,
     /could not be validated/i,
-    /no strict question anchors? (?:were|was) detected/i
+    /no strict question anchors? (?:were|was) detected/i,
+    /rhetorical hook questions?/i,
+    /self-assessment prompts?/i,
+    /cta-style questions?/i,
+    /broad thematic lead-ins?/i
 ];
 
 const isInternalGuardrailExplanation = (value) => {
@@ -859,41 +900,41 @@ const buildQuestionAnchorEditorialExplanation = (checkId, reason) => {
     const normalizedReason = String(reason || '').trim().toLowerCase();
     if (normalizedCheckId === 'faq_structure_opportunity') {
         return normalizedReason === 'invalid_or_missing_question_anchor'
-            ? 'The article contains answerable topics, but the question-and-answer structure is too ambiguous to support reliable FAQ extraction.'
-            : 'The content shares useful information, but it is not organized into explicit question-and-answer pairs that support FAQ extraction.';
+            ? 'The article contains answerable topics, but this section reads more like an explainer than a clean question-and-answer pair, so FAQ extraction remains only partial.'
+            : 'The content shares useful information, but it is not organized into explicit question-and-answer pairs that support reliable FAQ extraction.';
     }
     if (normalizedCheckId === 'faq_jsonld_generation_suggestion') {
         return normalizedReason === 'invalid_or_missing_question_anchor'
-            ? 'The article hints at answerable topics, but the question-and-answer path is too ambiguous to support reliable FAQ schema guidance.'
+            ? 'The article hints at answerable topics, but this section reads more like an explainer than a clean question-and-answer pair, so FAQ schema guidance remains only partial.'
             : 'The content is not framed as clear question-and-answer pairs, so FAQ schema support is only partial.';
     }
     const answerFallbackByCheck = {
         immediate_answer_placement: normalizedReason === 'invalid_or_missing_question_anchor'
-            ? 'The topic is covered, but the opening does not show a clear query-to-answer path that supports immediate answer extraction.'
-            : 'The opening is informative, but it does not present a clear question-led setup for direct answer extraction in the first section.',
+            ? 'The topic is introduced clearly, but the opening delays the headline or section promise, so immediate answer extraction remains only partial.'
+            : 'The opening is informative, but it does not fulfill the headline or section promise quickly enough for direct extraction.',
         answer_sentence_concise: normalizedReason === 'invalid_or_missing_question_anchor'
-            ? 'The answer idea is present, but the query-to-answer path is too ambiguous to confirm a concise extractable answer sentence.'
-            : 'The content includes useful detail, but it is not structured as concise question-led answer sentences.',
+            ? 'The answer idea is present, but the opening still reads more like setup than a clean response to the headline or section promise.'
+            : 'The content includes useful detail, but it is not shaped like a clean answer snippet that fulfills the headline or section promise.',
         question_answer_alignment: normalizedReason === 'invalid_or_missing_question_anchor'
-            ? 'The response appears relevant, but the query-to-answer path is too ambiguous to verify strong question-answer alignment.'
-            : 'The section is informative, but it is not organized into explicit question-led answers that prove clear alignment.',
+            ? 'The response appears relevant, but the opening does not resolve the headline or section promise cleanly enough to prove strong alignment.'
+            : 'The section is informative, but it does not resolve the headline or section promise cleanly enough to prove clear alignment.',
         clear_answer_formatting: normalizedReason === 'invalid_or_missing_question_anchor'
-            ? 'The content covers the topic, but the query-to-answer path is too ambiguous to support clearly formatted answer extraction.'
-            : 'The section shares useful information, but it is not formatted as explicit question-and-answer blocks for clear extraction.'
+            ? 'The content covers the topic, but the answer stays buried under the headline or section promise instead of standing out cleanly.'
+            : 'The section shares useful information, but the answer still does not stand out clearly beneath the headline or section promise.'
     };
     if (answerFallbackByCheck[normalizedCheckId]) {
         return answerFallbackByCheck[normalizedCheckId];
     }
     return normalizedReason === 'invalid_or_missing_question_anchor'
-        ? 'The article covers the topic, but the query-to-answer path is too ambiguous to support strong direct-answer extraction.'
-        : 'The content is informative, but it is not structured around explicit question prompts that support direct-answer extraction.';
+        ? 'The article covers the topic, but the opening does not yet fulfill the headline or section promise cleanly enough for direct-answer extraction.'
+        : 'The content is informative, but the answer does not yet fulfill the headline or section promise cleanly enough for direct extraction.';
 };
 
 const buildQuestionAnchorEditorialWhy = (checkId) => {
     if (String(checkId || '').trim() === 'faq_structure_opportunity') {
         return 'Reusable FAQ sections work best when repeated user questions are grouped into short, explicit question-and-answer pairs.';
     }
-    return 'Explicit query-to-answer structure makes answer spans easier to extract, trust, and cite consistently.';
+    return 'Clear headline-or-query to answer structure makes answer spans easier to extract, trust, and cite consistently.';
 };
 
 const getAnswerExtractabilitySnippetWordCount = (context = {}) => {
@@ -911,8 +952,29 @@ const getAnswerExtractabilitySnippetWordCount = (context = {}) => {
 };
 
 const buildConciseAnswerSnippetFallbackText = () => (
-    'The opening answer does not yet read as a clean reusable snippet. Keep the first answer near 40-60 words and make sure it stands alone without extra setup or filler.'
+    'The opening answer does not yet read as a clean reusable snippet. Tighten it so it stands alone cleanly without extra setup or filler.'
 );
+
+const buildImmediateAnswerPlacementFallbackText = () => (
+    'The opening does not reach a clear direct answer early enough to fulfill the headline or section promise.'
+);
+
+const buildConciseAnswerNearRangeFallbackText = () => (
+    'The opening answer is close, but it still needs a tighter standalone shape to read as a clean reusable snippet.'
+);
+
+const hasAnswerExtractabilityThresholdMath = (text = '') => {
+    const normalized = String(text || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    if (!normalized) return false;
+    return /120[-\s]*word/.test(normalized)
+        || /40\s*-\s*60\s*word/.test(normalized)
+        || /121\s*-\s*150\s*words?/.test(normalized)
+        || /selected question anchor/.test(normalized)
+        || /ideal\s+\d+[-\s]*word\s+threshold/.test(normalized)
+        || /\bmissing the\b.*\bthreshold\b/.test(normalized)
+        || /\bbelow the\b.*\bword threshold\b/.test(normalized)
+        || /\bover the ideal\b.*\bword threshold\b/.test(normalized);
+};
 
 const hasImplausibleConciseAnswerMath = (text, context = {}) => {
     if (String(context.checkId || '').trim() !== 'answer_sentence_concise') {
@@ -990,23 +1052,23 @@ const normalizeAnswerExtractabilityFailureText = (value, context = {}) => {
         && (
             /answer appears at 121-150 words after the question anchor/i.test(text)
             || /direct answer starts at \d+ words/i.test(text)
+            || hasAnswerExtractabilityThresholdMath(text)
         )
     ) {
-        return 'The check did not confirm a direct answer within the first 120 words after the selected question anchor.';
+        return buildImmediateAnswerPlacementFallbackText();
     }
 
     if (
         checkId === 'answer_sentence_concise'
         && /lacks (?:direct|specific) evidence|evidence for the claim/i.test(text)
     ) {
-        const wordCountMatch = text.match(/(\d+)\s+words?/i);
-        if (wordCountMatch) {
-            return `The opening answer is ${wordCountMatch[1]} words, which is near the target range but still below the ideal reusable answer band.`;
-        }
-        return 'The opening answer is near the target range, but it still falls short of the ideal reusable answer band.';
+        return buildConciseAnswerNearRangeFallbackText();
     }
 
-    if (checkId === 'answer_sentence_concise' && hasImplausibleConciseAnswerMath(text, context)) {
+    if (
+        checkId === 'answer_sentence_concise'
+        && (hasImplausibleConciseAnswerMath(text, context) || hasAnswerExtractabilityThresholdMath(text))
+    ) {
         return buildConciseAnswerSnippetFallbackText();
     }
 
@@ -1039,12 +1101,59 @@ const resolveRawIssueExplanationForUser = (value, context = {}, fallbackMessage 
     }
     const normalizedExtractability = normalizeAnswerExtractabilityFailureText(sanitized, context);
     if (normalizedExtractability && normalizedExtractability !== sanitized) {
-        return '';
-    }
-    if (isNearDuplicateText(sanitized, fallbackMessage)) {
-        return '';
+        return clampGuidanceText(normalizedExtractability, 420);
     }
     return sanitized;
+};
+
+const resolvePreferredRawIssueExplanationForUser = (candidates, context = {}, fallbackMessage = '') => {
+    const queue = Array.isArray(candidates) ? candidates : [candidates];
+    const fallback = String(fallbackMessage || '').trim();
+    let best = '';
+    let bestScore = -1;
+    for (const candidate of queue) {
+        const resolved = resolveRawIssueExplanationForUser(candidate, context, fallbackMessage);
+        if (resolved) {
+            const score = (isNearDuplicateText(resolved, fallback) ? 0 : 5) + Math.min(countWords(resolved), 60);
+            if (score > bestScore) {
+                best = resolved;
+                bestScore = score;
+            }
+        }
+    }
+    return best;
+};
+
+const hasSubstantiveExplanationPackContent = (pack) => {
+    if (!pack || typeof pack !== 'object') return false;
+    if (typeof pack.what_failed === 'string' && pack.what_failed.trim()) return true;
+    if (typeof pack.why_it_matters === 'string' && pack.why_it_matters.trim()) return true;
+    if (typeof pack.issue_explanation === 'string' && pack.issue_explanation.trim()) return true;
+    return Array.isArray(pack.how_to_fix_steps) && pack.how_to_fix_steps.some((step) => typeof step === 'string' && step.trim());
+};
+
+const shouldPreserveAnalyzerExplanationPack = (checkId, context = {}, pack = null) => {
+    const normalizedCheckId = String(checkId || '').trim();
+    if (!ANSWER_EXTRACTABILITY_DETAIL_CHECKS.has(normalizedCheckId)) {
+        return false;
+    }
+    if (!hasSubstantiveExplanationPackContent(pack)) {
+        return false;
+    }
+    const guardrailReason = String(
+        context.guardrailReason
+        || context.failureReason
+        || context.checkData?.guardrail_reason
+        || ''
+    ).trim().toLowerCase();
+    if (
+        context.checkData?.guardrail_adjusted
+        || guardrailReason === 'no_strict_question_anchor'
+        || guardrailReason === 'invalid_or_missing_question_anchor'
+    ) {
+        return false;
+    }
+    return true;
 };
 
 const normalizeExplanationPack = (rawPack, context = {}) => {
@@ -1281,8 +1390,8 @@ const resolveCheckAwareFixHint = ({
     }
 
     const byCheckId = {
-        immediate_answer_placement: 'Place one direct answer sentence immediately after the question heading, then move setup or caveats after it.',
-        answer_sentence_concise: 'Keep the opening answer near 40-60 words total. Two or three short sentences are fine if they deliver one complete answer.',
+        immediate_answer_placement: 'Place one direct answer sentence immediately after the heading or opening line that carries the section promise, then move setup or caveats after it.',
+        answer_sentence_concise: 'Keep the opening answer compact and standalone. Two or three short sentences are fine if they deliver one complete answer.',
         question_answer_alignment: 'Use the query term in the opening answer and answer it directly, not indirectly.',
         clear_answer_formatting: 'Split the opening answer into short, scannable sentences or bullets so the main point stands alone.',
         faq_structure_opportunity: 'Only convert this section into FAQ format if it answers repeated user questions with short, direct answers.',
@@ -1399,12 +1508,17 @@ const buildIssueExplanationPack = ({
     const aiPack = normalizeExplanationPack(sourcePack, explanationContext)
         || normalizeExplanationPack(checkData?.ai_explanation_pack, explanationContext)
         || normalizeExplanationPack(checkData?.explanation_pack, explanationContext);
-    const rawIssueExplanation = resolveRawIssueExplanationForUser(
-        checkData?.issue_explanation || checkData?.explanation || '',
+    const rawIssueExplanation = resolvePreferredRawIssueExplanationForUser(
+        [
+            checkData?.issue_explanation || '',
+            message || '',
+            checkData?.explanation || ''
+        ],
         explanationContext,
         resolvedMessage
     );
     if (aiPack) {
+        const preserveAnalyzerPack = shouldPreserveAnalyzerExplanationPack(checkId, explanationContext, aiPack);
         const preferredActionSuggestion = resolveCheckAwareFixHint({
             checkId,
             failureReason,
@@ -1412,9 +1526,13 @@ const buildIssueExplanationPack = ({
             rewriteTarget
         });
         const merged = {
-            ...aiPack,
-            what_failed: resolvedMessage,
-            why_it_matters: aiPack.why_it_matters || (
+            ...aiPack
+        };
+        if (!preserveAnalyzerPack || !String(merged.what_failed || '').trim()) {
+            merged.what_failed = resolvedMessage;
+        }
+        if (!String(merged.why_it_matters || '').trim()) {
+            merged.why_it_matters = (
                 questionAnchorGuardrailActive
                     ? buildQuestionAnchorEditorialWhy(checkId)
                     : buildSemanticWhyItMatters({
@@ -1422,8 +1540,8 @@ const buildIssueExplanationPack = ({
                         checkId,
                         failureReason: normalizedFailureReason
                     })
-            )
-        };
+            );
+        }
         if (rawIssueExplanation && !merged.issue_explanation) {
             merged.issue_explanation = rawIssueExplanation;
         }
@@ -1925,20 +2043,33 @@ const buildSummaryRewriteContext = ({ checkId, checkData, highlight, fallbackSou
     );
     const resolvedStart = weakInlineProjection ? null : start;
     const resolvedEnd = weakInlineProjection ? null : end;
+    const resolvedPrimaryNodeRef = primaryNodeRef || null;
+    const resolvedRepairNodeRefs = resolvedPrimaryNodeRef ? [resolvedPrimaryNodeRef] : [];
+    const scopeConfidence = actionable
+        ? (weakInlineProjection ? 0.42 : (strongAnchor ? 0.64 : 0.38))
+        : 0;
 
     const rewriteTarget = {
         actionable,
         mode: projectedPolicy,
         operation: projectedOperation,
-        primary_node_ref: primaryNodeRef || null,
-        node_refs: primaryNodeRef ? [primaryNodeRef] : [],
+        primary_node_ref: resolvedPrimaryNodeRef,
+        anchor_node_ref: resolvedPrimaryNodeRef,
+        primary_repair_node_ref: resolvedPrimaryNodeRef,
+        node_refs: resolvedRepairNodeRefs,
+        repair_node_refs: resolvedRepairNodeRefs,
         target_text: snippet || null,
         quote: snippet ? { exact: snippet } : null,
         start: resolvedStart,
         end: resolvedEnd,
+        section_start_node_ref: null,
+        section_end_node_ref: null,
+        boundary_type: null,
+        boundary_node_ref: null,
         resolver_reason: actionable
             ? (weakInlineProjection ? 'summary_weak_inline_routed_to_section' : 'summary_contract_projection')
-            : (rewriteMode === 'manual_review' ? 'manual_review_policy' : 'summary_anchor_unavailable')
+            : (rewriteMode === 'manual_review' ? 'manual_review_policy' : 'summary_anchor_unavailable'),
+        scope_confidence: scopeConfidence
     };
 
     if (projectedPolicy === 'heading_support_range' && primaryNodeRef) {
@@ -2290,6 +2421,19 @@ const serializeForSidebar = (fullAnalysis, runId = 'unknown', options = {}) => {
                 if (rewriteContext.repair_intent) {
                     compactHighlight.repair_intent = rewriteContext.repair_intent;
                 }
+                compactHighlight.fix_assist_triage = buildSerializedFixAssistTriage({
+                    checkId,
+                    checkName,
+                    verdict: uiVerdict,
+                    snippet,
+                    message: compactHighlight.message,
+                    failureReason: highlight.failure_reason || '',
+                    rewriteTarget: rewriteContext?.rewrite_target || null,
+                    repairIntent: rewriteContext?.repair_intent || null,
+                    explanationPack: highlightExplanationPack,
+                    reviewSummary: compactHighlight.review_summary,
+                    issueExplanation: compactHighlight.issue_explanation
+                });
                 return compactHighlight;
             });
             const firstInstanceSource = allInstances.length > 0
@@ -2346,6 +2490,7 @@ const serializeForSidebar = (fullAnalysis, runId = 'unknown', options = {}) => {
                 check_id: checkId,
                 detail_ref: `check:${checkId}`,
                 name: checkName,
+                check_name: checkName,
                 ui_verdict: uiVerdict,
                 instances: instanceCount,
                 first_instance_node_ref: firstInstanceNodeRef,
@@ -2369,6 +2514,19 @@ const serializeForSidebar = (fullAnalysis, runId = 'unknown', options = {}) => {
             if (issueRewriteContext.repair_intent) {
                 issueSummary.repair_intent = issueRewriteContext.repair_intent;
             }
+            issueSummary.fix_assist_triage = buildSerializedFixAssistTriage({
+                checkId,
+                checkName,
+                verdict: uiVerdict,
+                snippet: firstInstanceSnippet,
+                message: summaryFailureMessage,
+                failureReason: '',
+                rewriteTarget: issueRewriteContext?.rewrite_target || null,
+                repairIntent: issueRewriteContext?.repair_intent || null,
+                explanationPack: issueExplanationPack,
+                reviewSummary: issueSummary.review_summary,
+                issueExplanation: issueSummary.issue_explanation
+            });
 
             categoriesMap[categoryId].issues.push(issueSummary);
 
@@ -3340,6 +3498,7 @@ function buildHighlightedHtml(manifest, analysisResult) {
             : (
                 nodeRef
                 || (signature ? (signatureToNodeRef.get(signature) || '') : '')
+                || (rewriteTarget && rewriteTarget.primary_repair_node_ref ? String(rewriteTarget.primary_repair_node_ref) : '')
                 || (rewriteTarget && rewriteTarget.primary_node_ref ? String(rewriteTarget.primary_node_ref) : '')
             );
         const resolvedJumpNodeRef = resolvedNodeRef || contextualNodeRef || '';
@@ -3397,6 +3556,7 @@ function buildHighlightedHtml(manifest, analysisResult) {
             checkId,
             failureReason: normalizedFailureReason
         });
+        const issueExplanation = composeIssueExplanationNarrative(enrichedExplanationPack);
         const baseIssue = {
             run_id: runId || '',
             check_id: String(checkId || ''),
@@ -3409,7 +3569,7 @@ function buildHighlightedHtml(manifest, analysisResult) {
             snippet: snippet ? String(snippet).slice(0, 600) : '',
             action_suggestion: actionSuggestion,
             explanation_pack: enrichedExplanationPack,
-            issue_explanation: composeIssueExplanationNarrative(enrichedExplanationPack),
+            issue_explanation: issueExplanation,
             ...(reviewSummary ? { review_summary: reviewSummary } : {}),
             failure_reason: normalizedFailureReason,
             node_ref: resolvedNodeRef,
@@ -3422,6 +3582,19 @@ function buildHighlightedHtml(manifest, analysisResult) {
                 instance_index: normalizedInstanceIndex
             }
         };
+        baseIssue.fix_assist_triage = buildSerializedFixAssistTriage({
+            checkId,
+            checkName,
+            verdict,
+            snippet,
+            message: resolvedMessage,
+            failureReason: normalizedFailureReason,
+            rewriteTarget,
+            repairIntent,
+            explanationPack: enrichedExplanationPack,
+            reviewSummary,
+            issueExplanation
+        });
         if (rewriteTarget) {
             baseIssue.rewrite_target = rewriteTarget;
         }
@@ -3634,6 +3807,20 @@ function buildHighlightedHtml(manifest, analysisResult) {
                     checkId,
                     failureReason
                 });
+                const inlineIssueExplanation = composeIssueExplanationNarrative(inlineExplanationPack);
+                const inlineFixAssistTriage = buildSerializedFixAssistTriage({
+                    checkId,
+                    checkName: String(check.title || check.name || getCheckDefinitionMeta(checkId)?.name || checkId || ''),
+                    verdict,
+                    snippet: effectiveSnippet,
+                    message,
+                    failureReason,
+                    rewriteTarget: inlineRewriteTarget || null,
+                    repairIntent: inlineRepairIntent || null,
+                    explanationPack: inlineExplanationPack,
+                    reviewSummary,
+                    issueExplanation: inlineIssueExplanation
+                });
                 const issueKey = `${String(checkId || '')}:${instanceIndex}`;
                 const blockOnlyItem = {
                     run_id: runId || '',
@@ -3653,8 +3840,9 @@ function buildHighlightedHtml(manifest, analysisResult) {
                         instance_index: instanceIndex
                     },
                     explanation_pack: inlineExplanationPack,
-                    issue_explanation: composeIssueExplanationNarrative(inlineExplanationPack),
+                    issue_explanation: inlineIssueExplanation,
                     ...(reviewSummary ? { review_summary: reviewSummary } : {}),
+                    fix_assist_triage: inlineFixAssistTriage,
                     start: candidatePrecision.start,
                     end: candidatePrecision.end,
                     range_key: `${issueKey}:0`
@@ -3674,6 +3862,7 @@ function buildHighlightedHtml(manifest, analysisResult) {
                 const blockOnlyFinding = {
                     run_id: runId || '',
                     check_id: String(checkId || ''),
+                    check_name: String(check.title || check.name || getCheckDefinitionMeta(checkId)?.name || checkId || ''),
                     instance_index: instanceIndex,
                     issue_key: issueKey,
                     verdict: String(verdict),
@@ -3696,7 +3885,8 @@ function buildHighlightedHtml(manifest, analysisResult) {
                         instance_index: instanceIndex
                     },
                     explanation_pack: inlineExplanationPack,
-                    issue_explanation: composeIssueExplanationNarrative(inlineExplanationPack),
+                    issue_explanation: inlineIssueExplanation,
+                    fix_assist_triage: inlineFixAssistTriage,
                     ...(reviewSummary ? { review_summary: reviewSummary } : {})
                 };
                 if (inlineRewriteTarget) {
@@ -3877,9 +4067,24 @@ function buildHighlightedHtml(manifest, analysisResult) {
                 checkId,
                 failureReason: ''
             });
+            const inlineIssueExplanation = composeIssueExplanationNarrative(inlineExplanationPack);
+            const inlineFixAssistTriage = buildSerializedFixAssistTriage({
+                checkId,
+                checkName: String(check.title || check.name || getCheckDefinitionMeta(checkId)?.name || checkId || ''),
+                verdict,
+                snippet: representative.effectiveSnippetValue || fallbackSnippet || '',
+                message: primaryMessage,
+                failureReason: '',
+                rewriteTarget: inlineRewriteTarget || null,
+                repairIntent: inlineRepairIntent || null,
+                explanationPack: inlineExplanationPack,
+                reviewSummary,
+                issueExplanation: inlineIssueExplanation
+            });
             const inlineFinding = {
                 run_id: runId || '',
                 check_id: String(checkId || ''),
+                check_name: String(check.title || check.name || getCheckDefinitionMeta(checkId)?.name || checkId || ''),
                 instance_index: instanceIndex,
                 issue_key: issueKey,
                 verdict: String(verdict),
@@ -3899,7 +4104,8 @@ function buildHighlightedHtml(manifest, analysisResult) {
                     instance_index: instanceIndex
                 },
                 explanation_pack: inlineExplanationPack,
-                issue_explanation: composeIssueExplanationNarrative(inlineExplanationPack),
+                issue_explanation: inlineIssueExplanation,
+                fix_assist_triage: inlineFixAssistTriage,
                 ...(reviewSummary ? { review_summary: reviewSummary } : {}),
                 ...(group.collapsed
                     ? {
@@ -3941,7 +4147,8 @@ function buildHighlightedHtml(manifest, analysisResult) {
                         instance_index: instanceIndex
                     },
                     explanation_pack: inlineExplanationPack,
-                    issue_explanation: composeIssueExplanationNarrative(inlineExplanationPack),
+                    issue_explanation: inlineIssueExplanation,
+                    fix_assist_triage: inlineFixAssistTriage,
                     ...(reviewSummary ? { review_summary: reviewSummary } : {})
                 };
                 if (inlineRewriteTarget) {

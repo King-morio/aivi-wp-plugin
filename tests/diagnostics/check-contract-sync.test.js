@@ -77,6 +77,15 @@ describe('Runtime check contract sync', () => {
             expect(Number.isInteger(entry.rewrite_context_window)).toBe(true);
             expect(entry.rewrite_context_window).toBeGreaterThanOrEqual(1);
             expect(entry.rewrite_context_window).toBeLessThanOrEqual(6);
+            if (typeof entry.copilot_mode === 'string' && entry.copilot_mode.trim()) {
+                expect([
+                    'local_rewrite',
+                    'structural_transform',
+                    'schema_metadata_assist',
+                    'web_backed_evidence_assist',
+                    'limited_technical_guidance'
+                ]).toContain(entry.copilot_mode);
+            }
         });
     });
 
@@ -99,6 +108,21 @@ describe('Runtime check contract sync', () => {
         });
     });
 
+    test('answer-extractability definitions keep title and headline intent-cue language aligned', () => {
+        const definitions = loadJson(definitionsPath);
+        const definitionChecks = flattenDefinitionChecks(definitions);
+        [
+            'immediate_answer_placement',
+            'answer_sentence_concise',
+            'question_answer_alignment',
+            'clear_answer_formatting'
+        ].forEach((checkId) => {
+            const evaluation = String(definitionChecks[checkId]?.evaluation || '');
+            expect(evaluation).toMatch(/page titles, H1s, and headlines as intent cues by default, not as strict question anchors/i);
+            expect(evaluation).toMatch(/page title, heading, or pseudo heading clearly sets local section intent/i);
+        });
+    });
+
     test('heading ownership split and rewrite target policies match product contract', () => {
         const runtimeContract = loadJson(runtimeContractPath);
         const contractChecks = runtimeContract.checks || {};
@@ -109,14 +133,26 @@ describe('Runtime check contract sync', () => {
         expect(contractChecks.heading_topic_fulfillment?.allowed_scopes).toEqual(['span']);
         expect(contractChecks.heading_like_text_uses_heading_markup?.allowed_scopes).toEqual(['block']);
         expect(contractChecks.heading_like_text_uses_heading_markup?.rewrite_target_policy).toBe('block');
+        expect(contractChecks.heading_like_text_uses_heading_markup?.rewrite_mode).toBe('ai_rewrite');
+        expect(contractChecks.heading_like_text_uses_heading_markup?.rewrite_allowed_ops || []).toContain('replace_block');
+        expect(contractChecks.heading_like_text_uses_heading_markup?.copilot_mode).toBe('structural_transform');
         expect(contractChecks.heading_topic_fulfillment?.rewrite_target_policy).toBe('heading_support_range');
+        expect(contractChecks.faq_structure_opportunity?.rewrite_mode).toBe('ai_rewrite');
+        expect(contractChecks.faq_structure_opportunity?.rewrite_allowed_ops || []).toContain('replace_block');
         expect(contractChecks.lists_tables_presence?.allowed_scopes).toEqual(['block']);
         expect(contractChecks.lists_tables_presence?.rewrite_target_policy).toBe('block');
         expect(contractChecks.lists_tables_presence?.rewrite_allowed_ops || []).toContain('convert_to_list');
         expect(['inline_span', 'block']).toContain(contractChecks.heading_fragmentation?.rewrite_target_policy);
         expect(contractChecks.canonical_clarity?.analysis_engine).toBe('deterministic');
+        expect(contractChecks.valid_jsonld_schema?.copilot_mode).toBe('schema_metadata_assist');
         expect(contractChecks.ai_crawler_accessibility?.analysis_engine).toBe('deterministic');
+        expect(contractChecks.external_authoritative_sources?.rewrite_mode).toBe('ai_rewrite');
+        expect(contractChecks.external_authoritative_sources?.rewrite_allowed_ops || []).toContain('replace_block');
+        expect(contractChecks.claim_provenance_and_evidence?.rewrite_mode).toBe('ai_rewrite');
         expect(contractChecks.original_evidence_signal?.analysis_engine).toBe('ai');
+        expect(contractChecks.original_evidence_signal?.rewrite_mode).toBe('ai_rewrite');
+        expect(contractChecks.original_evidence_signal?.copilot_mode).toBe('web_backed_evidence_assist');
+        expect(contractChecks.citation_format_and_context?.rewrite_mode).toBe('ai_rewrite');
     });
 
     test('sidebar payload contract stays aligned with stripper allowlists', () => {

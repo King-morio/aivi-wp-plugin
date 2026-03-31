@@ -38,6 +38,7 @@ const EXPECTED_ISSUE_FIELDS = [
     'explanation_pack',
     'issue_explanation',
     'review_summary',
+    'fix_assist_triage',
     'highlights'
 ];
 

@@ -1,6 +1,6 @@
 {
   "schema_version": "v1",
-  "description": "Canonical credit pricing snapshot and ledger event contract for AiVI analysis billing.",
+  "description": "Canonical credit pricing snapshot and ledger event contract for AiVI analysis billing and billable co-pilot generations.",
   "pricing_snapshot": {
     "pricing_version": "string",
     "requested_model": "string",
@@ -27,7 +27,7 @@
     "run_id": "string|null",
     "event_type": "reservation|settlement|refund|adjustment",
     "status": "pending|settled|released|refunded|voided",
-    "reason_code": "string",
+    "reason_code": "string (for example analysis_admission, analysis_completed, analysis_failed, copilot_generation, manual_credit_adjustment)",
     "pricing_snapshot": "pricing_snapshot",
     "usage_snapshot": "usage_snapshot|null",
     "amounts": {

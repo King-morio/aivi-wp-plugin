@@ -1663,7 +1663,7 @@
         if (status >= 500) {
             return {
                 type: 'error',
-                message: 'AiVI backend is unavailable. Try again later.',
+                message: 'AiVI backend is unavailable right now. Check for an update, try again shortly, or contact support if the issue persists.',
                 retry: true
             };
         }
@@ -2331,7 +2331,6 @@
         const summary = props.summary;
         const compact = props.compact === true;
         const [detailsOpen, setDetailsOpen] = useState(false);
-        const canToggleWebLookups = summary.kind === 'connected' && summary.webLookupsAllowed === true && typeof props.onToggleWebLookups === 'function';
         const sharedInfoChip = createElement('span', {
             style: {
                 display: 'inline-grid',
@@ -2529,74 +2528,6 @@
                         createElement('div', { style: { color: '#10213D', fontWeight: 600, textAlign: 'right' } }, summary.accountLabel || 'AiVI account'),
                         createElement('div', { style: { color: COLORS.subtext } }, 'Last sync'),
                         createElement('div', { style: { color: '#10213D', fontWeight: 600, textAlign: 'right' } }, summary.syncLabel ? summary.syncLabel.replace(/^Last sync\\s+/i, '') : 'Not synced')
-                    ),
-                    createElement('div', {
-                        style: {
-                            border: '1px solid #D7E2F2',
-                            borderRadius: 18,
-                            padding: 14,
-                            background: '#FBFDFF'
-                        }
-                    },
-                        createElement('div', {
-                            style: {
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: 12,
-                                marginBottom: 8
-                            }
-                        },
-                            createElement('div', {
-                                style: {
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 8,
-                                    fontSize: 14,
-                                    fontWeight: 700,
-                                    color: '#10213D'
-                                }
-                            }, 'Verify with web lookups', sharedInfoChip),
-                            createElement('button', {
-                                type: 'button',
-                                onClick: function () {
-                                    if (!canToggleWebLookups || props.webLookupToggleBusy === true) return;
-                                    props.onToggleWebLookups(!(summary.webLookupsEnabled === true));
-                                },
-                                disabled: !canToggleWebLookups || props.webLookupToggleBusy === true,
-                                style: {
-                                    position: 'relative',
-                                    width: 48,
-                                    height: 28,
-                                    borderRadius: 999,
-                                    border: 'none',
-                                    cursor: canToggleWebLookups && props.webLookupToggleBusy !== true ? 'pointer' : 'not-allowed',
-                                    background: summary.webLookupsEnabled === true ? 'linear-gradient(135deg, #2D6DF6, #0A56DC)' : '#D8E2F2',
-                                    opacity: canToggleWebLookups ? 1 : 0.6,
-                                    flex: '0 0 auto'
-                                }
-                            }, createElement('span', {
-                                style: {
-                                    position: 'absolute',
-                                    top: 3,
-                                    left: summary.webLookupsEnabled === true ? 23 : 3,
-                                    width: 22,
-                                    height: 22,
-                                    borderRadius: 999,
-                                    background: '#FFFFFF',
-                                    boxShadow: '0 4px 10px rgba(15, 30, 65, 0.12)'
-                                }
-                            }))
-                        ),
-                        createElement('div', {
-                            style: {
-                                color: COLORS.subtext,
-                                fontSize: 12,
-                                lineHeight: 1.45
-                            }
-                        }, summary.webLookupsAllowed
-                            ? 'Adds external verification for trust-sensitive checks. Turn it off when you want the fastest run.'
-                            : 'External verification is unavailable on this account right now.')
                     ),
                     !summary.canBuyCredits && createElement('div', {
                         style: {

@@ -1,0 +1,93 @@
+{
+  "fixture_id": "lists-tables-presence-dropshipping-mistakes",
+  "title": "Lists and tables presence gate fixture",
+  "description": "A dense paragraph with many sibling mistakes that should surface as calm bullet lines rather than prose or raw HTML.",
+  "check_id": "lists_tables_presence",
+  "check_name": "Lists and Tables Presence",
+  "generation_mode": "live_model_required",
+  "acceptance": {
+    "required_variant_count": 3,
+    "must_pass_all_variants": true
+  },
+  "copilot_issue": {
+    "issue_key": "lists_tables_presence:0",
+    "check_id": "lists_tables_presence",
+    "check_name": "Lists and Tables Presence",
+    "instance_index": 0,
+    "analyzer_note": "Listable content exists but is not formatted as a visible structured surface, reducing readability and AI extractability.",
+    "node_ref": "block-0",
+    "snippet": "competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, or product-market fit",
+    "target_mode": "block",
+    "target_operation": "convert_to_list",
+    "target_node_refs": [
+      "block-0"
+    ],
+    "heading_chain": [
+      "Common dropshipping mistakes"
+    ],
+    "section_range": {
+      "start_ref": "block-0",
+      "end_ref": "block-0",
+      "node_count": 1
+    },
+    "section_nodes": [
+      {
+        "ref": "block-0",
+        "type": "core/paragraph",
+        "text": "The biggest mistake beginners make is ignoring competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, and product-market fit."
+      }
+    ],
+    "section_text": "The biggest mistake beginners make is ignoring competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, and product-market fit.",
+    "selected_issue": {
+      "check_id": "lists_tables_presence",
+      "check_name": "Lists and Tables Presence",
+      "instance_index": 0,
+      "analyzer_note": "Listable content exists but is not formatted as a visible structured surface, reducing readability and AI extractability."
+    }
+  },
+  "rewrite_target": {
+    "actionable": true,
+    "mode": "block",
+    "operation": "convert_to_list",
+    "anchor_node_ref": "block-0",
+    "primary_repair_node_ref": "block-0",
+    "primary_node_ref": "block-0",
+    "repair_node_refs": [
+      "block-0"
+    ],
+    "node_refs": [
+      "block-0"
+    ],
+    "target_text": "The biggest mistake beginners make is ignoring competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, and product-market fit.",
+    "quote": {
+      "exact": "The biggest mistake beginners make is ignoring competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, and product-market fit."
+    },
+    "section_start_node_ref": "block-0",
+    "section_end_node_ref": "block-0",
+    "boundary_type": "document_end",
+    "boundary_node_ref": null,
+    "scope_confidence": 0.95,
+    "resolver_reason": "m6_fixture"
+  },
+  "repair_intent": {
+    "check_id": "lists_tables_presence",
+    "check_name": "Lists and Tables Presence",
+    "instruction": "Convert the dense listable prose into clean visible bullet lines without adding new claims.",
+    "rule_hint": "Use plain bullet lines only. Keep the original concepts, but group or compress them only if readability improves and the meaning stays intact."
+  },
+  "manifest": {
+    "nodes": [
+      {
+        "ref": "block-h1",
+        "type": "core/heading",
+        "text": "Common dropshipping mistakes"
+      },
+      {
+        "ref": "block-0",
+        "type": "core/paragraph",
+        "text": "The biggest mistake beginners make is ignoring competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, and product-market fit."
+      }
+    ],
+    "plain_text": "Common dropshipping mistakes\n\nThe biggest mistake beginners make is ignoring competition, refunds, shipping delays, supplier quality, ad fatigue, return policies, compliance, taxes, brand building, customer trust, and product-market fit."
+  }
+}

@@ -210,7 +210,7 @@ describe('Result Contract Lock - Acceptance Tests', () => {
         test('analysis_summary issues include compact highlights', () => {
             const { analysis_summary } = serializeForSidebar(mockFullAnalysis, 'test-run-123');
 
-            const requiredFields = ['check_id', 'detail_ref', 'name', 'ui_verdict', 'instances', 'first_instance_node_ref', 'highlights'];
+            const requiredFields = ['check_id', 'detail_ref', 'name', 'check_name', 'ui_verdict', 'instances', 'first_instance_node_ref', 'highlights'];
 
             analysis_summary.categories.forEach(cat => {
                 expect(cat).toHaveProperty('id');
@@ -242,6 +242,8 @@ describe('Result Contract Lock - Acceptance Tests', () => {
                 expect(issue).toHaveProperty('rewrite_target');
                 expect(issue).toHaveProperty('repair_intent');
                 expect(issue).toHaveProperty('explanation_pack');
+                expect(issue).toHaveProperty('fix_assist_triage');
+                expect(issue.fix_assist_triage).toHaveProperty('state');
                 expect(issue.explanation_pack).toHaveProperty('what_failed');
                 expect(issue.explanation_pack).toHaveProperty('why_it_matters');
                 expect(issue.explanation_pack).toHaveProperty('how_to_fix_steps');
@@ -251,6 +253,8 @@ describe('Result Contract Lock - Acceptance Tests', () => {
                         expect(highlight).toHaveProperty('rewrite_target');
                         expect(highlight).toHaveProperty('repair_intent');
                         expect(highlight).toHaveProperty('explanation_pack');
+                        expect(highlight).toHaveProperty('fix_assist_triage');
+                        expect(highlight.fix_assist_triage).toHaveProperty('state');
                         expect(highlight.explanation_pack).toHaveProperty('what_failed');
                         expect(highlight.explanation_pack).toHaveProperty('why_it_matters');
                         expect(highlight.explanation_pack).toHaveProperty('how_to_fix_steps');
@@ -259,23 +263,21 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             });
         });
 
-        test('March 16 answer-extractability specimen keeps richer serializer narrative beside raw summary text', () => {
+        test('March 16 answer-extractability specimen preserves cleaned analyzer-led summary text without stock enrichment', () => {
             const { analysisResult } = march16AnswerExtractabilityFixture;
             const { analysis_summary } = serializeForSidebar(analysisResult, analysisResult.run_id);
             const issues = analysis_summary.categories.flatMap((category) => category.issues || []);
             const expectations = {
                 immediate_answer_placement: {
                     raw: 'Answer appears at 121-150 words after the question anchor.',
-                    normalized: /did not confirm a direct answer within the first 120 words/i,
-                    richer: /Answer engines are more reliable when the direct answer appears immediately/i
+                    normalized: 'The opening does not reach a clear direct answer early enough to fulfill the headline or section promise.'
                 },
                 answer_sentence_concise: {
                     raw: 'Answer sentence has 32 words, which is below the 40-60 word threshold.',
-                    richer: /easier to scan, quote, and reuse/i
+                    normalized: 'The opening answer does not yet read as a clean reusable snippet. Tighten it so it stands alone cleanly without extra setup or filler.'
                 },
                 clear_answer_formatting: {
-                    raw: 'Answer is not separated into clear steps or bullet points for better readability.',
-                    richer: /Dense answer formatting makes the main point harder to scan and extract quickly/i
+                    raw: 'Answer is not separated into clear steps or bullet points for better readability.'
                 }
             };
 
@@ -284,16 +286,17 @@ describe('Result Contract Lock - Acceptance Tests', () => {
 
                 expect(issue).toBeDefined();
                 if (matcher.normalized) {
-                    expect(issue.explanation_pack.what_failed).toMatch(matcher.normalized);
-                    expect(issue.issue_explanation).toMatch(matcher.normalized);
+                    expect(issue.explanation_pack.what_failed).toBe(matcher.normalized);
+                    expect(issue.issue_explanation).toBe(matcher.normalized);
                     expect(issue.issue_explanation).not.toContain(matcher.raw);
+                    expect(issue.highlights?.[0]?.message).toBe(matcher.normalized);
                 } else {
                     expect(issue.explanation_pack.what_failed).toBe(matcher.raw);
-                    expect(issue.issue_explanation).toContain(matcher.raw);
+                    expect(issue.issue_explanation).toBe(matcher.raw);
+                    expect(issue.highlights?.[0]?.message).toBe(matcher.raw);
                 }
-                expect(issue.highlights?.[0]?.message).toBe(matcher.raw);
-                expect(issue.issue_explanation).toMatch(matcher.richer);
-                expect(countWords(issue.issue_explanation)).toBeGreaterThan(countWords(issue.explanation_pack.what_failed));
+                expect(issue.issue_explanation).not.toContain('Answer engines are more reliable when the direct answer appears immediately');
+                expect(issue.issue_explanation).not.toContain('Place one direct answer sentence');
             });
         });
 
@@ -304,14 +307,16 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const directAnswerIssue = issues.find((item) => item.check_id === 'immediate_answer_placement');
             const conciseIssue = issues.find((item) => item.check_id === 'answer_sentence_concise');
 
-            expect(directAnswerIssue.highlights?.[0]?.message).toBe('The direct answer starts at 125 words, missing the 120-word threshold.');
-            expect(directAnswerIssue.explanation_pack.what_failed).toMatch(/did not confirm a direct answer within the first 120 words/i);
+            expect(directAnswerIssue.highlights?.[0]?.message).toBe('The opening does not reach a clear direct answer early enough to fulfill the headline or section promise.');
+            expect(directAnswerIssue.explanation_pack.what_failed).toMatch(/does not reach a clear direct answer early enough/i);
+            expect(directAnswerIssue.issue_explanation).toBe('The opening does not reach a clear direct answer early enough to fulfill the headline or section promise.');
             expect(directAnswerIssue.issue_explanation).not.toMatch(/125 words/i);
 
-            expect(conciseIssue.highlights?.[0]?.message).toBe('The answer is 35 words, which is concise but lacks direct evidence for the claim.');
-            expect(conciseIssue.explanation_pack.what_failed).toBe('The opening answer is 35 words, which is near the target range but still below the ideal reusable answer band.');
+            expect(conciseIssue.highlights?.[0]?.message).toBe('The opening answer is close, but it still needs a tighter standalone shape to read as a clean reusable snippet.');
+            expect(conciseIssue.explanation_pack.what_failed).toBe('The opening answer is close, but it still needs a tighter standalone shape to read as a clean reusable snippet.');
+            expect(conciseIssue.issue_explanation).toBe('The opening answer is close, but it still needs a tighter standalone shape to read as a clean reusable snippet.');
             expect(conciseIssue.issue_explanation).not.toMatch(/lacks direct evidence for the claim/i);
-            expect(conciseIssue.issue_explanation).toMatch(/Two or three short sentences are fine if they deliver one complete answer/i);
+            expect(conciseIssue.issue_explanation).not.toContain('Two or three short sentences are fine if they deliver one complete answer.');
         });
 
         test('answer_sentence_concise drops implausible threshold math when it contradicts the anchored snippet', () => {
@@ -339,8 +344,8 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const issue = analysis_summary.categories.flatMap((category) => category.issues || []).find((item) => item.check_id === 'answer_sentence_concise');
 
             expect(issue).toBeDefined();
-            expect(issue.highlights?.[0]?.message).toBe('The first sentence is 22 words over the ideal 60-word threshold for a concise snippet.');
-            expect(issue.explanation_pack.what_failed).toBe('The opening answer does not yet read as a clean reusable snippet. Keep the first answer near 40-60 words and make sure it stands alone without extra setup or filler.');
+            expect(issue.highlights?.[0]?.message).toBe('The opening answer does not yet read as a clean reusable snippet. Tighten it so it stands alone cleanly without extra setup or filler.');
+            expect(issue.explanation_pack.what_failed).toBe('The opening answer does not yet read as a clean reusable snippet. Tighten it so it stands alone cleanly without extra setup or filler.');
             expect(issue.issue_explanation).toContain('The opening answer does not yet read as a clean reusable snippet.');
             expect(issue.issue_explanation).not.toMatch(/22 words over the ideal 60-word threshold/i);
         });
@@ -388,10 +393,78 @@ describe('Result Contract Lock - Acceptance Tests', () => {
 
             expect(issue).toBeDefined();
             expect(issue.review_summary || '').toMatch(/reaches the answer only after setup/i);
-            expect(issue.explanation_pack.what_failed).toBe('The check did not confirm a direct answer within the first 120 words after the selected question anchor.');
+            expect(issue.explanation_pack.what_failed).toBe('The opening does not reach a clear direct answer early enough to fulfill the headline or section promise.');
             expect(issue.issue_explanation).toContain('only arrives at the actual answer after too much framing');
             expect(issue.issue_explanation).toContain('extractable answer confidence');
             expect(issue.issue_explanation).not.toBe(issue.explanation_pack.what_failed);
+        });
+
+        test('answer-extractability summary preserves usable AI explanation packs for section-intent cases', () => {
+            const analysisResult = {
+                run_id: 'headline-intent-pack-preservation',
+                checks: {
+                    immediate_answer_placement: {
+                        verdict: 'partial',
+                        explanation: 'The opening is informative, but it does not fulfill the headline or section promise quickly enough for direct extraction.',
+                        ai_explanation_pack: {
+                            what_failed: 'The H2 promises five concrete ways, but the section spends its opening lines on setup before the first actual way appears.',
+                            why_it_matters: 'A list-style heading works best when the first concrete item shows up quickly and confirms the promised structure.',
+                            how_to_fix_steps: [
+                                'Keep one short lead-in line, then surface the first numbered way immediately under the heading.'
+                            ],
+                            issue_explanation: 'This section already has the right list intent, but the opening paragraph delays the first concrete item. Bringing the first numbered way closer to the heading would make the structure easier to extract and reuse.'
+                        },
+                        highlights: [{
+                            node_ref: 'block-1',
+                            start: 0,
+                            end: 84,
+                            text: 'Digital tools can make exam revision more manageable, efficient, and less stressful.',
+                            message: 'The opening is informative, but it does not fulfill the headline or section promise quickly enough for direct extraction.'
+                        }]
+                    }
+                }
+            };
+
+            const { analysis_summary } = serializeForSidebar(analysisResult, analysisResult.run_id);
+            const issue = analysis_summary.categories.flatMap((category) => category.issues || []).find((item) => item.check_id === 'immediate_answer_placement');
+
+            expect(issue).toBeDefined();
+            expect(issue.explanation_pack.what_failed).toBe('The H2 promises five concrete ways, but the section spends its opening lines on setup before the first actual way appears.');
+            expect(issue.explanation_pack.why_it_matters).toBe('A list-style heading works best when the first concrete item shows up quickly and confirms the promised structure.');
+            expect(issue.issue_explanation).toContain('opening paragraph delays the first concrete item');
+            expect(issue.issue_explanation).not.toContain('Answer engines are more reliable when the direct answer appears immediately');
+            expect(issue.issue_explanation).not.toContain('question heading');
+        });
+
+        test('answer-extractability summary preserves highlight-level analyzer reasoning when no explicit issue_explanation exists', () => {
+            const analysisResult = {
+                run_id: 'headline-intent-message-preservation',
+                checks: {
+                    immediate_answer_placement: {
+                        verdict: 'partial',
+                        explanation: 'The opening is informative, but it does not fulfill the headline or section promise quickly enough for direct extraction.',
+                        highlights: [{
+                            node_ref: 'block-1',
+                            start: 0,
+                            end: 84,
+                            text: 'Digital tools can make exam revision more manageable, efficient, and less stressful.',
+                            message: 'The H2 promises five concrete ways, but this opening paragraph stays in setup mode instead of surfacing the first actual way.'
+                        }]
+                    }
+                }
+            };
+
+            const { analysis_summary } = serializeForSidebar(analysisResult, analysisResult.run_id);
+            const issue = analysis_summary.categories.flatMap((category) => category.issues || []).find((item) => item.check_id === 'immediate_answer_placement');
+
+            expect(issue).toBeDefined();
+            expect(issue.explanation_pack.what_failed).toBe('The H2 promises five concrete ways, but this opening paragraph stays in setup mode instead of surfacing the first actual way.');
+            expect([
+                'The H2 promises five concrete ways, but this opening paragraph stays in setup mode instead of surfacing the first actual way.',
+                'The opening is informative, but it does not fulfill the headline or section promise quickly enough for direct extraction.'
+            ]).toContain(issue.issue_explanation);
+            expect(issue.issue_explanation).not.toContain('Answer engines are more reliable when the direct answer appears immediately');
+            expect(issue.issue_explanation).not.toContain('Place one direct answer sentence');
         });
 
         test('routes snippet-only inline summary projections to section when section-first flag is enabled', () => {
@@ -456,6 +529,37 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             expect(issue.rewrite_target.mode).toBe('inline_span');
             expect(issue.rewrite_target.operation).toBe('replace_span');
             expect(issue.rewrite_target.resolver_reason).toBe('summary_contract_projection');
+        });
+
+        test('summary rewrite projections carry anchor and repair scope metadata', () => {
+            const projectedAnalysis = {
+                checks: {
+                    claim_pattern_detection: {
+                        verdict: 'fail',
+                        explanation: 'Claim is unsupported.',
+                        highlights: [
+                            {
+                                node_ref: 'block-7',
+                                snippet: 'Studies show 10000% improvement overnight',
+                                start: 12,
+                                end: 53
+                            }
+                        ],
+                        suggestions: []
+                    }
+                }
+            };
+
+            const { analysis_summary } = serializeForSidebar(projectedAnalysis, 'test-run-summary-scope');
+            const allIssues = analysis_summary.categories.flatMap((category) => category.issues || []);
+            const issue = allIssues.find((entry) => entry.check_id === 'claim_pattern_detection');
+
+            expect(issue).toBeDefined();
+            expect(issue.rewrite_target).toBeDefined();
+            expect(issue.rewrite_target.anchor_node_ref).toBe('block-7');
+            expect(issue.rewrite_target.primary_repair_node_ref).toBe('block-7');
+            expect(issue.rewrite_target.repair_node_refs).toEqual(['block-7']);
+            expect(issue.rewrite_target.scope_confidence).toBeGreaterThan(0);
         });
 
         test('deterministic inline highlights do not inherit aggregate count explanations', () => {
@@ -1036,7 +1140,7 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             expect(overlay.recommendations[0].failure_reason).toBe('external_sources_document_scope');
             expect(overlay.recommendations[0]).toHaveProperty('analysis_ref');
             expect(overlay.recommendations[0].analysis_ref).toHaveProperty('check_id', 'external_authoritative_sources');
-            expect(overlay.recommendations[0]).not.toHaveProperty('rewrite_target');
+            expect(overlay.recommendations[0]).toHaveProperty('rewrite_target');
             expect(overlay.recommendations[0]).toHaveProperty('repair_intent');
         });
 
@@ -1951,9 +2055,9 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const overlay = buildHighlightedHtml(manifest, analysisResult);
             const recommendation = overlay.recommendations[0];
             expect(recommendation).toBeDefined();
-            expect(recommendation.explanation_pack.what_failed).toContain('question-led setup');
+            expect(recommendation.explanation_pack.what_failed).toMatch(/headline or section promise|explainer|explanatory prose/i);
             expect(recommendation.explanation_pack.what_failed).not.toMatch(/strict question anchor/i);
-            expect(recommendation.issue_explanation).toMatch(/query-to-answer structure|direct answer/i);
+            expect(recommendation.issue_explanation).toMatch(/headline or section promise|strict Q&A|direct extraction|question-to-answer setup/i);
             expect(recommendation.issue_explanation).not.toMatch(/strict question anchor/i);
             expect(recommendation.issue_explanation).not.toMatch(/cannot be evaluated/i);
             expect(recommendation.issue_explanation).not.toMatch(/remains unproven/i);
@@ -1989,12 +2093,53 @@ describe('Result Contract Lock - Acceptance Tests', () => {
             const issue = analysis_summary.categories.flatMap((category) => category.issues)[0];
 
             expect(issue).toBeDefined();
-            expect(issue.explanation_pack.what_failed).toContain('question-led setup');
+            expect(issue.explanation_pack.what_failed).toMatch(/headline or section promise|explainer|explanatory prose/i);
             expect(issue.explanation_pack.what_failed).not.toMatch(/strict question anchor/i);
-            expect(issue.issue_explanation).toContain('question-led setup');
+            expect(issue.issue_explanation).toMatch(/headline or section promise|strict Q&A|direct extraction|question-to-answer setup/i);
             expect(issue.issue_explanation).not.toMatch(/strict question anchor/i);
             expect(issue.issue_explanation).not.toMatch(/cannot be evaluated/i);
             expect(issue.issue_explanation).not.toMatch(/remains unproven/i);
+        });
+
+        test('scrubs rhetorical-hook guardrail diagnostics from user-facing answer-extractability copy', () => {
+            const manifest = {
+                block_map: [{
+                    node_ref: 'block-0',
+                    signature: 'sig-rhetorical-1',
+                    text: 'Do you struggle to write college essays? Modern gadgets can make the process easier when they help organize research, notes, and drafting.'
+                }]
+            };
+            const analysisResult = {
+                run_id: 'test-run-rhetorical-hook-scrub',
+                checks: {
+                    immediate_answer_placement: {
+                        verdict: 'partial',
+                        ui_verdict: 'partial',
+                        guardrail_adjusted: true,
+                        guardrail_reason: 'invalid_or_missing_question_anchor',
+                        explanation: 'The opener uses rhetorical hook questions and broad thematic lead-ins rather than a strict question anchor, so answer extractability remains only partial.',
+                        highlights: [],
+                        failed_candidates: [{
+                            snippet: 'Do you struggle to write college essays? Modern gadgets can make the process easier when they help organize research, notes, and drafting.',
+                            message: 'The opener uses rhetorical hook questions and broad thematic lead-ins rather than a strict question anchor, so answer extractability remains only partial.',
+                            failure_reason: '',
+                            explanation_pack: {
+                                what_failed: 'The opener uses rhetorical hook questions and broad thematic lead-ins rather than a strict question anchor, so answer extractability remains only partial.',
+                                issue_explanation: 'Rhetorical hook question detected; answer extractability remains unproven for direct queries.'
+                            }
+                        }]
+                    }
+                }
+            };
+
+            const overlay = buildHighlightedHtml(manifest, analysisResult);
+            const recommendation = overlay.recommendations[0];
+
+            expect(recommendation).toBeDefined();
+            expect(recommendation.explanation_pack.what_failed).toMatch(/headline or section promise|rhetorical lead-in|explainer|strict Q&A/i);
+            expect(recommendation.explanation_pack.what_failed).not.toMatch(/rhetorical hook questions?|broad thematic lead-ins?|strict question anchor/i);
+            expect(recommendation.issue_explanation).toMatch(/headline or section promise|rhetorical lead-in|question-to-answer setup|direct extraction/i);
+            expect(recommendation.issue_explanation).not.toMatch(/rhetorical hook questions?|broad thematic lead-ins?|strict question anchor/i);
         });
 
         test('surfaces deterministic heading-markup issues with anchored guidance', () => {

@@ -2,6 +2,116 @@
 
 All notable public-facing changes to the **AiVI - AI Visibility Inspector** WordPress plugin are documented in this file.
 
+## [1.0.44] - 2026-03-31
+
+### Copilot Guidance And Scope Safety
+
+- preserved clearer analyzer-led extractability explanations so flagged sections are easier to understand and act on
+- stopped Copilot from returning unusable fallback variants when a requested rewrite scope is too wide, and now explains when the section needs a tighter snippet-level repair
+- refined Copilot guidance so optional web-verification prompts appear only on issues that actually need source-aware help
+
+## [1.0.43] - 2026-03-31
+
+### Extractability Explanation Preservation
+
+- preserved analyzer-led Answer Extractability explanations all the way into Review Rail so issue summaries no longer flatten into generic serializer wording
+- aligned Copilot issue packets and analyzer notes with the preserved explanation pack so rewrite context stays closer to the analyzer's real reasoning
+- kept the serializer guardrails, threshold scrub, and UI regression coverage while removing lingering question-style wording drift in section-intent cases
+
+## [1.0.42] - 2026-03-31
+
+### Headline Intent Cue Repair
+
+- taught Analyzer to treat page titles, H1s, and headlines as bounded intent cues instead of automatic strict question anchors
+- rewrote answer-extractability fallback wording so delayed openings are explained as headline or section promise fulfillment rather than rigid question-anchor failure
+- added focused headline-led fixtures and proof coverage for direct-answer, broad multi-answer, and structured-surface articles
+- tightened Copilot helper wording so optional web-verification prompts appear only on issues that actually require user consent
+
+## [1.0.41] - 2026-03-31
+
+### Copilot Messaging And Rhetorical Hook Repair
+
+- refined stored Copilot helper and verification copy so the Review Rail reads calmer and more professionally
+- cleared Copilot-owned Review Rail status text on close, dismiss, and focus changes so stale helper messages no longer linger
+- aligned the live worker contract around rhetorical hooks, strict anchors, and bounded section intent so explainer-style intros no longer behave like false question-answer anchors
+
+## [1.0.40] - 2026-03-31
+
+### Copilot Validator, Structured Surface, And Section Intent Repair
+
+- retired low-value numeric-claim blocking for verified evidence rewrites so web-backed Copilot variants can return when support is actually found
+- normalized Copilot list and structured-surface rewrites into clean bullet text instead of raw HTML list tags
+- hardened answer extractability around rhetorical hooks, heading intent, and nearby structured surfaces such as lists and tables
+
+## [1.0.39] - 2026-03-31
+
+### Copilot Consent And Extractability Repair
+
+- repaired the Copilot consent handoff so `Verify first` and `Stay local` choices reliably reach rewrite generation and return three variants when the backend path is available
+- tightened the verification wait contract so evidence checks stay quick, report clearer outcomes, and fall back more calmly when verifiable support cannot be confirmed in time
+- taught answer extractability to treat rhetorical lead-in questions more intelligently and removed internal threshold math from user-facing guidance
+
+## [1.0.38] - 2026-03-31
+
+### Copilot Shell Alignment
+
+- rebuilt the live Copilot rail shell so the pre-variant and variants-ready states share one calmer editorial surface
+- kept Copilot inside the Review Rail takeover area so it no longer spills into the writing canvas during issue work
+- removed credit-used chatter from the live Copilot surface and softened verification prompts so the UI feels cleaner and more premium
+
+## [1.0.37] - 2026-03-30
+
+### Copilot Validation Repair
+
+- narrowed preservation enforcement so good Copilot rewrites are no longer rejected for low-value literal drift
+- added exact validation diagnostics for missing literals, literal class, and provenance to speed up live diagnosis
+- proved the repaired validator path across representative Copilot check families and live lambda gate runs
+
+## [1.0.36] - 2026-03-30
+
+### Copilot Separation And Deploy Safety
+
+- separated Copilot more cleanly from Analyzer-owned diagnosis so the repair surface stays focused on scoped editorial fixes
+- improved the Copilot bubble so variants are easier to read, copy, and review without re-showing Analyzer-style explanation
+- hardened deploy and packaging safety around the Copilot rewrite route and critical backend modules
+
+## [1.0.35] - 2026-03-30
+
+### Copilot Expansion And Verification
+
+- enabled the expanded Copilot flow so issue-scoped variant generation, evidence-aware help, and calmer guidance can work together more reliably
+- added consent-based web verification for trust and support issues, while keeping local-only suggestion paths available when authors prefer them
+- refined the Review Rail Copilot bubble so it feels roomier, calmer, and more aligned with the active issue during review
+
+## [1.0.34] - 2026-03-29
+
+### Fix Assist Alignment And Calmness
+
+- improved Fix Assist so Review Rail issue counts and names stay aligned more reliably during review
+- grounded Copilot help more cleanly in the selected issue and current article context before suggesting variants
+- refined the attached Copilot card so it stays calmer and easier to read while you review findings
+
+## [1.0.33] - 2026-03-29
+
+### Fix Assist Flow Polish
+
+- improved Fix Assist targeting so help follows the active issue more reliably
+- made Fix Assist quieter to use by launching it from the Review Rail instead of covering article text by default
+
+## [1.0.32] - 2026-03-29
+
+### Reliability and Guidance
+
+- restored analysis reliability after a live backend packaging regression
+- improved the temporary-outage guidance shown in the plugin when AiVI is unavailable
+
+## [1.0.31] - 2026-03-29
+
+### Fix Assist Foundations
+
+- introduced the first AiVI Fix Assist workflow for calmer issue-scoped rewrite help inside the overlay editor
+- kept Fix Assist suggestions copy-only so authors stay in control before updating WordPress
+
 ## [1.0.30] - 2026-03-27
 
 ### Final Validation Cleanup

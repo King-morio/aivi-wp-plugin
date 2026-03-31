@@ -18,6 +18,7 @@
                             "allowed_issue_fields":  [
                                                          "check_id",
                                                          "detail_ref",
+                                                         "check_name",
                                                          "name",
                                                          "ui_verdict",
                                                          "instances",
@@ -32,6 +33,7 @@
                                                          "explanation_pack",
                                                          "issue_explanation",
                                                          "review_summary",
+                                                         "fix_assist_triage",
                                                          "highlights"
                                                      ],
                             "allowed_highlight_fields":  [
@@ -52,7 +54,8 @@
                                                              "repair_intent",
                                                              "explanation_pack",
                                                              "issue_explanation",
-                                                             "review_summary"
+                                                             "review_summary",
+                                                             "fix_assist_triage"
                                                          ]
                         },
     "checks":  {
@@ -109,10 +112,11 @@
                                                                           ],
                                                   "rewrite_context_window":  3
                                               },
-                   "intro_schema_suggestion":  {
+                    "intro_schema_suggestion":  {
                                                    "analysis_engine":  "deterministic",
                                                    "evidence_mode":  "recommendation_only",
                                                    "rewrite_mode":  "manual_review",
+                                                   "copilot_mode":  "schema_metadata_assist",
                                                    "allowed_scopes":  "block",
                                                    "check_type":  "hybrid",
                                                    "category_id":  "intro_focus_factuality",
@@ -188,19 +192,20 @@
                                                                            ],
                                                    "rewrite_context_window":  2
                                                },
-                   "faq_structure_opportunity":  {
-                                                     "analysis_engine":  "ai",
-                                                     "evidence_mode":  "recommendation_only",
-                                                     "rewrite_mode":  "manual_review",
-                                                     "allowed_scopes":  "block",
-                                                     "check_type":  "semantic",
-                                                     "category_id":  "answer_extractability",
-                                                     "rewrite_target_policy":  "section",
-                                                     "rewrite_allowed_ops":  [
-
-                                                                             ],
-                                                     "rewrite_context_window":  3
-                                                 },
+                    "faq_structure_opportunity":  {
+                                                        "analysis_engine":  "ai",
+                                                        "evidence_mode":  "recommendation_only",
+                                                        "rewrite_mode":  "ai_rewrite",
+                                                        "copilot_mode":  "structural_transform",
+                                                        "allowed_scopes":  "block",
+                                                       "check_type":  "semantic",
+                                                       "category_id":  "answer_extractability",
+                                                       "rewrite_target_policy":  "section",
+                                                       "rewrite_allowed_ops":  [
+                                                                                 "replace_block"
+                                                                               ],
+                                                       "rewrite_context_window":  3
+                                                   },
                    "single_h1":  {
                                      "analysis_engine":  "deterministic",
                                      "evidence_mode":  "inline_required",
@@ -269,21 +274,22 @@
                                                                              ],
                                                      "rewrite_context_window":  2
                                              },
-                   "heading_like_text_uses_heading_markup":  {
-                                                                   "analysis_engine":  "deterministic",
-                                                                   "evidence_mode":  "inline_required",
-                                                                   "rewrite_mode":  "manual_review",
-                                                                   "allowed_scopes":  [
-                                                                                          "block"
-                                                                                      ],
-                                                                   "check_type":  "deterministic",
-                                                                   "category_id":  "structure_readability",
-                                                                   "rewrite_target_policy":  "block",
-                                                                   "rewrite_allowed_ops":  [
-
-                                                                                           ],
-                                                                   "rewrite_context_window":  2
-                                                               },
+                    "heading_like_text_uses_heading_markup":  {
+                                                                     "analysis_engine":  "deterministic",
+                                                                     "evidence_mode":  "inline_required",
+                                                                     "rewrite_mode":  "ai_rewrite",
+                                                                     "copilot_mode":  "structural_transform",
+                                                                     "allowed_scopes":  [
+                                                                                           "block"
+                                                                                       ],
+                                                                    "check_type":  "deterministic",
+                                                                    "category_id":  "structure_readability",
+                                                                    "rewrite_target_policy":  "block",
+                                                                    "rewrite_allowed_ops":  [
+                                                                                             "replace_block"
+                                                                                             ],
+                                                                     "rewrite_context_window":  2
+                                                                 },
                     "lists_tables_presence":  {
                                                 "analysis_engine":  "ai",
                                                 "evidence_mode":  "inline_required",
@@ -334,11 +340,12 @@
                                                                                 ],
                                                         "rewrite_context_window":  2
                                                     },
-                   "valid_jsonld_schema":  {
-                                               "analysis_engine":  "deterministic",
-                                               "evidence_mode":  "recommendation_only",
-                                               "rewrite_mode":  "manual_review",
-                                               "allowed_scopes":  "block",
+                    "valid_jsonld_schema":  {
+                                                "analysis_engine":  "deterministic",
+                                                "evidence_mode":  "recommendation_only",
+                                                "rewrite_mode":  "manual_review",
+                                                "copilot_mode":  "schema_metadata_assist",
+                                                "allowed_scopes":  "block",
                                                "check_type":  "deterministic",
                                                "category_id":  "schema_structured_data",
                                                "rewrite_target_policy":  "section",
@@ -353,11 +360,12 @@
                                                "schema_assist_conflict_strategy":  "copy_only",
                                                "schema_assist_replace_scope":  "none"
                                            },
-                   "article_jsonld_presence_and_completeness":  {
-                                                                      "analysis_engine":  "deterministic",
-                                                                      "evidence_mode":  "recommendation_only",
-                                                                      "rewrite_mode":  "manual_review",
-                                                                      "allowed_scopes":  "block",
+                    "article_jsonld_presence_and_completeness":  {
+                                                                       "analysis_engine":  "deterministic",
+                                                                       "evidence_mode":  "recommendation_only",
+                                                                       "rewrite_mode":  "manual_review",
+                                                                       "copilot_mode":  "schema_metadata_assist",
+                                                                       "allowed_scopes":  "block",
                                                                       "check_type":  "deterministic",
                                                                       "category_id":  "schema_structured_data",
                                                                       "rewrite_target_policy":  "section",
@@ -372,11 +380,12 @@
                                                                       "schema_assist_conflict_strategy":  "no_op_replace_copy_append",
                                                                       "schema_assist_replace_scope":  "single_aivi_managed_match"
                                                                   },
-                    "schema_matches_content":  {
-                                                   "analysis_engine":  "deterministic",
-                                                   "evidence_mode":  "recommendation_only",
-                                                   "rewrite_mode":  "manual_review",
-                                                   "allowed_scopes":  "block",
+                     "schema_matches_content":  {
+                                                    "analysis_engine":  "deterministic",
+                                                    "evidence_mode":  "recommendation_only",
+                                                    "rewrite_mode":  "manual_review",
+                                                    "copilot_mode":  "schema_metadata_assist",
+                                                    "allowed_scopes":  "block",
                                                    "check_type":  "deterministic",
                                                    "category_id":  "schema_structured_data",
                                                    "rewrite_target_policy":  "section",
@@ -405,10 +414,11 @@
                                               "rewrite_context_window":  3
                                           },
                     "semantic_html_usage":  {
-                                               "analysis_engine":  "deterministic",
-                                               "evidence_mode":  "recommendation_only",
-                                               "rewrite_mode":  "manual_review",
-                                               "allowed_scopes":  "block",
+                                                "analysis_engine":  "deterministic",
+                                                "evidence_mode":  "recommendation_only",
+                                                "rewrite_mode":  "manual_review",
+                                                "copilot_mode":  "schema_metadata_assist",
+                                                "allowed_scopes":  "block",
                                                "check_type":  "deterministic",
                                                "category_id":  "schema_structured_data",
                                                "rewrite_target_policy":  "section",
@@ -423,11 +433,12 @@
                                                "schema_assist_conflict_strategy":  "copy_only",
                                                "schema_assist_replace_scope":  "none"
                                            },
-                   "supported_schema_types_validation":  {
-                                                             "analysis_engine":  "deterministic",
-                                                             "evidence_mode":  "recommendation_only",
-                                                             "rewrite_mode":  "manual_review",
-                                                             "allowed_scopes":  "block",
+                    "supported_schema_types_validation":  {
+                                                              "analysis_engine":  "deterministic",
+                                                              "evidence_mode":  "recommendation_only",
+                                                              "rewrite_mode":  "manual_review",
+                                                              "copilot_mode":  "schema_metadata_assist",
+                                                              "allowed_scopes":  "block",
                                                              "check_type":  "deterministic",
                                                              "category_id":  "schema_structured_data",
                                                              "rewrite_target_policy":  "section",
@@ -436,11 +447,12 @@
                                                                                      ],
                                                              "rewrite_context_window":  3
                                                          },
-                   "faq_jsonld_presence_and_completeness":  {
-                                                                "analysis_engine":  "deterministic",
-                                                                "evidence_mode":  "recommendation_only",
-                                                                "rewrite_mode":  "manual_review",
-                                                                "allowed_scopes":  "block",
+                    "faq_jsonld_presence_and_completeness":  {
+                                                                 "analysis_engine":  "deterministic",
+                                                                 "evidence_mode":  "recommendation_only",
+                                                                 "rewrite_mode":  "manual_review",
+                                                                 "copilot_mode":  "schema_metadata_assist",
+                                                                 "allowed_scopes":  "block",
                                                                 "check_type":  "deterministic",
                                                                 "category_id":  "schema_structured_data",
                                                                 "rewrite_target_policy":  "section",
@@ -455,11 +467,12 @@
                                                                 "schema_assist_conflict_strategy":  "no_op_replace_copy_append",
                                                                 "schema_assist_replace_scope":  "single_aivi_managed_match"
                                                             },
-                   "howto_jsonld_presence_and_completeness":  {
-                                                                  "analysis_engine":  "deterministic",
-                                                                  "evidence_mode":  "recommendation_only",
-                                                                  "rewrite_mode":  "manual_review",
-                                                                  "allowed_scopes":  "block",
+                    "howto_jsonld_presence_and_completeness":  {
+                                                                   "analysis_engine":  "deterministic",
+                                                                   "evidence_mode":  "recommendation_only",
+                                                                   "rewrite_mode":  "manual_review",
+                                                                   "copilot_mode":  "schema_metadata_assist",
+                                                                   "allowed_scopes":  "block",
                                                                   "check_type":  "deterministic",
                                                                   "category_id":  "schema_structured_data",
                                                                   "rewrite_target_policy":  "section",
@@ -498,6 +511,7 @@
                                                                   "analysis_engine":  "deterministic",
                                                                   "evidence_mode":  "recommendation_only",
                                                                   "rewrite_mode":  "manual_review",
+                                                                  "copilot_mode":  "schema_metadata_assist",
                                                                   "allowed_scopes":  "block",
                                                                   "check_type":  "deterministic",
                                                                   "category_id":  "schema_structured_data",
@@ -518,6 +532,7 @@
                                                                      "analysis_engine":  "deterministic",
                                                                      "evidence_mode":  "recommendation_only",
                                                                      "rewrite_mode":  "manual_review",
+                                                                     "copilot_mode":  "schema_metadata_assist",
                                                                      "allowed_scopes":  "block",
                                                                      "check_type":  "deterministic",
                                                                      "category_id":  "schema_structured_data",
@@ -757,32 +772,34 @@
                                                                         ],
                                                 "rewrite_context_window":  3
                                             },
-                   "external_authoritative_sources":  {
-                                                          "analysis_engine":  "ai",
-                                                          "evidence_mode":  "recommendation_only",
-                                                          "rewrite_mode":  "manual_review",
-                                                          "allowed_scopes":  "block",
-                                                          "check_type":  "semantic",
-                                                          "category_id":  "trust_neutrality",
-                                                          "rewrite_target_policy":  "section",
-                                                          "rewrite_allowed_ops":  [
-
-                                                                                  ],
-                                                          "rewrite_context_window":  3
-                                                      },
-                   "claim_provenance_and_evidence":  {
-                                                         "analysis_engine":  "ai",
-                                                         "evidence_mode":  "recommendation_only",
-                                                         "rewrite_mode":  "manual_review",
-                                                         "allowed_scopes":  "block",
-                                                         "check_type":  "semantic",
-                                                         "category_id":  "trust_neutrality",
-                                                         "rewrite_target_policy":  "section",
-                                                         "rewrite_allowed_ops":  [
-
-                                                                                 ],
-                                                         "rewrite_context_window":  3
-                                                     },
+                    "external_authoritative_sources":  {
+                                                             "analysis_engine":  "ai",
+                                                             "evidence_mode":  "recommendation_only",
+                                                             "rewrite_mode":  "ai_rewrite",
+                                                             "copilot_mode":  "web_backed_evidence_assist",
+                                                             "allowed_scopes":  "block",
+                                                            "check_type":  "semantic",
+                                                            "category_id":  "trust_neutrality",
+                                                            "rewrite_target_policy":  "section",
+                                                            "rewrite_allowed_ops":  [
+                                                                                    "replace_block"
+                                                                                    ],
+                                                            "rewrite_context_window":  3
+                                                        },
+                    "claim_provenance_and_evidence":  {
+                                                            "analysis_engine":  "ai",
+                                                            "evidence_mode":  "recommendation_only",
+                                                            "rewrite_mode":  "ai_rewrite",
+                                                            "copilot_mode":  "web_backed_evidence_assist",
+                                                            "allowed_scopes":  "block",
+                                                           "check_type":  "semantic",
+                                                           "category_id":  "trust_neutrality",
+                                                           "rewrite_target_policy":  "section",
+                                                           "rewrite_allowed_ops":  [
+                                                                                   "replace_block"
+                                                                                   ],
+                                                           "rewrite_context_window":  3
+                                                       },
                    "numeric_claim_consistency":  {
                                                      "analysis_engine":  "ai",
                                                      "evidence_mode":  "inline_required",
@@ -868,19 +885,20 @@
                                                                                   ],
                                                           "rewrite_context_window":  2
                                                       },
-                   "original_evidence_signal":  {
-                                                   "analysis_engine":  "ai",
-                                                   "evidence_mode":  "recommendation_only",
-                                                   "rewrite_mode":  "manual_review",
-                                                   "allowed_scopes":  "block",
-                                                   "check_type":  "semantic",
-                                                   "category_id":  "citability_verifiability",
-                                                   "rewrite_target_policy":  "section",
-                                                   "rewrite_allowed_ops":  [
-
-                                                                           ],
-                                                   "rewrite_context_window":  3
-                                               },
+                    "original_evidence_signal":  {
+                                                      "analysis_engine":  "ai",
+                                                      "evidence_mode":  "recommendation_only",
+                                                      "rewrite_mode":  "ai_rewrite",
+                                                      "copilot_mode":  "web_backed_evidence_assist",
+                                                      "allowed_scopes":  "block",
+                                                     "check_type":  "semantic",
+                                                     "category_id":  "citability_verifiability",
+                                                     "rewrite_target_policy":  "section",
+                                                     "rewrite_allowed_ops":  [
+                                                                             "replace_block"
+                                                                             ],
+                                                     "rewrite_context_window":  3
+                                                 },
                    "claim_pattern_detection":  {
                                                     "analysis_engine":  "ai",
                                                     "evidence_mode":  "inline_required",
@@ -937,18 +955,19 @@
                                                                                          ],
                                                                  "rewrite_context_window":  2
                                                              },
-                   "citation_format_and_context":  {
-                                                       "analysis_engine":  "ai",
-                                                       "evidence_mode":  "recommendation_only",
-                                                       "rewrite_mode":  "manual_review",
-                                                       "allowed_scopes":  "block",
-                                                       "check_type":  "semantic",
-                                                       "category_id":  "citability_verifiability",
-                                                       "rewrite_target_policy":  "section",
-                                                       "rewrite_allowed_ops":  [
-
-                                                                               ],
-                                                       "rewrite_context_window":  3
-                                                   }
+                    "citation_format_and_context":  {
+                                                          "analysis_engine":  "ai",
+                                                          "evidence_mode":  "recommendation_only",
+                                                          "rewrite_mode":  "ai_rewrite",
+                                                          "copilot_mode":  "web_backed_evidence_assist",
+                                                          "allowed_scopes":  "block",
+                                                         "check_type":  "semantic",
+                                                         "category_id":  "citability_verifiability",
+                                                         "rewrite_target_policy":  "section",
+                                                         "rewrite_allowed_ops":  [
+                                                                                 "replace_block"
+                                                                                 ],
+                                                         "rewrite_context_window":  3
+                                                     }
                }
 }

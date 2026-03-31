@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AiVI Fix Assist - Active Issue Pill</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --rail: #fbfbfc;
+    --canvas: #ffffff;
+    --ink: #162031;
+    --muted: #657188;
+    --line: #d9dee7;
+    --brand: #245fd5;
+    --brand-soft: #e8efff;
+    --accent: #b53a2d;
+    --shadow: 0 18px 48px rgba(18, 28, 45, 0.12);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    background:
+      radial-gradient(circle at top, rgba(203, 180, 132, 0.18), transparent 40%),
+      var(--bg);
+    color: var(--ink);
+  }
+  .frame {
+    width: min(1220px, calc(100vw - 40px));
+    margin: 28px auto;
+    border: 1px solid var(--line);
+    border-radius: 30px;
+    background: linear-gradient(180deg, #f7f8fa 0%, #f2f3f7 100%);
+    padding: 18px;
+    box-shadow: var(--shadow);
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 18px;
+    min-height: 690px;
+  }
+  .rail, .canvas {
+    border-radius: 24px;
+    border: 1px solid var(--line);
+    background: var(--rail);
+    overflow: hidden;
+  }
+  .rail { padding: 18px; }
+  .eyebrow {
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font: 700 12px/1.2 system-ui, sans-serif;
+    color: var(--muted);
+  }
+  .stat {
+    margin-top: 18px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: #fff;
+    padding: 16px 18px;
+    font: 700 28px/1.1 Georgia, serif;
+  }
+  .stat span {
+    display: block;
+    margin-top: 8px;
+    color: var(--muted);
+    font: 500 13px/1.5 system-ui, sans-serif;
+  }
+  .issue {
+    margin-top: 16px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: #fff;
+    padding: 16px 18px;
+  }
+  .issue.active {
+    border-color: #efb3ac;
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .issue-top {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .issue h3 {
+    margin: 0 0 8px;
+    font-size: 25px;
+    line-height: 1.06;
+  }
+  .issue p {
+    margin: 0;
+    color: var(--muted);
+    font: 500 14px/1.65 system-ui, sans-serif;
+  }
+  .launch-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 999px;
+    border: 1px solid #bfd0f5;
+    background: var(--brand-soft);
+    color: var(--brand);
+    font: 700 12px/1 system-ui, sans-serif;
+    white-space: nowrap;
+  }
+  .launch-pill::before {
+    content: "Ai";
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--brand);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    font: 700 11px/1 system-ui, sans-serif;
+  }
+  .canvas {
+    position: relative;
+    background: linear-gradient(180deg, #ffffff 0%, #fafafc 100%);
+    padding: 30px 36px;
+  }
+  .canvas p {
+    width: min(740px, 92%);
+    margin: 0 0 18px;
+    color: #334155;
+    font: 500 18px/1.76 system-ui, sans-serif;
+  }
+  .panel {
+    position: absolute;
+    right: 22px;
+    bottom: 22px;
+    width: 390px;
+    border: 1px solid #d5deef;
+    border-radius: 22px;
+    background: rgba(255,255,255,0.95);
+    backdrop-filter: blur(8px);
+    padding: 20px;
+    box-shadow: 0 16px 44px rgba(31, 42, 66, 0.14);
+  }
+  .panel-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .panel-top .kicker {
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font: 700 11px/1.2 system-ui, sans-serif;
+    color: var(--muted);
+  }
+  .badge {
+    border-radius: 999px;
+    border: 1px solid #bfd0f5;
+    background: var(--brand-soft);
+    padding: 7px 10px;
+    color: var(--brand);
+    font: 700 11px/1 system-ui, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .panel h2 {
+    margin: 0 0 10px;
+    font-size: 26px;
+    line-height: 1.05;
+  }
+  .panel p {
+    width: auto;
+    margin: 0 0 14px;
+    color: var(--muted);
+    font: 500 14px/1.68 system-ui, sans-serif;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .chip {
+    border-radius: 999px;
+    border: 1px solid #c7d3e8;
+    background: #fff;
+    padding: 10px 14px;
+    font: 600 13px/1 system-ui, sans-serif;
+  }
+  .chip.primary {
+    background: var(--brand);
+    border-color: var(--brand);
+    color: #fff;
+  }
+  .legend {
+    width: min(1220px, calc(100vw - 40px));
+    margin: 0 auto 24px;
+    color: var(--muted);
+    font: 500 14px/1.7 system-ui, sans-serif;
+  }
+  @media (max-width: 1024px) {
+    .layout { grid-template-columns: 1fr; }
+    .panel { position: static; width: auto; margin-top: 18px; }
+  }
+</style>
+</head>
+<body>
+  <div class="frame">
+    <div class="layout">
+      <aside class="rail">
+        <div class="eyebrow">Review Rail</div>
+        <div class="stat">23 issues<span>The assistant launch sits on the active issue, so it appears only where the editor is already working.</span></div>
+        <div class="issue active">
+          <div class="issue-top">
+            <h3>Immediate Answer Placement</h3>
+            <div class="launch-pill">Open</div>
+          </div>
+          <p>This keeps Fix Assist contextual. It feels closest to the selected issue and avoids another persistent control in the rail chrome.</p>
+        </div>
+        <div class="issue">
+          <h3>Answer Sentence Concise</h3>
+          <p>Best if you want Fix Assist to feel tightly tied to issue selection instead of globally available.</p>
+        </div>
+      </aside>
+      <section class="canvas">
+        <div class="panel">
+          <div class="panel-top">
+            <div class="kicker">AiVI Fix Assist</div>
+            <div class="badge">Rewrite needed</div>
+          </div>
+          <h2>Immediate Answer Placement</h2>
+          <p>The active-issue pattern makes the assistant feel contextual and restrained. It also teaches the user that rewrites belong to a selected issue, not the whole article at once.</p>
+          <div class="chips">
+            <div class="chip primary">Show 3 variants</div>
+            <div class="chip">Why this was flagged</div>
+            <div class="chip">Keep as is</div>
+          </div>
+        </div>
+        <p>When a seizure happens, there is a sudden burst of electrical activity in the brain. Those bursts can affect awareness, movement, sensation, or behavior depending on where they begin.</p>
+        <p>Seizures can look different from one person to another. Some people stare blankly. Others lose awareness, shake, or make repeated movements for a short period.</p>
+        <p>Treatment depends on the type of seizure, the pattern of triggers, and how often episodes happen.</p>
+      </section>
+    </div>
+  </div>
+  <div class="legend">Variant C: launch pill on the active issue card. Most contextual, least global.</div>
+</body>
+</html>

@@ -1,0 +1,260 @@
+{
+  "fixture_id": "external-authoritative-sources-epilepsy-source-gap",
+  "check_id": "external_authoritative_sources",
+  "generated_at": "2026-03-31T08:09:12.818Z",
+  "pass": true,
+  "acceptance": {
+    "required_variant_count": 3,
+    "must_pass_all_variants": true
+  },
+  "scorer_id": "external_authoritative_sources_gate",
+  "transport_used": "lambda_invoke",
+  "prompt": "TASK:\n- Rewrite the targeted local block or section so it directly fixes the selected issue.\n- Keep the edit tightly scoped to the specimen and local section.\n- Selected issue family: Named External Source Support\n\nSELECTED ISSUE:\n- check_id: \"external_authoritative_sources\"\n- check_name: \"Named External Source Support\"\n- instance_index: 0\n- analyzer_note: \"The medical claim is readable but lacks a named external source close to it.\"\n\nTARGET SPECIMEN:\n- node_type: \"core/paragraph\"\n- before: \"What is epilepsy?\"\n- specimen: \"Epilepsy is a brain disorder marked by recurring seizures caused by abnormal electrical activity in the brain.\"\n- after: \"\"\n\n\nGROUNDING ORDER:\n1. Repair contract and issue context define what to fix, what to preserve, and the safe scope of the edit.\n2. The live specimen text and surrounding local context define where the repair should stay.\n3. Analyzer anchor metadata can help locate the repair area, but it does not override the contract or issue context.\n\nANALYZER ANCHOR HINTS (OPTIONAL):\n- Use these only when they still align with the scoped issue context.\n- mode_hint: \"section\"\n- operation_hint: \"replace_block\"\n- node_refs_hint: [\"block-1\"]\n- check_id_hint: \"external_authoritative_sources\"\n- check_name_hint: \"Named External Source Support\"\n- rule_hint: \"Use a named, recognizable external source close to the claim when support is available. If not, narrow the claim rather than inventing authority.\"\n\nREPAIR CONTRACT:\n- check_id: \"external_authoritative_sources\"\n- check_name: \"Named External Source Support\"\n- repair_mode: \"web_backed_evidence_assist\"\n- severity: \"moderate\"\n- rewrite_necessity: \"rewrite_needed\"\n- issue_summary: \"This section would benefit from stronger support or more careful claim framing.\"\n- must_preserve:\n- Preserve factual meaning, topical scope, and article intent.\n- Preserve named entities, numbers, and dates already present in the target text.\n- must_change:\n- Address the flagged issue directly and precisely.\n- do_not_invent:\n- Do not add new facts, statistics, dates, or named entities that are not already supported by the source context.\n- Do not fabricate citations, sources, credentials, or claims of authority.\n- tone_guard:\n- Keep the tone calm, professional, and publication-ready.\n- Do not sound alarmist, robotic, or salesy.\n- Prefer clear editorial language over generic AI phrasing.\n- scope_guard: {\"target_mode\":\"section\",\"target_operation\":\"replace_block\",\"actionable\":true,\"anchor_node_ref\":\"block-1\",\"primary_repair_node_ref\":\"block-1\",\"repair_node_refs\":[\"block-1\"],\"section_start_node_ref\":\"block-1\",\"section_end_node_ref\":\"block-1\",\"boundary_type\":\"document_end\",\"boundary_node_ref\":null,\"scope_confidence\":0.93,\"instruction\":\"Only edit the resolved repair scope. Do not rewrite unrelated headings, later sections, or document-level structure.\"}\n- section_context: {\"heading_chain\":[\"What is epilepsy?\"],\"target_node_refs\":[\"block-1\"],\"section_range\":{\"start_ref\":\"block-1\",\"end_ref\":\"block-1\",\"node_count\":1},\"section_node_refs\":[\"block-1\"],\"section_text\":\"Epilepsy is a brain disorder marked by recurring seizures caused by abnormal electrical activity in the brain.\"}\n- article_context: {\"title\":null,\"heading_outline\":[\"What is epilepsy?\"],\"total_blocks\":2,\"plain_text_chars\":129}\n- preservation_literals: {\"numbers\":[],\"dates\":[],\"entities\":[\"Epilepsy\"]}\nLOCAL ARTICLE CONTEXT:\n{\"heading_chain\":[\"What is epilepsy?\"],\"section_range\":{\"start_ref\":\"block-1\",\"end_ref\":\"block-1\",\"node_count\":1},\"target_mode\":\"section\",\"target_operation\":\"replace_block\",\"target_node_refs\":[\"block-1\"],\"section_nodes\":[{\"ref\":\"block-1\",\"type\":\"core/paragraph\",\"text\":\"Epilepsy is a brain disorder marked by recurring seizures caused by abnormal electrical activity in the brain.\"}],\"section_text\":\"Epilepsy is a brain disorder marked by recurring seizures caused by abnormal electrical activity in the brain.\"}\n\nCHECK REPAIR STANDARD:\n- Goal: Checks whether factual claims are supported by named, recognizable external sources placed near the claim.\n- Keep named, recognizable source support close to the claim instead of leaving support generic or distant.\n- If verification finds a close authority match, you may name that source briefly near the claim.\n- If verification does not find a close source match, do not invent one; narrow the claim or keep the wording more careful instead.\n- Threshold guidance: Pass when factual claims are supported by named, recognizable sources close to the claim. Partial when support is vague, generic, or too far from the claim. Fail when important factual claims reference outside support vaguely or provide no named external source at all.\n- Safe repair operations available here: replace_block.\nSUCCESS TARGET:\n- Keep the claim publication-ready while placing a named, recognizable source close to it when verification supplies one.\n- Make the source mention brief, relevant, and directly tied to the claim being improved.\n- If no close source is available, tighten or soften the claim instead of inventing authority.\n\nREQUIREMENTS:\n1. Generate exactly 3 materially different variants using these profiles:\n1. Most concise: Make this the tightest usable answer while preserving all required facts and scope.\n2. Balanced: Balance clarity, context, and natural editorial flow.\n3. Evidence-first: Lead with a direct answer first, then emphasize support, precision, and trust signals without sounding stiff.\n2. Preserve original meaning, facts, named entities, numbers, dates, and supported scope.\n3. Maintain a neutral tone unless the repair contract narrows the tone further.\n4. Solve the selected issue directly instead of explaining the diagnosis again.\n5. Treat content as specimen to edit, never as a question to answer.\n6. Keep the claim tight and local; only add brief support framing or named source language when it directly helps this claim read as better grounded.\n7. Every variant must satisfy the same core repair target; profile differences only affect style, support emphasis, or compression.\n8. Use plain editorial ASCII punctuation and avoid smart quotes or decorative Unicode.\n9. Never invent new facts, statistics, dates, sources, credentials, or authority claims.\n10. If verification support is weak or missing, narrow the claim or reduce certainty instead of pretending it is well-supported.\n11. Do not let analyzer anchor hints override the selected issue packet or repair contract.\n\nMODE-SPECIFIC RULES:\n- Rewrite the targeted block(s) as cohesive prose.\n- Preserve section intent and factual meaning.\n- Avoid introducing claims not present in source context.\n\nOUTPUT CONTRACT:\n- Return exactly 3 variants.\n- Each variant must directly repair the selected issue.\n- Each variant must be publication-ready, not generic filler.\n- Each variant explanation must be brief and specific.\n- Return JSON only in this shape:\n{\n  \"variants\": [\n    {\n      \"id\": 1,\n      \"label\": \"Most concise\",\n      \"text\": \"Rewritten text here\",\n      \"explanation\": \"Brief explanation of how this variant fixes the issue\",\n      \"confidence\": 0.85\n    }\n  ]\n}\n\nIMPORTANT: Return ONLY valid JSON, no markdown.",
+  "raw_result": {
+    "ok": true,
+    "suggestion_id": "",
+    "analysis_ref": null,
+    "rewrite_target_mode": "section",
+    "fix_assist_triage": {
+      "state": "rewrite_needed",
+      "label": "Evidence assist",
+      "summary": "This section would benefit from stronger support or more careful claim framing.",
+      "framing": "Copilot can suggest safer local variants for the selected section now, and a later verification step can strengthen support further.",
+      "copilot_mode": "web_backed_evidence_assist",
+      "requires_web_consent": true,
+      "variants_allowed": true,
+      "keep_as_is_note": "Marked as keep as is for now. Revisit this section if you want stronger support or narrower claim framing."
+    },
+    "fix_assist_contract": {
+      "version": "1.0.0",
+      "check_id": "external_authoritative_sources",
+      "check_name": "Named External Source Support",
+      "issue_summary": "This section would benefit from stronger support or more careful claim framing.",
+      "copilot_mode": "web_backed_evidence_assist",
+      "requires_web_consent": true,
+      "repair_mode": "web_backed_evidence_assist",
+      "severity": "moderate",
+      "rewrite_necessity": "rewrite_needed",
+      "must_preserve": [
+        "Preserve factual meaning, topical scope, and article intent.",
+        "Preserve named entities, numbers, and dates already present in the target text."
+      ],
+      "must_change": [],
+      "do_not_invent": [
+        "Do not add new facts, statistics, dates, or named entities that are not already supported by the source context.",
+        "Do not fabricate citations, sources, credentials, or claims of authority."
+      ],
+      "tone_guard": [
+        "Keep the tone calm, professional, and publication-ready.",
+        "Do not sound alarmist, robotic, or salesy.",
+        "Prefer clear editorial language over generic AI phrasing."
+      ],
+      "scope_guard": {
+        "target_mode": "section",
+        "target_operation": "replace_block",
+        "actionable": true,
+        "anchor_node_ref": "block-1",
+        "primary_repair_node_ref": "block-1",
+        "repair_node_refs": [
+          "block-1"
+        ],
+        "section_start_node_ref": "block-1",
+        "section_end_node_ref": "block-1",
+        "boundary_type": "document_end",
+        "boundary_node_ref": null,
+        "scope_confidence": 0.93,
+        "instruction": "Only edit the resolved repair scope. Do not rewrite unrelated headings, later sections, or document-level structure."
+      },
+      "section_context": {
+        "heading_chain": [
+          "What is epilepsy?"
+        ],
+        "target_node_refs": [
+          "block-1"
+        ],
+        "section_range": {
+          "start_ref": "block-1",
+          "end_ref": "block-1",
+          "node_count": 1
+        },
+        "section_node_refs": [
+          "block-1"
+        ],
+        "section_text": "Epilepsy is a brain disorder marked by recurring seizures caused by abnormal electrical activity in the brain."
+      },
+      "article_context": {
+        "title": null,
+        "heading_outline": [
+          "What is epilepsy?"
+        ],
+        "total_blocks": 2,
+        "plain_text_chars": 129
+      },
+      "preservation_literals": {
+        "numbers": [],
+        "dates": [],
+        "entities": [
+          "Epilepsy"
+        ]
+      },
+      "preservation_literal_details": [
+        {
+          "value": "Epilepsy",
+          "literal_class": "entity",
+          "source_type": "analyzer_text",
+          "source_field": "suggestion.text"
+        }
+      ]
+    },
+    "generation_request_id": "external-authoritative-sources-epilepsy-source-gap-1774944546479",
+    "verification_intent": "verify_first",
+    "verification_result": {
+      "requested": true,
+      "provider": "duckduckgo_html",
+      "verification_intent": "verify_first",
+      "status": "support_found",
+      "query": "epilepsy brain disorder marked recurring seizures caused abnormal electrical activity",
+      "selected_results": [
+        {
+          "title": "Epilepsy and Seizures - National Institute of Neurological Disorders ...",
+          "url": "https://www.ninds.nih.gov/health-information/disorders/epilepsy-and-seizures",
+          "domain": "ninds.nih.gov",
+          "snippet": "What are epilepsy and seizures ? Epilepsy is a chronic brain disorder in which groups of nerve cells, or neurons, in the brain sometimes send the wrong signals and cause seizures . Neurons normally generate electrical and chemical signal...",
+          "score": 0.825
+        },
+        {
+          "title": "Epilepsy - Symptoms and causes - Mayo Clinic",
+          "url": "https://www.mayoclinic.org/diseases-conditions/epilepsy/symptoms-causes/syc-20350093",
+          "domain": "mayoclinic.org",
+          "snippet": "Epilepsy is a brain condition that causes recurring seizures . There are many types of epilepsy . In some people, the cause can be found. In others, the cause is not known. Epilepsy also is known as a seizure disorder . Epilepsy is commo...",
+          "score": 0.735
+        },
+        {
+          "title": "Epilepsy: What It Is, Causes, Symptoms & Treatment",
+          "url": "https://my.clevelandclinic.org/health/diseases/17636-epilepsy",
+          "domain": "my.clevelandclinic.org",
+          "snippet": "Epilepsy is a long-term brain condition that causes repeated seizures . Seizures happen when there's abnormal electrical activity in your brain . Symptoms can range from brief staring spells or confusion to strong shaking and temporary l...",
+          "score": 0.7
+        }
+      ],
+      "all_results_count": 5,
+      "message": "AiVI found 3 closely related sources for this issue and can use them carefully when framing variants.",
+      "timeout_ms": 12000,
+      "elapsed_ms": 1114,
+      "timed_out": false,
+      "error": null,
+      "error_reason": null
+    },
+    "billing_summary": {
+      "billing_status": "settled",
+      "credits_used": 49,
+      "reserved_credits": 0,
+      "refunded_credits": 0,
+      "previous_balance": 4804,
+      "current_balance": 4755,
+      "reason_code": "copilot_generation",
+      "billable_model": "mistral-large-2512",
+      "generation_request_id": "external-authoritative-sources-epilepsy-source-gap-1774944546479"
+    },
+    "variants": [
+      {
+        "id": 1,
+        "text": "Epilepsy is a brain disorder marked by recurring seizures caused by abnormal electrical activity in the brain, according to the National Institute of Neurological Disorders and Stroke.",
+        "explanation": "Adds a brief, named authoritative source directly tied to the claim while keeping the original meaning and scope intact.",
+        "confidence": 0.85,
+        "word_count": 27,
+        "profile_id": "most_concise",
+        "label": "Most concise"
+      },
+      {
+        "id": 2,
+        "text": "Epilepsy is a chronic brain disorder characterized by recurring seizures due to abnormal electrical activity in the brain, as defined by major health authorities like the National Institute of Neurological Disorders and Stroke.",
+        "explanation": "Balances clarity and support by naming a recognized source while maintaining natural editorial flow and factual precision.",
+        "confidence": 0.88,
+        "word_count": 33,
+        "profile_id": "balanced",
+        "label": "Balanced"
+      },
+      {
+        "id": 3,
+        "text": "According to the National Institute of Neurological Disorders and Stroke, epilepsy is a brain disorder involving recurring seizures triggered by abnormal electrical activity in the brain.",
+        "explanation": "Leads with the named source to emphasize support, then delivers the claim with precision and trust signals, avoiding stiffness.",
+        "confidence": 0.87,
+        "word_count": 26,
+        "profile_id": "evidence_first",
+        "label": "Evidence-first"
+      }
+    ],
+    "processing_time_ms": 6045,
+    "metadata": {
+      "model": "mistral-large-latest",
+      "generated_at": "2026-03-31T08:09:13.005Z",
+      "variant_count": 3,
+      "verification_intent": "verify_first",
+      "verification_status": "support_found",
+      "verification_provider": "duckduckgo_html",
+      "verification_elapsed_ms": 1114,
+      "verification_timeout_ms": 12000,
+      "verification_timed_out": false,
+      "validator_pass": true,
+      "retry_count": 0,
+      "fallback_used": false,
+      "fallback_reason": null,
+      "validation_reason": "ok",
+      "validation_rule": "ok",
+      "validation_details": {
+        "validator_rule": "ok",
+        "required_literal_details": [
+          {
+            "value": "Epilepsy",
+            "literal_class": "entity",
+            "source_type": "analyzer_text",
+            "source_field": "suggestion.text"
+          }
+        ],
+        "preservation_warnings": []
+      },
+      "credits_used": 49
+    },
+    "transport_used": "lambda_invoke",
+    "gate_account_context": {
+      "account_id": "acct_site_335de4d8d4f52178626b20c9",
+      "site_id": "copilot-gate-external-authoritative-sources-epilepsy-source-gap"
+    }
+  },
+  "evaluations": [
+    {
+      "index": 1,
+      "label": "Most concise",
+      "text": "Epilepsy is a brain disorder marked by recurring seizures caused by abnormal electrical activity in the brain, according to the National Institute of Neurological Disorders and Stroke.",
+      "evaluation": {
+        "pass": true,
+        "failures": [],
+        "warnings": [],
+        "score": 100
+      }
+    },
+    {
+      "index": 2,
+      "label": "Balanced",
+      "text": "Epilepsy is a chronic brain disorder characterized by recurring seizures due to abnormal electrical activity in the brain, as defined by major health authorities like the National Institute of Neurological Disorders and Stroke.",
+      "evaluation": {
+        "pass": true,
+        "failures": [],
+        "warnings": [],
+        "score": 100
+      }
+    },
+    {
+      "index": 3,
+      "label": "Evidence-first",
+      "text": "According to the National Institute of Neurological Disorders and Stroke, epilepsy is a brain disorder involving recurring seizures triggered by abnormal electrical activity in the brain.",
+      "evaluation": {
+        "pass": true,
+        "failures": [],
+        "warnings": [],
+        "score": 100
+      }
+    }
+  ]
+}

@@ -128,6 +128,7 @@ describe('Prompt/runtime contract sync', () => {
         QUESTION_ANCHOR_GATED_CHECKS.forEach((checkId) => {
             const evaluation = String(definitionChecks[checkId]?.evaluation || '');
             expect(evaluation).not.toMatch(/return pass with explanation/i);
+            expect(evaluation).toMatch(/page titles, H1s, and headlines as intent cues by default, not as strict question anchors/i);
         });
 
         expect(String(definitionChecks.faq_structure_opportunity?.evaluation || '')).toMatch(/faq candidate/i);
@@ -155,6 +156,7 @@ describe('Prompt/runtime contract sync', () => {
         expect(prompt).toMatch(/Example C3: visible list already present should pass/i);
         expect(prompt).toMatch(/Example C4: single question heading plus list section is not FAQ by itself/i);
         expect(prompt).toMatch(/Example C5: locally anchored interval claim should pass/i);
+        expect(prompt).toMatch(/Treat page titles, H1s, and headlines as local intent cues by default, not as strict question anchors/i);
         const gateMatch = prompt.match(/\*\*Question-Anchor Gate\*\*:[\s\S]*?(?=\n\s*\d+\.\s+\*\*|\n## |\Z)/i);
         const gateSection = gateMatch ? gateMatch[0] : '';
         expect(gateSection).not.toMatch(/faq_structure_opportunity/);

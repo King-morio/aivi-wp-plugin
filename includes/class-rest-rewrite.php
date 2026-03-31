@@ -82,6 +82,44 @@ class REST_Rewrite {
                             return empty($param) || is_array($param);
                         }
                     ),
+                    'issue_context'    => array(
+                        'type'              => 'object',
+                        'required'          => false,
+                        'validate_callback' => function($param) {
+                            return empty($param) || is_array($param);
+                        }
+                    ),
+                    'copilot_issue'    => array(
+                        'type'              => 'object',
+                        'required'          => false,
+                        'validate_callback' => function($param) {
+                            return empty($param) || is_array($param);
+                        }
+                    ),
+                    'fix_assist_triage' => array(
+                        'type'              => 'object',
+                        'required'          => false,
+                        'validate_callback' => function($param) {
+                            return empty($param) || is_array($param);
+                        }
+                    ),
+                    'fix_assist_contract' => array(
+                        'type'              => 'object',
+                        'required'          => false,
+                        'validate_callback' => function($param) {
+                            return empty($param) || is_array($param);
+                        }
+                    ),
+                    'generation_request_id' => array(
+                        'type'              => 'string',
+                        'sanitize_callback' => 'sanitize_text_field',
+                        'required'          => false,
+                    ),
+                    'verification_intent' => array(
+                        'type'              => 'string',
+                        'sanitize_callback' => 'sanitize_text_field',
+                        'required'          => false,
+                    ),
                     'options'          => array(
                         'type'              => 'object',
                         'required'          => false,
@@ -202,6 +240,12 @@ class REST_Rewrite {
                 'analysis_ref' => $request->get_param('analysis_ref'),
                 'rewrite_target' => $request->get_param('rewrite_target'),
                 'repair_intent' => $request->get_param('repair_intent'),
+                'issue_context' => $request->get_param('issue_context'),
+                'copilot_issue' => $request->get_param('copilot_issue'),
+                'fix_assist_triage' => $request->get_param('fix_assist_triage'),
+                'fix_assist_contract' => $request->get_param('fix_assist_contract'),
+                'generation_request_id' => $request->get_param('generation_request_id'),
+                'verification_intent' => $request->get_param('verification_intent'),
                 'options'    => $request->get_param('options') ?: array(),
                 'test_mode'  => $request->get_param('test_mode') ?: false,
             );
@@ -223,7 +267,21 @@ class REST_Rewrite {
                 $url,
                 array(
                     'body'    => $json_body,
-                    'headers' => Admin_Settings::get_api_headers(),
+                    'headers' => array_merge(
+                        Admin_Settings::get_api_headers(),
+                        array_filter(
+                            array(
+                                'X-AIVI-Account-Id'     => sanitize_text_field( (string) ( Admin_Settings::get_account_state()['account_id'] ?? '' ) ),
+                                'X-AIVI-Site-Id'        => sanitize_text_field( (string) ( Admin_Settings::get_site_identity_payload()['site_id'] ?? '' ) ),
+                                'X-AIVI-Blog-Id'        => (string) ( (int) ( Admin_Settings::get_site_identity_payload()['blog_id'] ?? 0 ) ),
+                                'X-AIVI-Home-Url'       => esc_url_raw( (string) ( Admin_Settings::get_site_identity_payload()['home_url'] ?? '' ) ),
+                                'X-AIVI-Plugin-Version' => sanitize_text_field( (string) ( Admin_Settings::get_site_identity_payload()['plugin_version'] ?? '' ) ),
+                            ),
+                            static function ( $value ) {
+                                return '' !== (string) $value;
+                            }
+                        )
+                    ),
                     'timeout' => 30,
                     'sslverify' => true,
                     'httpversion' => '1.1',

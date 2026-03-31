@@ -59,27 +59,49 @@ const isBoldBoundaryNode = (node = null) => {
     return isLikelyBoldBoundaryText(node.text || '');
 };
 
-const isSectionBoundaryNode = (node = null) => {
-    if (!node || typeof node !== 'object') return false;
-    return isHeadingLike(node.block_type) || isBoldBoundaryNode(node);
+const getSectionBoundaryType = (node = null) => {
+    if (!node || typeof node !== 'object') return '';
+    if (isHeadingLike(node.block_type)) return 'heading';
+    if (isBoldBoundaryNode(node)) return 'pseudo_heading';
+    return '';
 };
 
-const resolveSectionBoundaryRange = ({ nodes, anchorIndex, maxNodes = 0 }) => {
+const isSectionBoundaryNode = (node = null) => {
+    if (!node || typeof node !== 'object') return false;
+    return !!getSectionBoundaryType(node);
+};
+
+const collectNodesInRange = ({ nodes, startIndex, endIndex }) => {
+    if (!Array.isArray(nodes) || nodes.length === 0) return [];
+    if (!Number.isInteger(startIndex) || !Number.isInteger(endIndex)) return [];
+    if (startIndex < 0 || endIndex < startIndex) return [];
+    return nodes.slice(startIndex, endIndex + 1).filter((node) => node && node.text);
+};
+
+const resolveSectionBoundaryRange = ({ nodes, anchorIndex }) => {
     if (!Array.isArray(nodes) || nodes.length === 0) return null;
     if (!Number.isInteger(anchorIndex) || anchorIndex < 0 || anchorIndex >= nodes.length) return null;
 
     let sectionStart = 0;
+    let sectionStartBoundaryType = '';
     for (let i = anchorIndex; i >= 0; i -= 1) {
-        if (isSectionBoundaryNode(nodes[i])) {
+        const boundaryType = getSectionBoundaryType(nodes[i]);
+        if (boundaryType) {
             sectionStart = i;
+            sectionStartBoundaryType = boundaryType;
             break;
         }
     }
 
     let sectionEnd = nodes.length - 1;
+    let boundaryType = 'document_end';
+    let boundaryNodeRef = null;
     for (let i = anchorIndex + 1; i < nodes.length; i += 1) {
-        if (isSectionBoundaryNode(nodes[i])) {
+        const nextBoundaryType = getSectionBoundaryType(nodes[i]);
+        if (nextBoundaryType) {
             sectionEnd = i - 1;
+            boundaryType = nextBoundaryType;
+            boundaryNodeRef = nodes[i] && nodes[i].node_ref ? nodes[i].node_ref : null;
             break;
         }
     }
@@ -88,19 +110,78 @@ const resolveSectionBoundaryRange = ({ nodes, anchorIndex, maxNodes = 0 }) => {
         sectionEnd = sectionStart;
     }
 
-    if (Number.isInteger(maxNodes) && maxNodes > 0 && (sectionEnd - sectionStart + 1) > maxNodes) {
-        sectionEnd = sectionStart + maxNodes - 1;
-    }
-
-    const sectionNodes = nodes.slice(sectionStart, sectionEnd + 1).filter((node) => node && node.text);
+    const sectionNodes = collectNodesInRange({
+        nodes,
+        startIndex: sectionStart,
+        endIndex: sectionEnd
+    });
     if (!sectionNodes.length) return null;
 
+    const sectionNodeRefs = sectionNodes.map((node) => node.node_ref);
     return {
         start_index: sectionStart,
         end_index: sectionEnd,
-        node_refs: sectionNodes.map((node) => node.node_ref),
+        node_refs: sectionNodeRefs,
         text: sectionNodes.map((node) => node.text).join('\n\n'),
-        includes_heading_or_boundary: isSectionBoundaryNode(nodes[sectionStart])
+        includes_heading_or_boundary: isSectionBoundaryNode(nodes[sectionStart]),
+        section_start_node_ref: sectionNodeRefs[0] || null,
+        section_end_node_ref: sectionNodeRefs[sectionNodeRefs.length - 1] || null,
+        section_start_boundary_type: sectionStartBoundaryType || getSectionBoundaryType(nodes[sectionStart]) || '',
+        boundary_type: boundaryType,
+        boundary_node_ref: boundaryNodeRef
+    };
+};
+
+const buildSectionScopeFromNode = (resolvedNode, nodes, options = {}) => {
+    if (!resolvedNode || !Array.isArray(nodes) || nodes.length === 0) return null;
+    const range = resolveSectionBoundaryRange({
+        nodes,
+        anchorIndex: resolvedNode.index
+    });
+    if (!range) return null;
+
+    const maxNodes = Number.isInteger(options.maxNodes) ? options.maxNodes : 0;
+    let repairStart = range.start_index;
+    let repairEnd = range.end_index;
+
+    if (maxNodes > 0) {
+        if (options.includeLeadingBoundary === true) {
+            repairStart = range.start_index;
+            repairEnd = Math.min(range.end_index, range.start_index + maxNodes - 1);
+        } else {
+            repairStart = Math.max(range.start_index, resolvedNode.index - (maxNodes - 1));
+            repairEnd = Math.min(range.end_index, repairStart + maxNodes - 1);
+            if (repairEnd < resolvedNode.index) {
+                repairEnd = resolvedNode.index;
+                repairStart = Math.max(range.start_index, repairEnd - maxNodes + 1);
+            }
+        }
+    }
+
+    const repairNodes = collectNodesInRange({
+        nodes,
+        startIndex: repairStart,
+        endIndex: repairEnd
+    });
+    if (!repairNodes.length) return null;
+
+    const repairNodeRefs = repairNodes.map((node) => node.node_ref);
+    return {
+        anchor_node_ref: resolvedNode.node_ref,
+        primary_repair_node_ref: repairNodeRefs.includes(resolvedNode.node_ref)
+            ? resolvedNode.node_ref
+            : (repairNodeRefs[0] || null),
+        start_index: repairStart,
+        end_index: repairEnd,
+        node_refs: repairNodeRefs,
+        repair_node_refs: repairNodeRefs,
+        target_text: repairNodes.map((node) => node.text).join('\n\n'),
+        includes_heading_or_boundary: range.includes_heading_or_boundary,
+        section_start_node_ref: range.section_start_node_ref,
+        section_end_node_ref: range.section_end_node_ref,
+        section_start_boundary_type: range.section_start_boundary_type,
+        boundary_type: range.boundary_type,
+        boundary_node_ref: range.boundary_node_ref
     };
 };
 
@@ -108,20 +189,7 @@ const resolveSectionTargetFromCandidate = (candidateValue, nodes, options = {}) 
     if (!candidateValue || !Array.isArray(nodes) || nodes.length === 0) return null;
     const resolvedNode = resolveNodeFromCandidate(candidateValue, nodes);
     if (!resolvedNode) return null;
-    const range = resolveSectionBoundaryRange({
-        nodes,
-        anchorIndex: resolvedNode.index,
-        maxNodes: Number.isInteger(options.maxNodes) ? options.maxNodes : 0
-    });
-    if (!range) return null;
-    return {
-        anchor_node_ref: resolvedNode.node_ref,
-        start_index: range.start_index,
-        end_index: range.end_index,
-        node_refs: range.node_refs,
-        target_text: range.text,
-        includes_heading_or_boundary: range.includes_heading_or_boundary
-    };
+    return buildSectionScopeFromNode(resolvedNode, nodes, options);
 };
 
 const resolveRuntimeContractPath = () => {
@@ -243,17 +311,20 @@ const resolveNodeFromCandidate = (candidateValue, nodes) => {
         if (byRef) return byRef;
     }
 
+    const snippet = getCandidateSnippet(candidateValue);
+    if (snippet) {
+        const normalizedSnippet = snippet.toLowerCase();
+        const byExactSnippet = nodes.find((node) => node.text.toLowerCase() === normalizedSnippet);
+        if (byExactSnippet) return byExactSnippet;
+        const bySnippet = nodes.find((node) => node.text.toLowerCase().includes(normalizedSnippet));
+        if (bySnippet) return bySnippet;
+    }
+
+    // Signature remains available, but only as a last-resort analyzer hint.
     const signature = getCandidateSignature(candidateValue);
     if (signature) {
         const bySignature = nodes.find((node) => node.signature && node.signature === signature);
         if (bySignature) return bySignature;
-    }
-
-    const snippet = getCandidateSnippet(candidateValue);
-    if (snippet) {
-        const normalizedSnippet = snippet.toLowerCase();
-        const bySnippet = nodes.find((node) => node.text.toLowerCase().includes(normalizedSnippet));
-        if (bySnippet) return bySnippet;
     }
 
     return null;
@@ -280,7 +351,7 @@ const resolveHeadingSupportNodes = (headingNode, nodes, contextWindow = 3) => {
     const supportNodes = [];
     for (let i = headingIndex + 1; i < nodes.length; i += 1) {
         const node = nodes[i];
-        if (isHeadingLike(node.block_type)) break;
+        if (isSectionBoundaryNode(node)) break;
         if (!node.text) continue;
         supportNodes.push(node);
         if (supportNodes.length >= Math.max(1, contextWindow)) break;
@@ -416,13 +487,21 @@ const resolveRewriteTarget = ({ checkId, checkDetails, manifest, instanceIndex =
         mode: policy,
         operation: primaryOperation,
         primary_node_ref: null,
+        anchor_node_ref: null,
+        primary_repair_node_ref: null,
         node_refs: [],
+        repair_node_refs: [],
         target_text: null,
         quote: snippet ? { exact: snippet } : null,
         start: Number.isFinite(candidateValue?.start) ? candidateValue.start : null,
         end: Number.isFinite(candidateValue?.end) ? candidateValue.end : null,
+        section_start_node_ref: null,
+        section_end_node_ref: null,
+        boundary_type: null,
+        boundary_node_ref: null,
         resolver_reason: '',
-        confidence: 0
+        confidence: 0,
+        scope_confidence: 0
     };
 
     if (rewriteMode === 'manual_review') {
@@ -465,14 +544,22 @@ const resolveRewriteTarget = ({ checkId, checkDetails, manifest, instanceIndex =
                     actionable: true,
                     mode: 'section',
                     operation: sectionOperation,
-                    primary_node_ref: sectionTarget.anchor_node_ref || sectionTarget.node_refs[0] || null,
+                    primary_node_ref: sectionTarget.primary_repair_node_ref || sectionTarget.anchor_node_ref || sectionTarget.node_refs[0] || null,
+                    anchor_node_ref: sectionTarget.anchor_node_ref || null,
+                    primary_repair_node_ref: sectionTarget.primary_repair_node_ref || sectionTarget.node_refs[0] || null,
                     node_refs: sectionTarget.node_refs,
+                    repair_node_refs: sectionTarget.repair_node_refs || sectionTarget.node_refs,
                     target_text: sectionTarget.target_text,
                     quote: snippet ? { exact: snippet } : null,
                     start: null,
                     end: null,
+                    section_start_node_ref: sectionTarget.section_start_node_ref || null,
+                    section_end_node_ref: sectionTarget.section_end_node_ref || null,
+                    boundary_type: sectionTarget.boundary_type || null,
+                    boundary_node_ref: sectionTarget.boundary_node_ref || null,
                     resolver_reason: 'weak_inline_routed_to_section',
-                    confidence: 0.84
+                    confidence: 0.84,
+                    scope_confidence: 0.84
                 },
                 repair_intent: buildRepairIntent(checkId, checkDetails, 'section', candidateValue, sectionOperation)
             };
@@ -497,20 +584,34 @@ const resolveRewriteTarget = ({ checkId, checkDetails, manifest, instanceIndex =
             };
         }
 
+        const sectionRange = resolveSectionBoundaryRange({
+            nodes,
+            anchorIndex: headingNode.index
+        });
+        const repairNodeRefs = supportNodes.map((node) => node.node_ref);
+
         return {
             rewrite_target: {
                 actionable: true,
                 mode: policy,
                 operation: allowedOps[0] || 'replace_block',
                 primary_node_ref: supportNodes[0].node_ref,
-                node_refs: supportNodes.map((node) => node.node_ref),
+                anchor_node_ref: headingNode.node_ref,
+                primary_repair_node_ref: supportNodes[0].node_ref,
+                node_refs: repairNodeRefs,
+                repair_node_refs: repairNodeRefs,
                 target_text: supportNodes.map((node) => node.text).join('\n\n'),
                 quote: { exact: headingNode.text },
                 heading_node_ref: headingNode.node_ref,
                 start: null,
                 end: null,
+                section_start_node_ref: sectionRange ? sectionRange.section_start_node_ref : headingNode.node_ref,
+                section_end_node_ref: sectionRange ? sectionRange.section_end_node_ref : (repairNodeRefs[repairNodeRefs.length - 1] || null),
+                boundary_type: sectionRange ? sectionRange.boundary_type : 'document_end',
+                boundary_node_ref: sectionRange ? sectionRange.boundary_node_ref : null,
                 resolver_reason: 'heading_support_range_resolved',
-                confidence: 0.9
+                confidence: 0.9,
+                scope_confidence: 0.9
             },
             repair_intent: buildRepairIntent(checkId, checkDetails, policy, { ...candidateValue, snippet: headingNode.text }, primaryOperation || '')
         };
@@ -526,10 +627,19 @@ const resolveRewriteTarget = ({ checkId, checkDetails, manifest, instanceIndex =
     }
 
     if (policy === 'block' || policy === 'section') {
-        const range = policy === 'section' ? nodes.slice(
-            Math.max(0, resolvedNode.index - (contextWindow - 1)),
-            Math.min(nodes.length, resolvedNode.index + contextWindow)
-        ) : [resolvedNode];
+        const sectionScope = policy === 'section'
+            ? buildSectionScopeFromNode(resolvedNode, nodes, {
+                maxNodes: Math.max(1, (contextWindow * 2) - 1),
+                includeLeadingBoundary: false
+            })
+            : null;
+        const range = policy === 'section'
+            ? collectNodesInRange({
+                nodes,
+                startIndex: sectionScope ? sectionScope.start_index : resolvedNode.index,
+                endIndex: sectionScope ? sectionScope.end_index : resolvedNode.index
+            })
+            : [resolvedNode];
         const refs = range.map((node) => node.node_ref);
         return {
             rewrite_target: {
@@ -537,13 +647,21 @@ const resolveRewriteTarget = ({ checkId, checkDetails, manifest, instanceIndex =
                 mode: policy,
                 operation: allowedOps[0] || 'replace_block',
                 primary_node_ref: resolvedNode.node_ref,
+                anchor_node_ref: resolvedNode.node_ref,
+                primary_repair_node_ref: resolvedNode.node_ref,
                 node_refs: refs,
+                repair_node_refs: refs,
                 target_text: range.map((node) => node.text).join('\n\n'),
                 quote: snippet ? { exact: snippet } : { exact: resolvedNode.text },
                 start: null,
                 end: null,
+                section_start_node_ref: sectionScope ? sectionScope.section_start_node_ref : null,
+                section_end_node_ref: sectionScope ? sectionScope.section_end_node_ref : null,
+                boundary_type: sectionScope ? sectionScope.boundary_type : null,
+                boundary_node_ref: sectionScope ? sectionScope.boundary_node_ref : null,
                 resolver_reason: policy === 'section' ? 'section_resolved' : 'block_resolved',
-                confidence: policy === 'section' ? 0.8 : 0.88
+                confidence: policy === 'section' ? 0.8 : 0.88,
+                scope_confidence: policy === 'section' ? 0.8 : 0.88
             },
             repair_intent: buildRepairIntent(checkId, checkDetails, policy, candidateValue, primaryOperation || '')
         };
@@ -555,13 +673,17 @@ const resolveRewriteTarget = ({ checkId, checkDetails, manifest, instanceIndex =
             mode: 'inline_span',
             operation: allowedOps[0] || 'replace_span',
             primary_node_ref: resolvedNode.node_ref,
+            anchor_node_ref: resolvedNode.node_ref,
+            primary_repair_node_ref: resolvedNode.node_ref,
             node_refs: [resolvedNode.node_ref],
+            repair_node_refs: [resolvedNode.node_ref],
             target_text: snippet || resolvedNode.text,
             quote: snippet ? { exact: snippet } : { exact: resolvedNode.text },
             start: Number.isFinite(candidateValue?.start) ? candidateValue.start : null,
             end: Number.isFinite(candidateValue?.end) ? candidateValue.end : null,
             resolver_reason: 'inline_span_resolved',
-            confidence: 0.92
+            confidence: 0.92,
+            scope_confidence: 0.92
         },
         repair_intent: buildRepairIntent(checkId, checkDetails, 'inline_span', candidateValue, primaryOperation || '')
     };
@@ -576,7 +698,10 @@ module.exports = {
         shouldAutoRouteWeakInlineToSection,
         isLikelyBoldBoundaryText,
         isBoldBoundaryNode,
+        getSectionBoundaryType,
         isSectionBoundaryNode,
+        collectNodesInRange,
+        buildSectionScopeFromNode,
         resolveSectionBoundaryRange,
         resolveSectionTargetFromCandidate,
         collectManifestNodes,

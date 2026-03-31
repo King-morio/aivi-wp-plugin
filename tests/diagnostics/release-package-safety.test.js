@@ -91,10 +91,13 @@ describe('release package safety', () => {
 
     test('wordpress.org readme stays aligned to the distributed plugin metadata', () => {
         const readme = read('readme.txt');
+        const pluginHeader = read('ai-visibility-inspector.php');
+        const versionMatch = pluginHeader.match(/Version:\s*([0-9.]+)/);
+        const pluginVersion = versionMatch ? versionMatch[1] : '';
 
         expect(readme).toContain('=== AiVI - AI Visibility Inspector ===');
         expect(readme).toContain('Tested up to: 6.9');
-        expect(readme).toContain('Stable tag: 1.0.30');
+        expect(readme).toContain(`Stable tag: ${pluginVersion}`);
         expect(readme).toContain('License: GPLv2 or later');
         expect(readme).toContain('License URI: https://www.gnu.org/licenses/gpl-2.0.html');
         expect(readme).not.toContain('WordPress Plugin');

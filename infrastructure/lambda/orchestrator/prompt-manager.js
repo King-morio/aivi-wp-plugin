@@ -163,6 +163,12 @@ Output structure:
 ## Special Instructions
 
 - For answer extractability, focus on direct answers and clear structure
+- Do not treat rhetorical hook questions, self-assessment prompts, CTA-style questions, or broad thematic lead-ins as strict question anchors
+- Treat page titles, H1s, and headlines as local intent cues by default, not as strict question anchors
+- If no true strict question anchor exists but a page title, heading, or pseudo heading clearly promises a direct answer or structured surface such as a list, table, comparison, or short matrix, use it only as a local section-intent cue, not as a substitute strict anchor
+- Bound that heading-intent inspection to the heading or pseudo heading, the first answer paragraph beneath it, and the next support paragraph, visible list, or visible table; stop at the next heading or pseudo heading
+- If the heading promise is delayed by setup, throat-clearing, or broad framing, you may fail or partial answer-placement, alignment, or formatting checks accordingly
+- If a section behaves more like an explainer or list article than a true Q&A section and no clear heading-intent cue exists, return partial instead of forcing answer-distance math, snippet math, or alignment judgments from the hook question
 - For readability, look for walls of text and poor organization
 - For schema, identify structured data opportunities
 - For entities, ensure clarity and consistency

@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AiVI Landing Preview</title>
+  <style>
+    :root {
+      --bg: #07172b;
+      --bg-soft: #0d2440;
+      --panel: rgba(10, 26, 48, 0.78);
+      --panel-strong: rgba(15, 34, 60, 0.92);
+      --line: rgba(137, 187, 255, 0.2);
+      --text: #f5f8ff;
+      --muted: #b3c3de;
+      --bright: #69d3ff;
+      --aqua: #2ee6c5;
+      --gold: #ffd663;
+      --shadow: 0 28px 70px rgba(0, 0, 0, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --radius-md: 14px;
+      --hero-glow: linear-gradient(135deg, rgba(46, 230, 197, 0.18), rgba(105, 211, 255, 0.24), rgba(255, 214, 99, 0.12));
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(63, 135, 255, 0.24), transparent 28%),
+        radial-gradient(circle at 85% 12%, rgba(46, 230, 197, 0.18), transparent 24%),
+        radial-gradient(circle at 50% 100%, rgba(255, 214, 99, 0.12), transparent 26%),
+        linear-gradient(180deg, #06111f 0%, #07172b 46%, #0a1d34 100%);
+      font-family: "Aptos", "Segoe UI Variable Text", "Trebuchet MS", sans-serif;
+      line-height: 1.55;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 88%);
+      opacity: 0.28;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .page {
+      width: min(1200px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .nav {
+      position: sticky;
+      top: 18px;
+      z-index: 20;
+      margin: 18px auto 0;
+      backdrop-filter: blur(18px);
+      background: rgba(6, 18, 32, 0.68);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 12px 16px 12px 18px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(145deg, rgba(105, 211, 255, 0.22), rgba(46, 230, 197, 0.18));
+      border: 1px solid rgba(105, 211, 255, 0.3);
+      color: var(--bright);
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      box-shadow: 0 0 26px rgba(105, 211, 255, 0.18);
+    }
+
+    .brand-copy {
+      min-width: 0;
+    }
+
+    .brand-copy strong {
+      display: block;
+      font-family: "Bahnschrift", "Segoe UI Variable Display", sans-serif;
+      font-size: 0.98rem;
+      letter-spacing: 0.02em;
+    }
+
+    .brand-copy span {
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      font-size: 0.94rem;
+      padding: 9px 12px;
+      border-radius: 999px;
+      transition: background 180ms ease, color 180ms ease, transform 180ms ease;
+    }
+
+    .nav-links a:hover {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      transform: translateY(-1px);
+    }
+
+    .hero {
+      padding: 62px 0 34px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
+      gap: 28px;
+      align-items: stretch;
+    }
+
+    .hero-copy,
+    .hero-card,
+    .panel,
+    .shot,
+    .quote {
+      position: relative;
+      overflow: hidden;
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--line);
+      background: var(--panel);
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-copy {
+      padding: 34px;
+      background:
+        radial-gradient(circle at top right, rgba(105, 211, 255, 0.18), transparent 32%),
+        linear-gradient(160deg, rgba(7, 23, 43, 0.96), rgba(10, 28, 51, 0.9));
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--gold);
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3 {
+      font-family: "Bahnschrift", "Segoe UI Variable Display", "Franklin Gothic Medium", sans-serif;
+      line-height: 0.98;
+      letter-spacing: -0.03em;
+      margin: 0;
+    }
+
+    h1 {
+      margin-top: 20px;
+      font-size: clamp(3rem, 8vw, 5.5rem);
+      max-width: 11ch;
+    }
+
+    .hero-lead {
+      max-width: 62ch;
+      margin: 22px 0 0;
+      color: var(--muted);
+      font-size: 1.08rem;
+    }
+
+    .hero-lead strong {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .hero-actions {
+      margin-top: 28px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 48px;
+      padding: 0 18px;
+      border-radius: 999px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+    }
+
+    .button:hover {
+      transform: translateY(-2px);
+    }
+
+    .button-primary {
+      color: #04131f;
+      background: linear-gradient(135deg, var(--aqua), #77f0ff);
+      box-shadow: 0 16px 40px rgba(46, 230, 197, 0.18);
+    }
+
+    .button-secondary {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .hero-meta {
+      margin-top: 22px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .hero-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 11px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .hero-card {
+      padding: 20px;
+      background:
+        var(--hero-glow),
+        linear-gradient(180deg, rgba(10, 26, 48, 0.9), rgba(8, 22, 39, 0.94));
+    }
+
+    .hero-card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(105, 211, 255, 0.55), rgba(46, 230, 197, 0.22), rgba(255, 214, 99, 0.18));
+      -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+      opacity: 0.9;
+    }
+
+    .hero-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .hero-card-top strong {
+      display: block;
+      font-size: 0.84rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--bright);
+    }
+
+    .hero-card-top span {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .orb {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.85), transparent 20%),
+        radial-gradient(circle at 50% 50%, rgba(105, 211, 255, 0.85), rgba(46, 230, 197, 0.18) 58%, transparent 72%);
+      box-shadow:
+        0 0 38px rgba(105, 211, 255, 0.38),
+        inset 0 0 16px rgba(255, 255, 255, 0.2);
+    }
+
+    .mini-ui {
+      display: grid;
+      gap: 14px;
+    }
+
+    .mini-row {
+      border-radius: 18px;
+      padding: 16px;
+      background: rgba(6, 18, 33, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .mini-row strong {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.95rem;
+      margin-bottom: 10px;
+    }
+
+    .mini-row strong::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--aqua), var(--bright));
+      box-shadow: 0 0 18px rgba(46, 230, 197, 0.48);
+    }
+
+    .mini-bullets {
+      display: grid;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .mini-bullets span {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .mini-bullets span::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255, 214, 99, 0.95);
+      flex: 0 0 auto;
+    }
+
+    .metric-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 26px;
+    }
+
+    .metric {
+      padding: 18px 16px;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.035);
+      box-shadow: var(--shadow);
+    }
+
+    .metric strong {
+      display: block;
+      font-family: "Bahnschrift", "Segoe UI Variable Display", sans-serif;
+      font-size: 1.55rem;
+      margin-bottom: 6px;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    section {
+      padding: 24px 0;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .section-head p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      max-width: 58ch;
+    }
+
+    h2 {
+      font-size: clamp(2rem, 5vw, 3.3rem);
+    }
+
+    .problem-grid,
+    .steps,
+    .proof-grid,
+    .faq-grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .problem-grid {
+      grid-template-columns: 1.15fr 0.85fr;
+    }
+
+    .steps,
+    .proof-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .panel {
+      padding: 24px;
+      background: linear-gradient(180deg, rgba(10, 26, 48, 0.82), rgba(8, 21, 37, 0.92));
+    }
+
+    .panel h3 {
+      font-size: 1.5rem;
+      margin-bottom: 12px;
+    }
+
+    .panel p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .bullet-list {
+      margin: 18px 0 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 12px;
+    }
+
+    .bullet-list li {
+      display: grid;
+      grid-template-columns: 18px 1fr;
+      gap: 12px;
+      align-items: start;
+      color: var(--muted);
+    }
+
+    .bullet-list li::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      margin-top: 0.45em;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--gold), #ffef98);
+      box-shadow: 0 0 18px rgba(255, 214, 99, 0.36);
+    }
+
+    .step-index {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      margin-bottom: 14px;
+      border-radius: 12px;
+      color: #05111d;
+      background: linear-gradient(135deg, var(--gold), #fff1a0);
+      font-weight: 800;
+      box-shadow: 0 10px 24px rgba(255, 214, 99, 0.18);
+    }
+
+    .shots {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .shot {
+      background: linear-gradient(180deg, rgba(13, 33, 58, 0.95), rgba(9, 23, 40, 0.96));
+    }
+
+    .shot img {
+      display: block;
+      width: 100%;
+      height: 260px;
+      object-fit: cover;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .shot-body {
+      padding: 16px 18px 18px;
+    }
+
+    .shot-body strong {
+      display: block;
+      font-size: 1rem;
+      margin-bottom: 6px;
+    }
+
+    .shot-body p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .quote {
+      padding: 24px;
+      background:
+        linear-gradient(145deg, rgba(105, 211, 255, 0.09), rgba(46, 230, 197, 0.04)),
+        rgba(8, 22, 39, 0.92);
+    }
+
+    .quote p {
+      margin: 0;
+      font-size: 1.12rem;
+      color: var(--text);
+    }
+
+    .quote span {
+      display: block;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .faq-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .faq-item {
+      padding: 22px;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.035);
+    }
+
+    .faq-item strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 1rem;
+    }
+
+    .faq-item p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .final-cta {
+      margin: 18px 0 54px;
+      padding: 28px;
+      border-radius: var(--radius-xl);
+      background:
+        radial-gradient(circle at 18% 0%, rgba(105, 211, 255, 0.16), transparent 30%),
+        radial-gradient(circle at 100% 100%, rgba(46, 230, 197, 0.14), transparent 28%),
+        rgba(7, 20, 36, 0.94);
+      border: 1px solid rgba(137, 187, 255, 0.24);
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .final-cta p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      max-width: 56ch;
+    }
+
+    .footer {
+      padding: 12px 0 42px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 1080px) {
+      .hero,
+      .problem-grid,
+      .final-cta {
+        grid-template-columns: 1fr;
+      }
+
+      .steps,
+      .proof-grid,
+      .metric-strip,
+      .faq-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .shots {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .page {
+        width: min(100% - 24px, 1200px);
+      }
+
+      .nav {
+        border-radius: 24px;
+        padding: 14px;
+      }
+
+      .nav,
+      .nav-links {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .hero {
+        padding-top: 34px;
+      }
+
+      .hero-copy,
+      .hero-card,
+      .panel,
+      .quote,
+      .final-cta {
+        border-radius: 22px;
+      }
+
+      .steps,
+      .proof-grid,
+      .metric-strip,
+      .faq-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .shot img {
+        height: 220px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="nav">
+      <div class="brand">
+        <div class="brand-mark">Ai</div>
+        <div class="brand-copy">
+          <strong>AiVI</strong>
+          <span>AI visibility for WordPress content</span>
+        </div>
+      </div>
+      <nav class="nav-links">
+        <a href="#why">Why AiVI</a>
+        <a href="#workflow">How It Works</a>
+        <a href="#screens">Screenshots</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <span class="eyebrow">Content intelligence for AI search</span>
+          <h1>Make WordPress content usable by AI systems.</h1>
+          <p class="hero-lead">
+            AiVI is not just another SEO plugin. It helps publishers and brands
+            see <strong>why content gets missed, misread, or skipped</strong> by
+            answer engines, then guides fixes before publication.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#screens">See the Product</a>
+            <a class="button button-secondary" href="#download">Download Preview</a>
+          </div>
+          <div class="hero-meta">
+            <span>Works in Gutenberg and Classic Editor</span>
+            <span>Checks structure, schema, trust, and answer readiness</span>
+            <span>Built for publishers, editors, and content teams</span>
+          </div>
+        </div>
+
+        <aside class="hero-card">
+          <div class="hero-card-top">
+            <div>
+              <strong>Inside the editor</strong>
+              <span>Review, inspect, and improve before publishing</span>
+            </div>
+            <div class="orb" aria-hidden="true"></div>
+          </div>
+          <div class="mini-ui">
+            <div class="mini-row">
+              <strong>AiVI Review Rail</strong>
+              <div class="mini-bullets">
+                <span>See grouped findings with clear next actions</span>
+                <span>Jump into issue details without leaving WordPress</span>
+              </div>
+            </div>
+            <div class="mini-row">
+              <strong>Overlay Editing</strong>
+              <div class="mini-bullets">
+                <span>Revise in context and copy improved text safely</span>
+                <span>Keep editorial control inside the WordPress editor</span>
+              </div>
+            </div>
+            <div class="mini-row">
+              <strong>AI Search Readiness</strong>
+              <div class="mini-bullets">
+                <span>Catch extraction, schema, trust, and freshness gaps</span>
+                <span>Improve machine usability, not just human readability</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="metric-strip" aria-label="Key benefits">
+        <div class="metric">
+          <strong>Inside WP</strong>
+          <span>Analyze content where editors already work</span>
+        </div>
+        <div class="metric">
+          <strong>Grouped Findings</strong>
+          <span>Prioritize the issues that actually affect reuse</span>
+        </div>
+        <div class="metric">
+          <strong>Actionable</strong>
+          <span>Move from explanation to revision faster</span>
+        </div>
+        <div class="metric">
+          <strong>Human + Machine</strong>
+          <span>Preserve readability while improving extractability</span>
+        </div>
+      </section>
+
+      <section id="why">
+        <div class="section-head">
+          <div>
+            <h2>Why AiVI matters now</h2>
+            <p>
+              Discovery is shifting from blue links to answer engines. Content can
+              be accurate and still underperform if machines cannot extract,
+              trust, or reuse it cleanly.
+            </p>
+          </div>
+        </div>
+        <div class="problem-grid">
+          <article class="panel">
+            <h3>The problem is not only ranking.</h3>
+            <p>
+              A page can look fine to a person and still fail in AI-driven search.
+              Weak opening answers, unclear structure, missing schema alignment,
+              vague claims, and trust gaps quietly reduce visibility.
+            </p>
+            <ul class="bullet-list">
+              <li>Content may answer the question, but not in a form AI systems can quote quickly.</li>
+              <li>Important semantic cues are often hidden in weak headings or scattered paragraphs.</li>
+              <li>Editors usually discover these issues too late, after publication and traffic loss.</li>
+            </ul>
+          </article>
+          <article class="quote">
+            <p>
+              “AiVI helps content become usable by AI systems, not just readable by humans.”
+            </p>
+            <span>Positioning line for the GitHub Pages landing experience</span>
+          </article>
+        </div>
+      </section>
+
+      <section id="workflow">
+        <div class="section-head">
+          <div>
+            <h2>How it works in WordPress</h2>
+            <p>
+              AiVI stays close to the editorial workflow. It analyzes, explains,
+              and guides revision without forcing authors out of the editor.
+            </p>
+          </div>
+        </div>
+        <div class="steps">
+          <article class="panel">
+            <span class="step-index">1</span>
+            <h3>Run analysis</h3>
+            <p>
+              Start AiVI from the editor and analyze the current post or page for
+              structure, extractability, trust, schema, and more.
+            </p>
+          </article>
+          <article class="panel">
+            <span class="step-index">2</span>
+            <h3>Review findings</h3>
+            <p>
+              Use the review rail to inspect grouped issues, understand verdicts,
+              and focus on the strongest problems first.
+            </p>
+          </article>
+          <article class="panel">
+            <span class="step-index">3</span>
+            <h3>Improve with confidence</h3>
+            <p>
+              Open the overlay editor, revise in context, and copy improved text
+              back into the WordPress block you want to update.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <div>
+            <h2>What teams can use it for</h2>
+            <p>
+              AiVI is especially useful for editorial teams that care about
+              discoverability in answer engines, AI assistants, and AI-assisted search.
+            </p>
+          </div>
+        </div>
+        <div class="proof-grid">
+          <article class="panel">
+            <h3>Publishers</h3>
+            <p>Catch structural and answer-format problems before articles go live.</p>
+          </article>
+          <article class="panel">
+            <h3>Brands</h3>
+            <p>Improve content trust, support signals, and structured clarity across key pages.</p>
+          </article>
+          <article class="panel">
+            <h3>Editors</h3>
+            <p>Get a practical review workflow that translates findings into real revisions.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="screens">
+        <div class="section-head">
+          <div>
+            <h2>See the product</h2>
+            <p>
+              These are live workflow screenshots already bundled in the plugin documentation,
+              reused here so the landing page stays honest to the actual experience.
+            </p>
+          </div>
+        </div>
+        <div class="shots">
+          <article class="shot">
+            <img src="../assets/img/docs/user-guide-open-sidebar.jpg" alt="AiVI opened from the WordPress editor sidebar">
+            <div class="shot-body">
+              <strong>Open AiVI from the editor</strong>
+              <p>Start from the eye icon and bring AiVI into the writing flow without leaving WordPress.</p>
+            </div>
+          </article>
+          <article class="shot">
+            <img src="../assets/img/docs/user-guide-run-analysis.jpg" alt="AiVI run analysis action in WordPress">
+            <div class="shot-body">
+              <strong>Run analysis on the current draft</strong>
+              <p>Kick off a focused review of structure, schema, trust, answer readiness, and extractability.</p>
+            </div>
+          </article>
+          <article class="shot">
+            <img src="../assets/img/docs/user-guide-analysis-progress.jpg" alt="AiVI analysis progress panel">
+            <div class="shot-body">
+              <strong>Watch progress inside the sidebar</strong>
+              <p>AiVI keeps the analysis state visible so authors understand what is being checked as results arrive.</p>
+            </div>
+          </article>
+          <article class="shot">
+            <img src="../assets/img/docs/user-guide-review-results.jpg" alt="AiVI review rail findings in the sidebar">
+            <div class="shot-body">
+              <strong>Review grouped findings</strong>
+              <p>Prioritize what matters first instead of hunting through disconnected warnings.</p>
+            </div>
+          </article>
+          <article class="shot">
+            <img src="../assets/img/docs/user-guide-open-overlay.jpg" alt="AiVI overlay editor open on top of WordPress content">
+            <div class="shot-body">
+              <strong>Revise in overlay mode</strong>
+              <p>Use the guided editing surface for deeper revision, then paste approved changes back into the exact WordPress block.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="faq">
+        <div class="section-head">
+          <div>
+            <h2>Quick questions</h2>
+            <p>
+              A lightweight FAQ keeps the landing page clear without turning it into a long documentation site.
+            </p>
+          </div>
+        </div>
+        <div class="faq-grid">
+          <article class="faq-item">
+            <strong>Is AiVI an SEO plugin?</strong>
+            <p>It overlaps with search, but the focus is AI visibility: extraction, trust, structure, schema, and answer readiness.</p>
+          </article>
+          <article class="faq-item">
+            <strong>Does it work in Gutenberg and Classic Editor?</strong>
+            <p>Yes. The plugin is designed to work across both editing experiences inside WordPress.</p>
+          </article>
+          <article class="faq-item">
+            <strong>Can authors still control the final content?</strong>
+            <p>Yes. AiVI guides revision, but the editor stays in control of what gets published.</p>
+          </article>
+          <article class="faq-item">
+            <strong>Where do users get it?</strong>
+            <p>For now, the clean flow is GitHub Releases. WordPress.org can be linked later once the listing is live.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="download">
+        <div class="final-cta">
+          <div>
+            <h2>Ready for a cleaner launch page.</h2>
+            <p>
+              This preview is intended to become a simple GitHub Pages landing page with a download path,
+              screenshots, product positioning, and trust links, without bloating into a full marketing site.
+            </p>
+          </div>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#">Download AiVI</a>
+            <a class="button button-secondary" href="#">View GitHub Repo</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>AiVI landing page preview for approval before GitHub Pages rollout.</span>
+      <span>Includes local screenshots only. Buttons are placeholders in this preview.</span>
+    </footer>
+  </div>
+</body>
+</html>

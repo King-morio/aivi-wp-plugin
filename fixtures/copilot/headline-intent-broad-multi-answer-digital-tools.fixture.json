@@ -1,0 +1,42 @@
+{
+  "fixture_id": "headline-intent-broad-multi-answer-digital-tools",
+  "title": "Headline intent broad multi-answer fixture",
+  "description": "A broad explainer title with rhetorical intro questions that should stay title-led without turning those intro questions into strict anchors.",
+  "expected": {
+    "anchor_count": 0,
+    "section_intent_cue_text": "How Digital Tools Help Students Manage Exam Revision",
+    "section_intent_cue_source": "title",
+    "section_intent_cue_kind": "question_like"
+  },
+  "manifest": {
+    "title": "How Digital Tools Help Students Manage Exam Revision",
+    "block_map": [
+      {
+        "node_ref": "block-1",
+        "block_type": "core/paragraph",
+        "text": "Do you ever feel overwhelmed trying to revise for several exams at once?"
+      },
+      {
+        "node_ref": "block-2",
+        "block_type": "core/paragraph",
+        "text": "Do you sometimes wonder how anyone manages to keep notes, deadlines, and practice questions organized?"
+      },
+      {
+        "node_ref": "block-3",
+        "block_type": "core/paragraph",
+        "text": "Many students find exam revision stressful, especially when several subjects compete for attention at the same time. However, digital tools can make revision easier to plan and manage."
+      },
+      {
+        "node_ref": "block-4",
+        "block_type": "core/heading",
+        "text": "5 Different Ways Digital Tools Can Help"
+      },
+      {
+        "node_ref": "block-5",
+        "block_type": "core/list",
+        "text": "Organize your revision schedule.\nAccess study resources quickly.\nKeep notes and tasks structured."
+      }
+    ],
+    "plain_text": "How Digital Tools Help Students Manage Exam Revision\n\nDo you ever feel overwhelmed trying to revise for several exams at once?\n\nDo you sometimes wonder how anyone manages to keep notes, deadlines, and practice questions organized?\n\nMany students find exam revision stressful, especially when several subjects compete for attention at the same time. However, digital tools can make revision easier to plan and manage.\n\n5 Different Ways Digital Tools Can Help\n\nOrganize your revision schedule.\nAccess study resources quickly.\nKeep notes and tasks structured."
+  }
+}

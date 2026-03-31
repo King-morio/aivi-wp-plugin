@@ -33,16 +33,17 @@ describe('overlay apply safety regression guard', () => {
         expect(source).toContain("setMetaStatus(sync.noChanges ? 'No changes to apply' : 'No editable content found');");
     });
 
-    test('inline rewrite variants copy text for manual paste instead of auto-applying to the editor', () => {
+    test('fix assist variants stay copy-only instead of auto-applying to the editor', () => {
         const overlayPath = path.resolve(__dirname, '../../assets/js/aivi-overlay-editor.js');
         const source = fs.readFileSync(overlayPath, 'utf8');
 
-        expect(source).toContain("copyBtn.textContent = 'Copy';");
+        expect(source).toContain("copyBtn.textContent = 'Copy variant';");
         expect(source).toContain("copyBtn.addEventListener('click', () => handleAccept(item, idx));");
         expect(source).toContain("info.status = 'Copied for paste';");
         expect(source).toContain("setMetaStatus('Copied revised text. Paste it into the matching WordPress block, then review and update the post.');");
         expect(source).not.toContain("acceptBtn.textContent = 'Accept';");
         expect(source).not.toContain("info.status = 'Applied in editor';");
+        expect(source).not.toContain('applyVariantToEditor(item, text);');
     });
 
     test('reveals applied Gutenberg blocks after a clean apply', () => {

@@ -4,7 +4,7 @@ Tags: ai, seo, structured-data, content-analysis, answer-engine
 Requires at least: 5.8
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.0.30
+Stable tag: 1.0.44
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -57,6 +57,39 @@ No. AiVI does not publish for you. The current overlay flow lets you review revi
 5. Use the Review Rail to inspect findings, open details, and act on recommendations.
 
 == Changelog ==
+
+= 1.0.44 =
+
+* preserved clearer analyzer-led extractability explanations so flagged sections are easier to understand and act on
+* stopped Copilot from returning unusable fallback variants when a requested rewrite scope is too wide, and now explains when the section needs a tighter snippet-level repair
+* refined Copilot guidance so optional web-verification prompts appear only on issues that actually need source-aware help
+
+= 1.0.36 =
+
+* separated Copilot more cleanly from Analyzer-owned diagnosis so the repair surface stays focused on scoped editorial fixes
+* improved the Copilot bubble so variants are easier to read, copy, and review without re-showing Analyzer-style explanation
+* hardened deploy and packaging safety around the Copilot rewrite route and critical backend modules
+
+= 1.0.34 =
+
+* improved Fix Assist so Review Rail issue counts and names stay aligned more reliably during review
+* made Copilot ground its help more cleanly in the selected issue and current article context before suggesting variants
+* refined the attached Copilot card so it stays calmer and easier to read while you review findings
+
+= 1.0.33 =
+
+* improved Fix Assist so issue help follows the focused Review Rail item more cleanly
+* made Fix Assist launch more quietly from the Review Rail instead of covering article text by default
+
+= 1.0.32 =
+
+* restored analysis reliability after a backend packaging regression in the live service
+* improved the guidance shown when AiVI is temporarily unavailable so the next recovery steps are clearer
+
+= 1.0.31 =
+
+* introduced the first AiVI Fix Assist workflow for calmer issue-scoped rewrite help inside the overlay editor
+* kept Fix Assist suggestions copy-only so authors stay in control before updating WordPress
 
 = 1.0.30 =
 
@@ -128,6 +161,14 @@ No. AiVI does not publish for you. The current overlay flow lets you review revi
 * improved packaging, translation readiness, and submission compatibility for WordPress.org
 
 == Upgrade Notice ==
+
+= 1.0.32 =
+
+Recommended update for restored analysis reliability and clearer temporary-outage guidance.
+
+= 1.0.31 =
+
+Recommended update for the first Fix Assist workflow and safer issue-scoped rewrite guidance inside AiVI.
 
 = 1.0.30 =
 

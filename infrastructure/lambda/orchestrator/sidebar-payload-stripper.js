@@ -61,6 +61,7 @@ const CANONICAL_CATEGORY_IDS = [
 const ALLOWED_ISSUE_FIELDS = [
     'check_id',
     'detail_ref',
+    'check_name',
     'name',
     'ui_verdict',
     'instances',
@@ -75,6 +76,7 @@ const ALLOWED_ISSUE_FIELDS = [
     'explanation_pack',
     'issue_explanation',
     'review_summary',
+    'fix_assist_triage',
     'highlights'
 ];
 
@@ -96,7 +98,8 @@ const ALLOWED_HIGHLIGHT_FIELDS = [
     'repair_intent',
     'explanation_pack',
     'issue_explanation',
-    'review_summary'
+    'review_summary',
+    'fix_assist_triage'
 ];
 
 const ALLOWED_CATEGORY_FIELDS = [
@@ -189,8 +192,13 @@ const stripRewriteTarget = (rewriteTarget) => {
         mode: rewriteTarget.mode ? String(rewriteTarget.mode) : 'legacy',
         operation: rewriteTarget.operation ? String(rewriteTarget.operation) : null,
         primary_node_ref: rewriteTarget.primary_node_ref ? String(rewriteTarget.primary_node_ref) : null,
+        anchor_node_ref: rewriteTarget.anchor_node_ref ? String(rewriteTarget.anchor_node_ref) : null,
+        primary_repair_node_ref: rewriteTarget.primary_repair_node_ref ? String(rewriteTarget.primary_repair_node_ref) : null,
         node_refs: Array.isArray(rewriteTarget.node_refs)
             ? rewriteTarget.node_refs.map((ref) => String(ref || '')).filter(Boolean)
+            : [],
+        repair_node_refs: Array.isArray(rewriteTarget.repair_node_refs)
+            ? rewriteTarget.repair_node_refs.map((ref) => String(ref || '')).filter(Boolean)
             : [],
         target_text: typeof rewriteTarget.target_text === 'string' ? rewriteTarget.target_text : null,
         quote: rewriteTarget.quote && typeof rewriteTarget.quote === 'object' && typeof rewriteTarget.quote.exact === 'string'
@@ -199,6 +207,11 @@ const stripRewriteTarget = (rewriteTarget) => {
         start: Number.isInteger(rewriteTarget.start) ? rewriteTarget.start : null,
         end: Number.isInteger(rewriteTarget.end) ? rewriteTarget.end : null,
         heading_node_ref: rewriteTarget.heading_node_ref ? String(rewriteTarget.heading_node_ref) : null,
+        section_start_node_ref: rewriteTarget.section_start_node_ref ? String(rewriteTarget.section_start_node_ref) : null,
+        section_end_node_ref: rewriteTarget.section_end_node_ref ? String(rewriteTarget.section_end_node_ref) : null,
+        boundary_type: rewriteTarget.boundary_type ? String(rewriteTarget.boundary_type) : null,
+        boundary_node_ref: rewriteTarget.boundary_node_ref ? String(rewriteTarget.boundary_node_ref) : null,
+        scope_confidence: Number.isFinite(Number(rewriteTarget.scope_confidence)) ? Number(rewriteTarget.scope_confidence) : null,
         resolver_reason: rewriteTarget.resolver_reason ? String(rewriteTarget.resolver_reason) : null
     };
     if (Number.isInteger(rewriteTarget.rewrite_context_window)) {
@@ -248,6 +261,36 @@ const stripExplanationPack = (pack) => {
     return hasAny ? stripped : null;
 };
 
+const stripFixAssistTriage = (triage) => {
+    if (!triage || typeof triage !== 'object') return null;
+    const allowedStates = new Set([
+        'rewrite_needed',
+        'optional_improvement',
+        'structural_guidance_only',
+        'leave_as_is'
+    ]);
+    const normalizeText = (value, max = 360) => {
+        if (typeof value !== 'string') return '';
+        const text = value.replace(/\s+/g, ' ').trim();
+        if (!text) return '';
+        if (text.length <= max) return text;
+        return `${text.slice(0, Math.max(0, max - 3)).trim()}...`;
+    };
+    const state = allowedStates.has(String(triage.state || '').trim())
+        ? String(triage.state).trim()
+        : 'structural_guidance_only';
+    return {
+        state,
+        label: normalizeText(triage.label, 80) || null,
+        summary: normalizeText(triage.summary, 280) || null,
+        framing: normalizeText(triage.framing, 320) || null,
+        copilot_mode: normalizeText(triage.copilot_mode, 64) || null,
+        requires_web_consent: triage.requires_web_consent === true,
+        variants_allowed: triage.variants_allowed === true,
+        keep_as_is_note: normalizeText(triage.keep_as_is_note, 220) || null
+    };
+};
+
 /**
  * Strip an issue object to only allowed fields
  * @param {Object} issue - Raw issue object
@@ -267,7 +310,8 @@ const stripIssue = (issue) => {
     // Ensure required fields have defaults
     stripped.check_id = stripped.check_id || 'unknown';
     stripped.detail_ref = stripped.detail_ref || `check:${stripped.check_id}`;
-    stripped.name = stripped.name || stripped.check_id;
+    stripped.check_name = stripped.check_name || stripped.name || stripped.check_id;
+    stripped.name = stripped.name || stripped.check_name || stripped.check_id;
     stripped.ui_verdict = stripped.ui_verdict || 'fail';
     stripped.instances = typeof stripped.instances === 'number' ? stripped.instances : 1;
     stripped.first_instance_node_ref = stripped.first_instance_node_ref || null;
@@ -291,6 +335,7 @@ const stripIssue = (issue) => {
     stripped.review_summary = typeof issue.review_summary === 'string'
         ? issue.review_summary.replace(/\s+/g, ' ').trim().slice(0, 280)
         : null;
+    stripped.fix_assist_triage = stripFixAssistTriage(issue.fix_assist_triage);
     if (Array.isArray(issue.highlights)) {
         stripped.highlights = issue.highlights.map(highlight => {
             if (!highlight || typeof highlight !== 'object') return null;
@@ -310,6 +355,7 @@ const stripIssue = (issue) => {
             compact.review_summary = typeof highlight.review_summary === 'string'
                 ? highlight.review_summary.replace(/\s+/g, ' ').trim().slice(0, 280)
                 : null;
+            compact.fix_assist_triage = stripFixAssistTriage(highlight.fix_assist_triage);
             return compact;
         }).filter(highlight => highlight !== null);
     }
