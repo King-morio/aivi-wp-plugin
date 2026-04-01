@@ -253,7 +253,7 @@ describe('worker regression guards', () => {
         expect(result.hasSemanticCoverage).toBe(false);
     });
 
-    test('budget-hit partial context resolves to success_partial and time_budget_exceeded', () => {
+    test('budget-hit context with a failed chunk now aborts the run instead of releasing a partial', () => {
         const state = __testHooks.derivePartialRunState({
             budget_hit: true,
             budget_ms: 90000,
@@ -264,9 +264,11 @@ describe('worker regression guards', () => {
         });
 
         expect(state.budgetHit).toBe(true);
-        expect(state.isPartialRun).toBe(true);
+        expect(state.isPartialRun).toBe(false);
+        expect(state.shouldAbortRun).toBe(true);
+        expect(state.abortReason).toBe('failed_chunk_count_exceeded');
         expect(state.partialReason).toBe('time_budget_exceeded');
-        expect(state.runStatus).toBe('success_partial');
+        expect(state.runStatus).toBe('failed');
     });
 
     test('budget-hit reason takes precedence over truncation and chunk parse failure reasons', () => {
@@ -279,6 +281,32 @@ describe('worker regression guards', () => {
         });
 
         expect(state.partialReason).toBe('time_budget_exceeded');
+    });
+
+    test('synthetic check rate at the reliability threshold aborts the run', () => {
+        const state = __testHooks.derivePartialRunState({
+            synthetic_check_rate: 0.03,
+            synthetic_findings_count: 2,
+            missing_ai_checks: 2
+        });
+
+        expect(state.shouldAbortRun).toBe(true);
+        expect(state.abortReason).toBe('synthetic_check_rate_exceeded');
+        expect(state.partialReason).toBe('missing_ai_checks');
+        expect(state.runStatus).toBe('failed');
+    });
+
+    test('milder degradation below the abort threshold remains a guarded partial candidate', () => {
+        const state = __testHooks.derivePartialRunState({
+            synthetic_check_rate: 0.02,
+            synthetic_findings_count: 1,
+            missing_ai_checks: 1
+        });
+
+        expect(state.shouldAbortRun).toBe(false);
+        expect(state.isPartialRun).toBe(true);
+        expect(state.partialReason).toBe('missing_ai_checks');
+        expect(state.runStatus).toBe('success_partial');
     });
 
     test('chunk budget window marks exhaustion when remaining headroom is too small', () => {

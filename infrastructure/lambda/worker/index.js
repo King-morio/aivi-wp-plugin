@@ -2272,6 +2272,8 @@ const DEFAULT_AI_COMPLETION_FIRST_ENABLED = true;
 const DEFAULT_AI_LAMBDA_RESERVE_MS = 20000;
 const DEFAULT_AI_MIN_RETURNED_CHECK_RATE = 0.85;
 const DEFAULT_AI_MAX_SYNTHETIC_CHECK_RATE = 0.15;
+const DEFAULT_AI_ABORT_FAILED_CHUNK_COUNT = 1;
+const DEFAULT_AI_ABORT_SYNTHETIC_CHECK_RATE = 0.03;
 const DEFAULT_AI_MALFORMED_CHUNK_CAPTURE_LIMIT = 3;
 const DEFAULT_MISTRAL_MODEL = 'mistral-large-latest';
 const DEFAULT_MISTRAL_FALLBACK_MODEL = 'magistral-small-latest';
@@ -2324,9 +2326,17 @@ const derivePartialRunState = (partialContextInput) => {
     const filteredInvalidChecks = Number(partialContext.filtered_invalid_checks || 0);
     const failedChunkCount = Number(partialContext.failed_chunk_count || 0);
     const syntheticFindingsCount = Number(partialContext.synthetic_findings_count || 0);
+    const syntheticCheckRate = Number(partialContext.synthetic_check_rate || 0);
     const chunkMissingTotal = Number(partialContext.chunk_missing_total || 0);
     const truncatedResponse = !!partialContext.was_truncated;
     const budgetHit = !!partialContext.budget_hit;
+    const parseErrorTotal = Number(partialContext.parse_error_total || 0);
+    const malformedChunkCaptureCount = Number(partialContext.malformed_chunk_capture_count || 0);
+    const abortReason = failedChunkCount >= DEFAULT_AI_ABORT_FAILED_CHUNK_COUNT
+        ? 'failed_chunk_count_exceeded'
+        : (syntheticCheckRate >= DEFAULT_AI_ABORT_SYNTHETIC_CHECK_RATE
+            ? 'synthetic_check_rate_exceeded'
+            : null);
     const partialReason = budgetHit
         ? 'time_budget_exceeded'
         : (truncatedResponse
@@ -2336,19 +2346,29 @@ const derivePartialRunState = (partialContextInput) => {
                 : ((syntheticFindingsCount > 0 || chunkMissingTotal > 0 || missingAiChecks > 0)
                     ? 'missing_ai_checks'
                     : (filteredInvalidChecks > 0 ? 'invalid_checks_filtered' : null))));
-    const isPartialRun = !!partialReason;
+    const shouldAbortRun = !!abortReason;
+    const isPartialRun = !shouldAbortRun && !!partialReason;
     return {
         partialContext,
         missingAiChecks,
         filteredInvalidChecks,
         failedChunkCount,
         syntheticFindingsCount,
+        syntheticCheckRate,
         chunkMissingTotal,
         truncatedResponse,
         budgetHit,
+        parseErrorTotal,
+        malformedChunkCaptureCount,
         partialReason,
+        shouldAbortRun,
+        abortReason,
         isPartialRun,
-        runStatus: isPartialRun ? 'success_partial' : 'success'
+        abortThresholds: {
+            failedChunkCount: DEFAULT_AI_ABORT_FAILED_CHUNK_COUNT,
+            syntheticCheckRate: DEFAULT_AI_ABORT_SYNTHETIC_CHECK_RATE
+        },
+        runStatus: shouldAbortRun ? 'failed' : (isPartialRun ? 'success_partial' : 'success')
     };
 };
 
@@ -5491,6 +5511,12 @@ const processJob = async (message, lambdaContext = null) => {
             ai_count: Object.keys(mergedChecks).length - deterministicAppliedCount,
             scores: result.scores
         });
+        const partialState = derivePartialRunState(aiPartialContext);
+        result.partial_context = aiPartialContext && typeof aiPartialContext === 'object'
+            ? { ...aiPartialContext }
+            : {};
+        result.status = partialState.runStatus;
+        result.partial_reason = partialState.partialReason || '';
 
         const normalizedResult = normalizeHighlightsWithManifest(result, manifest);
 
@@ -5546,15 +5572,19 @@ const processJob = async (message, lambdaContext = null) => {
         }
 
         const scores = result.scores || { AEO: 0, GEO: 0, GLOBAL: 0 };
-        const partialState = derivePartialRunState(aiPartialContext);
         const partialContext = partialState.partialContext;
         const missingAiChecks = partialState.missingAiChecks;
         const filteredInvalidChecks = partialState.filteredInvalidChecks;
         const failedChunkCount = partialState.failedChunkCount;
         const syntheticFindingsCount = partialState.syntheticFindingsCount;
+        const syntheticCheckRate = partialState.syntheticCheckRate;
         const partialReason = partialState.partialReason;
         const isPartialRun = partialState.isPartialRun;
         const budgetHit = partialState.budgetHit;
+        const shouldAbortRun = partialState.shouldAbortRun;
+        const abortReason = partialState.abortReason;
+        const parseErrorTotal = partialState.parseErrorTotal;
+        const malformedChunkCaptureCount = partialState.malformedChunkCaptureCount;
 
         if (isPartialRun && !featureFlags.partial_results_enabled) {
             log('INFO', 'Partial run status forced by analyzer integrity safeguards', {
@@ -5585,8 +5615,9 @@ const processJob = async (message, lambdaContext = null) => {
                     parse_error_total: Number(partialContext.parse_error_total || 0),
                     parse_recovery_count: Number(partialContext.parse_recovery_count || 0),
                     parse_error_counts: partialContext.parse_error_counts || {},
+                    malformed_chunk_capture_count: malformedChunkCaptureCount,
                     returned_check_rate: Number(partialContext.returned_check_rate || 0),
-                    synthetic_check_rate: Number(partialContext.synthetic_check_rate || 0),
+                    synthetic_check_rate: syntheticCheckRate,
                     coverage_guardrail_triggered: !!partialContext.coverage_guardrail_triggered,
                     coverage_guardrail_mode: partialContext.coverage_guardrail_mode || null,
                     budget_hit: budgetHit,
@@ -5611,11 +5642,12 @@ const processJob = async (message, lambdaContext = null) => {
                 chunk_retry_count: Number(partialContext.chunk_retry_count || 0),
                 api_retry_count: Number(partialContext.api_retry_count || 0),
                 model_switch_count: Number(partialContext.model_switch_count || 0),
-                parse_error_total: Number(partialContext.parse_error_total || 0),
+                parse_error_total: parseErrorTotal,
                 parse_recovery_count: Number(partialContext.parse_recovery_count || 0),
                 parse_error_counts: partialContext.parse_error_counts || {},
+                malformed_chunk_capture_count: malformedChunkCaptureCount,
                 returned_check_rate: Number(partialContext.returned_check_rate || 0),
-                synthetic_check_rate: Number(partialContext.synthetic_check_rate || 0),
+                synthetic_check_rate: syntheticCheckRate,
                 coverage_guardrail_triggered: !!partialContext.coverage_guardrail_triggered,
                 coverage_guardrail_mode: partialContext.coverage_guardrail_mode || null,
                 budget_hit: budgetHit,
@@ -5626,11 +5658,33 @@ const processJob = async (message, lambdaContext = null) => {
             };
         }
 
+        if (shouldAbortRun) {
+            statusPayload.error = 'analysis_reliability_abort';
+            statusPayload.error_message = abortReason === 'failed_chunk_count_exceeded'
+                ? 'analysis aborted after failed chunk threshold exceeded'
+                : 'analysis aborted after synthetic check rate threshold exceeded';
+            statusPayload.abort = {
+                mode: 'reliability_budget',
+                reason: abortReason,
+                failed_chunk_count: failedChunkCount,
+                synthetic_check_rate: syntheticCheckRate,
+                parse_error_total: parseErrorTotal,
+                malformed_chunk_capture_count: malformedChunkCaptureCount,
+                threshold_failed_chunk_count: partialState.abortThresholds.failedChunkCount,
+                threshold_synthetic_check_rate: partialState.abortThresholds.syntheticCheckRate
+            };
+        }
+
         if (deferredDetailsS3Uri) {
             statusPayload.details_s3 = deferredDetailsS3Uri;
         }
 
         const runStatus = partialState.runStatus;
+        const settlementReasonCode = shouldAbortRun
+            ? (abortReason === 'failed_chunk_count_exceeded'
+                ? 'analysis_reliability_abort_failed_chunks'
+                : 'analysis_reliability_abort_synthetic_rate')
+            : (runStatus === 'success_partial' ? 'analysis_completed_partial' : 'analysis_completed');
         let billingSummary = null;
         try {
             billingSummary = await finalizeCreditSettlement({
@@ -5640,7 +5694,7 @@ const processJob = async (message, lambdaContext = null) => {
                 reservation: creditReservation,
                 usage,
                 model,
-                reasonCode: runStatus === 'success_partial' ? 'analysis_completed_partial' : 'analysis_completed'
+                reasonCode: settlementReasonCode
             });
         } catch (billingError) {
             log('WARN', 'Failed to finalize credit settlement for completed run', {
@@ -5653,6 +5707,26 @@ const processJob = async (message, lambdaContext = null) => {
         }
         await updateRunStatus(runId, runStatus, statusPayload);
 
+        if (shouldAbortRun) {
+            log('WARN', 'Job completed with reliability abort status', {
+                run_id: runId,
+                status: runStatus,
+                scores,
+                abort_reason: abortReason,
+                partial_reason: partialReason,
+                failed_chunk_count: failedChunkCount,
+                synthetic_check_rate: syntheticCheckRate
+            });
+            return {
+                success: true,
+                run_id: runId,
+                status: runStatus,
+                scores,
+                aborted: true,
+                abort_reason: abortReason
+            };
+        }
+
         log('INFO', 'Job completed successfully', {
             run_id: runId,
             status: runStatus,
@@ -5664,164 +5738,174 @@ const processJob = async (message, lambdaContext = null) => {
     } catch (error) {
         log('ERROR', 'Job failed', { run_id: runId, error: error.message, stack: error.stack });
         const isSchemaError = error.message.startsWith('failed_schema');
-        const errorType = isSchemaError ? 'failed_schema' : 'ai_unavailable';
         const partialEnabled = !!featureFlags.partial_results_enabled;
 
-        if (partialEnabled && manifest) {
-            try {
-                if (!deterministicChecks) {
-                    deterministicChecks = await performDeterministicChecks(manifest, job, {
-                        enableIntroFocusFactuality: isIntroFocusFactualityEnabled(),
-                        contentHtml: manifest?.content_html || ''
-                    });
-                }
-
-                const fallbackChecks = { ...(deterministicChecks || {}) };
-                const aiEligibleCheckIds = Array.from(getAiEligibleCheckIds(cachedDefinitions, cachedRuntimeContract));
-                const missingAiCheckIds = aiEligibleCheckIds.filter(
-                    (checkId) => !Object.prototype.hasOwnProperty.call(fallbackChecks, checkId)
-                );
-                missingAiCheckIds.forEach((checkId) => {
-                    fallbackChecks[checkId] = buildSemanticFallbackCheck(checkId, cachedDefinitions);
+        if (partialEnabled && manifest && !error.reliability_abort_context) {
+            const fallbackAbortState = derivePartialRunState(error?.details?.context || {});
+            if (fallbackAbortState.shouldAbortRun) {
+                error.reliability_abort_context = fallbackAbortState;
+                log('WARN', 'Skipping deterministic partial fallback because analyzer reliability budget was exceeded', {
+                    run_id: runId,
+                    abort_reason: fallbackAbortState.abortReason,
+                    failed_chunk_count: fallbackAbortState.failedChunkCount,
+                    synthetic_check_rate: fallbackAbortState.syntheticCheckRate
                 });
-
-                const fallbackCheckIds = Object.keys(fallbackChecks);
-                if (fallbackCheckIds.length > 0) {
-                    const fallbackScores = scoreChecksForSidebar(fallbackChecks, manifest, runId);
-                    const fallbackResult = {
-                        classification: {
-                            primary_type: manifest?.content_type || manifest?.classification?.primary_type || 'article',
-                            confidence: 0.25
-                        },
-                        checks: fallbackChecks,
-                        scores: fallbackScores
-                    };
-
-                    const normalizedFallback = normalizeHighlightsWithManifest(fallbackResult, manifest);
-                    const enrichedFallback = enrichWithUiVerdict(normalizedFallback);
-
-                    let overlayContent;
-                    try {
-                        overlayContent = buildHighlightedHtml(manifest, enrichedFallback);
-                    } catch (overlayError) {
-                        log('WARN', 'Overlay generation failed for partial fallback', {
-                            run_id: runId,
-                            error: overlayError.message
+            } else {
+                try {
+                    if (!deterministicChecks) {
+                        deterministicChecks = await performDeterministicChecks(manifest, job, {
+                            enableIntroFocusFactuality: isIntroFocusFactualityEnabled(),
+                            contentHtml: manifest?.content_html || ''
                         });
-                        overlayContent = {
-                            schema_version: '2.0.0',
-                            generated_at: new Date().toISOString(),
+                    }
+
+                    const fallbackChecks = { ...(deterministicChecks || {}) };
+                    const aiEligibleCheckIds = Array.from(getAiEligibleCheckIds(cachedDefinitions, cachedRuntimeContract));
+                    const missingAiCheckIds = aiEligibleCheckIds.filter(
+                        (checkId) => !Object.prototype.hasOwnProperty.call(fallbackChecks, checkId)
+                    );
+                    missingAiCheckIds.forEach((checkId) => {
+                        fallbackChecks[checkId] = buildSemanticFallbackCheck(checkId, cachedDefinitions);
+                    });
+
+                    const fallbackCheckIds = Object.keys(fallbackChecks);
+                    if (fallbackCheckIds.length > 0) {
+                        const fallbackScores = scoreChecksForSidebar(fallbackChecks, manifest, runId);
+                        const fallbackResult = {
+                            classification: {
+                                primary_type: manifest?.content_type || manifest?.classification?.primary_type || 'article',
+                                confidence: 0.25
+                            },
+                            checks: fallbackChecks,
+                            scores: fallbackScores
+                        };
+
+                        const normalizedFallback = normalizeHighlightsWithManifest(fallbackResult, manifest);
+                        const enrichedFallback = enrichWithUiVerdict(normalizedFallback);
+
+                        let overlayContent;
+                        try {
+                            overlayContent = buildHighlightedHtml(manifest, enrichedFallback);
+                        } catch (overlayError) {
+                            log('WARN', 'Overlay generation failed for partial fallback', {
+                                run_id: runId,
+                                error: overlayError.message
+                            });
+                            overlayContent = {
+                                schema_version: '2.0.0',
+                                generated_at: new Date().toISOString(),
+                                run_id: runId,
+                                highlighted_html: null,
+                                content_hash: null,
+                                highlight_count: 0,
+                                recommendations: [],
+                                unhighlightable_issues: [],
+                                v2_findings: [],
+                                overlay_error: 'overlay_generation_failed'
+                            };
+                        }
+
+                        const { scrubbed: scrubbedFallback } = scrubAnalysisResult(enrichedFallback, runId);
+                        scrubbedFallback.overlay_content = overlayContent;
+
+                        const { s3Uri, presignedUrl } = await storeResult(runId, scrubbedFallback);
+                        let deferredDetailsS3Uri = null;
+                        try {
+                            const deferredDetailsPayload = buildDeferredDetailsPayload(scrubbedFallback, runId);
+                            const detailsStore = await storeResult(runId, deferredDetailsPayload, 'details.json');
+                            deferredDetailsS3Uri = detailsStore.s3Uri;
+                        } catch (detailsError) {
+                            log('WARN', 'Failed to persist deferred details artifact (partial fallback)', {
+                                run_id: runId,
+                                error: detailsError.message
+                            });
+                        }
+
+                        const statusPayload = {
+                            completed_at: new Date().toISOString(),
+                            result_s3: s3Uri,
+                            result_url: presignedUrl,
+                            scores: fallbackScores,
+                            feature_flags: featureFlags,
+                            partial: {
+                                mode: 'deterministic_fallback',
+                                reason: isSchemaError ? 'schema_validation_failed' : 'ai_unavailable',
+                                completed_checks: fallbackCheckIds.length,
+                                missing_ai_checks: missingAiCheckIds.length,
+                                filtered_invalid_checks: null
+                            },
+                            audit: {
+                                model: null,
+                                tokens_used: 0,
+                                prompt_version: promptVersion || 'v1',
+                                latency_ms: null,
+                                prompt_provenance: null,
+                                anchor_verification: normalizedFallback.anchor_verification || null,
+                                ai_chunking: error?.details?.context ? {
+                                    chunk_count: Number(error.details.context.chunk_count || 0),
+                                    failed_chunk_count: Number(error.details.context.failed_chunk_count || 0),
+                                    chunk_retry_count: Number(error.details.context.chunk_retry_count || 0),
+                                    api_retry_count: Number(error.details.context.api_retry_count || 0),
+                                    model_switch_count: Number(error.details.context.model_switch_count || 0),
+                                    parse_error_total: Number(error.details.context.parse_error_total || 0),
+                                    parse_error_counts: error.details.context.parse_error_counts || {},
+                                    returned_check_rate: Number(error.details.context.returned_check_rate || 0),
+                                    synthetic_check_rate: Number(error.details.context.synthetic_check_rate || 0),
+                                    coverage_guardrail_triggered: !!error.details.context.coverage_guardrail_triggered,
+                                    coverage_guardrail_mode: error.details.context.coverage_guardrail_mode || null
+                                } : null,
+                                feature_flags: featureFlags,
+                                fallback: true,
+                                original_error: error.message
+                            }
+                        };
+
+                        if (deferredDetailsS3Uri) {
+                            statusPayload.details_s3 = deferredDetailsS3Uri;
+                        }
+
+                        let billingSummary = null;
+                        try {
+                            billingSummary = await finalizeCreditSettlement({
+                                runId,
+                                siteId,
+                                finalStatus: 'success_partial',
+                                reservation: creditReservation,
+                                usage: { input_tokens: 0, output_tokens: 0 },
+                                model: null,
+                                reasonCode: 'deterministic_fallback'
+                            });
+                        } catch (billingError) {
+                            log('WARN', 'Failed to finalize credit settlement for fallback partial run', {
+                                run_id: runId,
+                                error: billingError.message
+                            });
+                        }
+                        if (billingSummary) {
+                            statusPayload.billing_summary = billingSummary;
+                        }
+                        await updateRunStatus(runId, 'success_partial', statusPayload);
+
+                        log('WARN', 'Job recovered with deterministic-only partial result', {
                             run_id: runId,
-                            highlighted_html: null,
-                            content_hash: null,
-                            highlight_count: 0,
-                            recommendations: [],
-                            unhighlightable_issues: [],
-                            v2_findings: [],
-                            overlay_error: 'overlay_generation_failed'
+                            check_count: fallbackCheckIds.length,
+                            synthesized_semantic_partial_count: missingAiCheckIds.length,
+                            reason: statusPayload.partial.reason
+                        });
+                        return {
+                            success: true,
+                            run_id: runId,
+                            status: 'success_partial',
+                            partial: true,
+                            fallback: true
                         };
                     }
-
-                    const { scrubbed: scrubbedFallback } = scrubAnalysisResult(enrichedFallback, runId);
-                    scrubbedFallback.overlay_content = overlayContent;
-
-                    const { s3Uri, presignedUrl } = await storeResult(runId, scrubbedFallback);
-                    let deferredDetailsS3Uri = null;
-                    try {
-                        const deferredDetailsPayload = buildDeferredDetailsPayload(scrubbedFallback, runId);
-                        const detailsStore = await storeResult(runId, deferredDetailsPayload, 'details.json');
-                        deferredDetailsS3Uri = detailsStore.s3Uri;
-                    } catch (detailsError) {
-                        log('WARN', 'Failed to persist deferred details artifact (partial fallback)', {
-                            run_id: runId,
-                            error: detailsError.message
-                        });
-                    }
-
-                    const statusPayload = {
-                        completed_at: new Date().toISOString(),
-                        result_s3: s3Uri,
-                        result_url: presignedUrl,
-                        scores: fallbackScores,
-                        feature_flags: featureFlags,
-                        partial: {
-                            mode: 'deterministic_fallback',
-                            reason: isSchemaError ? 'schema_validation_failed' : 'ai_unavailable',
-                            completed_checks: fallbackCheckIds.length,
-                            missing_ai_checks: missingAiCheckIds.length,
-                            filtered_invalid_checks: null
-                        },
-                        audit: {
-                            model: null,
-                            tokens_used: 0,
-                            prompt_version: promptVersion || 'v1',
-                            latency_ms: null,
-                            prompt_provenance: null,
-                            anchor_verification: normalizedFallback.anchor_verification || null,
-                            ai_chunking: error?.details?.context ? {
-                                chunk_count: Number(error.details.context.chunk_count || 0),
-                                failed_chunk_count: Number(error.details.context.failed_chunk_count || 0),
-                                chunk_retry_count: Number(error.details.context.chunk_retry_count || 0),
-                                api_retry_count: Number(error.details.context.api_retry_count || 0),
-                                model_switch_count: Number(error.details.context.model_switch_count || 0),
-                                parse_error_total: Number(error.details.context.parse_error_total || 0),
-                                parse_error_counts: error.details.context.parse_error_counts || {},
-                                returned_check_rate: Number(error.details.context.returned_check_rate || 0),
-                                synthetic_check_rate: Number(error.details.context.synthetic_check_rate || 0),
-                                coverage_guardrail_triggered: !!error.details.context.coverage_guardrail_triggered,
-                                coverage_guardrail_mode: error.details.context.coverage_guardrail_mode || null
-                            } : null,
-                            feature_flags: featureFlags,
-                            fallback: true,
-                            original_error: error.message
-                        }
-                    };
-
-                    if (deferredDetailsS3Uri) {
-                        statusPayload.details_s3 = deferredDetailsS3Uri;
-                    }
-
-                    let billingSummary = null;
-                    try {
-                        billingSummary = await finalizeCreditSettlement({
-                            runId,
-                            siteId,
-                            finalStatus: 'success_partial',
-                            reservation: creditReservation,
-                            usage: { input_tokens: 0, output_tokens: 0 },
-                            model: null,
-                            reasonCode: 'deterministic_fallback'
-                        });
-                    } catch (billingError) {
-                        log('WARN', 'Failed to finalize credit settlement for fallback partial run', {
-                            run_id: runId,
-                            error: billingError.message
-                        });
-                    }
-                    if (billingSummary) {
-                        statusPayload.billing_summary = billingSummary;
-                    }
-                    await updateRunStatus(runId, 'success_partial', statusPayload);
-
-                    log('WARN', 'Job recovered with deterministic-only partial result', {
+                } catch (partialError) {
+                    log('ERROR', 'Partial fallback failed', {
                         run_id: runId,
-                        check_count: fallbackCheckIds.length,
-                        synthesized_semantic_partial_count: missingAiCheckIds.length,
-                        reason: statusPayload.partial.reason
+                        error: partialError.message
                     });
-                    return {
-                        success: true,
-                        run_id: runId,
-                        status: 'success_partial',
-                        partial: true,
-                        fallback: true
-                    };
                 }
-            } catch (partialError) {
-                log('ERROR', 'Partial fallback failed', {
-                    run_id: runId,
-                    error: partialError.message
-                });
             }
         }
 
@@ -5829,8 +5913,20 @@ const processJob = async (message, lambdaContext = null) => {
             await storeResult(runId, { error: error.message, stack: error.stack }, 'error.json');
         } catch (storeError) { }
 
+        const finalReliabilityAbortContext = error.reliability_abort_context && typeof error.reliability_abort_context === 'object'
+            ? error.reliability_abort_context
+            : null;
+        const hasReliabilityAbortContext = !!finalReliabilityAbortContext;
+        const finalErrorType = isSchemaError
+            ? 'failed_schema'
+            : (hasReliabilityAbortContext ? 'analysis_reliability_abort' : 'ai_unavailable');
         const failureStatus = isSchemaError ? 'failed_schema' : 'failed';
         let failureBillingSummary = null;
+        const failureReasonCode = hasReliabilityAbortContext
+            ? (finalReliabilityAbortContext.abortReason === 'failed_chunk_count_exceeded'
+                ? 'analysis_reliability_abort_failed_chunks'
+                : 'analysis_reliability_abort_synthetic_rate')
+            : failureStatus;
         try {
             failureBillingSummary = await finalizeCreditSettlement({
                 runId,
@@ -5839,7 +5935,7 @@ const processJob = async (message, lambdaContext = null) => {
                 reservation: creditReservation,
                 usage: { input_tokens: 0, output_tokens: 0 },
                 model: null,
-                reasonCode: failureStatus
+                reasonCode: failureReasonCode
             });
         } catch (billingError) {
             log('WARN', 'Failed to finalize credit settlement for failed run', {
@@ -5848,19 +5944,35 @@ const processJob = async (message, lambdaContext = null) => {
             });
         }
 
-        await updateRunStatus(runId, failureStatus, {
+        const failurePayload = {
             completed_at: new Date().toISOString(),
-            error: errorType,
-            error_message: error.message,
+            error: finalErrorType,
+            error_message: hasReliabilityAbortContext
+                ? 'analysis aborted after reliability threshold exceeded'
+                : error.message,
             feature_flags: featureFlags,
             billing_summary: failureBillingSummary
-        });
+        };
+        if (hasReliabilityAbortContext) {
+            failurePayload.abort = {
+                mode: 'reliability_budget',
+                reason: finalReliabilityAbortContext.abortReason,
+                failed_chunk_count: finalReliabilityAbortContext.failedChunkCount,
+                synthetic_check_rate: finalReliabilityAbortContext.syntheticCheckRate,
+                parse_error_total: finalReliabilityAbortContext.parseErrorTotal,
+                malformed_chunk_capture_count: finalReliabilityAbortContext.malformedChunkCaptureCount,
+                threshold_failed_chunk_count: finalReliabilityAbortContext.abortThresholds?.failedChunkCount || DEFAULT_AI_ABORT_FAILED_CHUNK_COUNT,
+                threshold_synthetic_check_rate: finalReliabilityAbortContext.abortThresholds?.syntheticCheckRate || DEFAULT_AI_ABORT_SYNTHETIC_CHECK_RATE
+            };
+        }
+
+        await updateRunStatus(runId, failureStatus, failurePayload);
 
         if (isSchemaError) {
             return {
                 success: false,
                 run_id: runId,
-                error: errorType,
+                error: finalErrorType,
                 message: error.message,
                 _debug_details: error.details
             };

@@ -2090,15 +2090,6 @@
         if (!fallback) return '';
         if (!summaryText) return fallback;
         if (areGuidanceTextsEquivalent(fallback, summaryText)) return '';
-
-        const sentences = splitGuidanceSentences(fallback);
-        if (sentences.length > 1 && areGuidanceTextsEquivalent(sentences[0], summaryText)) {
-            const trimmed = normalizeText(sentences.slice(1).join(' '));
-            if (trimmed && !areGuidanceTextsEquivalent(trimmed, summaryText)) {
-                return trimmed;
-            }
-        }
-
         return fallback;
     }
 
@@ -3008,12 +2999,15 @@
     function resolveCopilotAnalyzerNote(issueLike, issueDisplayName, explanationPack) {
         if (!issueLike || typeof issueLike !== 'object') return 'Issue detected.';
         const fallbackName = normalizeText(issueDisplayName || resolveIssueDisplayName(issueLike));
+        const composedNarrative = composeIssueExplanationNarrative(explanationPack);
         const candidates = [
             issueLike.issue_explanation,
             issueLike.highlight && issueLike.highlight.issue_explanation,
             issueLike.check && issueLike.check.issue_explanation,
             explanationPack && explanationPack.issue_explanation,
+            composedNarrative,
             explanationPack && explanationPack.what_failed,
+            explanationPack && explanationPack.why_it_matters,
             issueLike.reviewSummary,
             issueLike.review_summary,
             issueLike.highlight && issueLike.highlight.review_summary,
@@ -3599,6 +3593,13 @@
         const railTitle = state.contextDoc.createElement('div');
         railTitle.className = 'aivi-overlay-review-rail-title';
         railTitle.textContent = 'Review Rail';
+        const actions = state.contextDoc.createElement('div');
+        actions.className = 'aivi-overlay-rail-actions';
+        const copyAllButton = state.contextDoc.createElement('button');
+        copyAllButton.type = 'button';
+        copyAllButton.className = 'aivi-overlay-rail-btn';
+        copyAllButton.textContent = 'Copy overlay content';
+        copyAllButton.addEventListener('click', () => copyOverlayContentToClipboard());
         const note = state.contextDoc.createElement('div');
         note.className = 'aivi-overlay-rail-note';
         note.textContent = OVERLAY_EDITOR_PERSISTENCE_NOTE;
@@ -3610,7 +3611,9 @@
         closeButton.addEventListener('click', () => closeOverlay());
 
         head.appendChild(railTitle);
-        head.appendChild(closeButton);
+        actions.appendChild(copyAllButton);
+        actions.appendChild(closeButton);
+        head.appendChild(actions);
         head.appendChild(note);
         state.overlayRail.appendChild(head);
 
@@ -7415,14 +7418,13 @@
         const text = normalizeFixAssistVariantText(variant.text || '', info.rewrite_target || null);
         if (!text) {
             info.status = 'Nothing to copy';
-            renderBlocks(true);
+            setMetaStatus('This variant did not contain usable text to copy.');
             return;
         }
 
         if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
             info.status = 'Copy unavailable';
             setMetaStatus('Clipboard is not available here. Copy the revised text manually from AiVI.');
-            renderBlocks(true);
             return;
         }
 
@@ -7441,7 +7443,6 @@
             info.status = 'Copy failed';
             setMetaStatus('Copy failed. Copy the revised text manually from AiVI.');
         }
-        renderBlocks(true);
     }
 
     function handleReject(item, idx) {
@@ -8988,10 +8989,70 @@
         setMetaStatus('No changes to apply');
     }
 
-    async function copyToClipboard() {
-        const html = buildClipboardHtml();
+    function buildOverlayClipboardHtmlForBody(body, wrapper, blocks) {
+        if (!body || !wrapper) return '';
+        const blockName = String(wrapper.getAttribute('data-block-name') || '').trim();
+        const nodeRef = String(wrapper.getAttribute('data-node-ref') || '').trim();
+        const blockInfo = nodeRef ? findBlockByNodeRef(Array.isArray(blocks) ? blocks : getBlocks(), nodeRef) : null;
+        const block = blockInfo && blockInfo.block ? blockInfo.block : null;
+        const html = extractEditableHtml(body).trim();
+        const text = normalizeText(body.textContent || '');
+        if (!html && !text) return '';
+
+        if (blockName === 'classic/content') {
+            return html || escapeHtml(text);
+        }
+        if (blockName === 'core/heading') {
+            if (/^\s*<h[1-6]\b/i.test(html)) return html;
+            const level = Math.max(1, Math.min(6, Number(block && block.attributes && block.attributes.level) || 2));
+            return `<h${level}>${html || escapeHtml(text)}</h${level}>`;
+        }
+        if (blockName === 'core/paragraph') {
+            if (/^\s*<p\b/i.test(html)) return html;
+            return `<p>${html || escapeHtml(text)}</p>`;
+        }
+        if (blockName === 'core/list') {
+            if (/^\s*<(ul|ol)\b/i.test(html)) return html;
+            const tag = block && block.attributes && block.attributes.ordered ? 'ol' : 'ul';
+            const listMarkup = html || convertTextToListMarkup(text);
+            if (!listMarkup) return '';
+            if (/^\s*<(ul|ol)\b/i.test(listMarkup)) return listMarkup;
+            return `<${tag}>${listMarkup}</${tag}>`;
+        }
+        if (blockName === 'core/quote') {
+            if (/^\s*<blockquote\b/i.test(html)) return html;
+            return `<blockquote><p>${html || escapeHtml(text)}</p></blockquote>`;
+        }
+        return html || `<p>${escapeHtml(text)}</p>`;
+    }
+
+    function buildOverlayClipboardHtml() {
+        const parts = [];
+        const titleText = normalizeText(state.overlayDocTitle && state.overlayDocTitle.textContent ? state.overlayDocTitle.textContent : '');
+        if (titleText) {
+            parts.push(`<h1>${escapeHtml(titleText)}</h1>`);
+        }
+        if (state.overlayContent) {
+            const blocks = getBlocks();
+            const wrappers = Array.from(state.overlayContent.querySelectorAll('.aivi-overlay-block'));
+            wrappers.forEach((wrapper) => {
+                const body = wrapper.querySelector('.aivi-overlay-block-body');
+                const blockHtml = buildOverlayClipboardHtmlForBody(body, wrapper, blocks);
+                if (blockHtml) {
+                    parts.push(blockHtml);
+                }
+            });
+        }
+        if (!parts.length) {
+            return buildClipboardHtml();
+        }
+        return parts.join('\n');
+    }
+
+    async function copyOverlayContentToClipboard() {
+        const html = buildOverlayClipboardHtml();
         if (!html) {
-            setMetaStatus('Nothing to copy');
+            setMetaStatus('No overlay content is available to copy.');
             return;
         }
         try {
@@ -9014,10 +9075,14 @@
                 state.contextDoc.execCommand('copy');
                 state.contextDoc.body.removeChild(textarea);
             }
-            setMetaStatus('Copied');
+            setMetaStatus('Copied the full overlay draft. Paste it into WordPress, then review the blocks before updating the post.');
         } catch (e) {
             setMetaStatus('Copy failed');
         }
+    }
+
+    async function copyToClipboard() {
+        await copyOverlayContentToClipboard();
     }
 
     function buildClipboardHtml() {

@@ -12,10 +12,14 @@ describe('overlay apply safety regression guard', () => {
         expect(source).toContain("const OVERLAY_EDITOR_PERSISTENCE_NOTE = 'Edit inside AiVI, then copy the revised text and paste it into the matching WordPress block. Close this panel anytime to return to the editor.';");
         expect(source).toContain("note.className = 'aivi-overlay-rail-note';");
         expect(source).toContain("note.textContent = OVERLAY_EDITOR_PERSISTENCE_NOTE;");
+        expect(source).toContain("actions.className = 'aivi-overlay-rail-actions';");
+        expect(source).toContain("copyAllButton.textContent = 'Copy overlay content';");
+        expect(source).toContain("copyAllButton.addEventListener('click', () => copyOverlayContentToClipboard());");
         expect(source).toContain("closeButton.textContent = 'Close';");
         expect(source).not.toContain("applyButton.textContent = 'Apply Changes';");
         expect(source).not.toContain("copyButton.textContent = 'Copy';");
-        expect(source).toContain('head.appendChild(closeButton);');
+        expect(source).toContain('actions.appendChild(closeButton);');
+        expect(source).toContain('head.appendChild(actions);');
         expect(css).toContain('.aivi-overlay-rail-note');
     });
 
@@ -36,11 +40,15 @@ describe('overlay apply safety regression guard', () => {
     test('fix assist variants stay copy-only instead of auto-applying to the editor', () => {
         const overlayPath = path.resolve(__dirname, '../../assets/js/aivi-overlay-editor.js');
         const source = fs.readFileSync(overlayPath, 'utf8');
+        const handleAcceptStart = source.indexOf('async function handleAccept(item, idx) {');
+        const handleRejectStart = source.indexOf('function handleReject(item, idx) {');
+        const handleAcceptSection = source.slice(handleAcceptStart, handleRejectStart);
 
         expect(source).toContain("copyBtn.textContent = 'Copy variant';");
         expect(source).toContain("copyBtn.addEventListener('click', () => handleAccept(item, idx));");
         expect(source).toContain("info.status = 'Copied for paste';");
         expect(source).toContain("setMetaStatus('Copied revised text. Paste it into the matching WordPress block, then review and update the post.');");
+        expect(handleAcceptSection).not.toContain('renderBlocks(true);');
         expect(source).not.toContain("acceptBtn.textContent = 'Accept';");
         expect(source).not.toContain("info.status = 'Applied in editor';");
         expect(source).not.toContain('applyVariantToEditor(item, text);');

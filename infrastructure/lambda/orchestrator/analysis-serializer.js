@@ -366,6 +366,50 @@ const shouldExposeRecommendationInRail = ({ checkData, failureReason }) => {
     if (!isSyntheticFallbackReason(normalizedReason)) return true;
     return isDeterministicCheckData(checkData);
 };
+const deriveSerializerPartialReason = (analysisResult) => {
+    const partialContext = analysisResult && analysisResult.partial_context && typeof analysisResult.partial_context === 'object'
+        ? analysisResult.partial_context
+        : {};
+    const explicitReason = String(
+        (analysisResult && analysisResult.partial_reason)
+        || partialContext.partial_reason
+        || ''
+    ).trim().toLowerCase();
+    if (explicitReason) return explicitReason;
+    const status = String((analysisResult && analysisResult.status) || '').trim().toLowerCase();
+    if (status !== 'success_partial') return '';
+    if (partialContext.budget_hit) return 'time_budget_exceeded';
+    if (partialContext.was_truncated) return 'truncated_response';
+    if (Number(partialContext.failed_chunk_count || 0) > 0) return 'chunk_parse_failure';
+    if (Number(partialContext.synthetic_findings_count || 0) > 0 || Number(partialContext.missing_ai_checks || 0) > 0) {
+        return 'missing_ai_checks';
+    }
+    return '';
+};
+const shouldGuardDegradedExtractabilityRelease = ({ analysisResult, checkId, checkData }) => {
+    if (!QUESTION_ANCHOR_GATED_CHECKS.has(String(checkId || '').trim())) return false;
+    if (!analysisResult || String(analysisResult.status || '').trim().toLowerCase() !== 'success_partial') return false;
+    if (isSyntheticDiagnosticCheck(checkData)) return false;
+    const partialReason = deriveSerializerPartialReason(analysisResult);
+    const partialContext = analysisResult.partial_context && typeof analysisResult.partial_context === 'object'
+        ? analysisResult.partial_context
+        : {};
+    if (partialReason !== 'chunk_parse_failure') return false;
+    return Number(partialContext.failed_chunk_count || 0) > 0
+        || Number(partialContext.parse_error_total || 0) > 0
+        || Number(partialContext.synthetic_findings_count || 0) > 0;
+};
+const buildDegradedExtractabilityGuardrailMessage = (checkId) => {
+    const normalizedCheckId = String(checkId || '').trim();
+    const byCheckId = {
+        immediate_answer_placement: 'This run only partially recovered the answer-structure checks, so AiVI is holding this issue at section level instead of pinning it to one exact snippet.',
+        answer_sentence_concise: 'This run only partially recovered the answer-structure checks, so AiVI is keeping this snippet-quality issue at section level for now.',
+        question_answer_alignment: 'This run only partially recovered the answer-structure checks, so AiVI is keeping this alignment issue at section level instead of forcing one exact span.',
+        clear_answer_formatting: 'This run only partially recovered the answer-structure checks, so AiVI is holding this formatting issue at section level instead of blaming one exact snippet.'
+    };
+    return byCheckId[normalizedCheckId]
+        || 'This run only partially recovered the answer-structure checks, so AiVI is keeping this issue at section level for now.';
+};
 
 const AGGREGATE_INLINE_MESSAGE_PATTERNS = [
     /\b\d+\s+[a-z0-9_-]+\(s\)/i,
@@ -3462,6 +3506,8 @@ function buildHighlightedHtml(manifest, analysisResult) {
                 return 'The model response was truncated for this check. Tighten the section and re-run analysis.';
             case 'invalid_checks_filtered':
                 return 'Strengthen this section with explicit claims and concrete support, then re-run analysis.';
+            case 'degraded_partial_extractability_guardrail':
+                return 'Tighten the opening under this heading so the direct answer or first structured item appears earlier, then re-run analysis for a clean snippet-level verdict.';
             case 'no_highlight_candidates':
                 return `Rewrite the section tied to ${checkName} with one explicit claim, one concrete support detail, and concise wording.`;
             default:
@@ -3660,6 +3706,21 @@ function buildHighlightedHtml(manifest, analysisResult) {
                 message: check.explanation || `${String(checkId || '')} could not be completed by AI analyzer`,
                 snippet: '',
                 failureReason: syntheticReason,
+                nodeRef: '',
+                signature: '',
+                sourcePack: check.ai_explanation_pack || check.explanation_pack || null
+            }));
+            return;
+        }
+        if (shouldGuardDegradedExtractabilityRelease({ analysisResult, checkId, checkData: check })) {
+            unhighlightableIssues.push(buildUnhighlightableIssue({
+                checkId,
+                check,
+                instanceIndex: 0,
+                verdict,
+                message: buildDegradedExtractabilityGuardrailMessage(checkId),
+                snippet: '',
+                failureReason: 'degraded_partial_extractability_guardrail',
                 nodeRef: '',
                 signature: '',
                 sourcePack: check.ai_explanation_pack || check.explanation_pack || null
@@ -4376,7 +4437,26 @@ const ABORT_REASONS = {
     TIMEOUT: 'timeout',
     INVALID_OUTPUT: 'invalid_output',
     INTERNAL_ERROR: 'internal_error',
-    SCHEMA_VALIDATION_FAILED: 'schema_validation_failed'
+    SCHEMA_VALIDATION_FAILED: 'schema_validation_failed',
+    RELIABILITY_THRESHOLD_EXCEEDED: 'reliability_threshold_exceeded'
+};
+
+const RELIABILITY_ABORT_MESSAGES = [
+    'This run did not meet AiVI\'s reliability standard, so we stopped it instead of returning an ambiguous partial. Please try again.',
+    'AiVI paused this run after repeated processing failures. Rather than show a misleading partial result, we recommend running the analysis again.',
+    'We stopped this analysis because the result quality dropped below our reliability threshold. Please run it again to get a cleaner result.',
+    'AiVI aborted this analysis rather than surface a result that could mislead your editorial decision. Please run it again.',
+    'This analysis was stopped because the draft hit too many processing failures to return a result we\'d trust. Please run the analysis again.'
+];
+
+const pickReliabilityAbortMessage = (runId, traceId) => {
+    const seed = `${String(runId || '').trim()}::${String(traceId || '').trim()}::reliability_abort`;
+    let hash = 0;
+    for (let i = 0; i < seed.length; i += 1) {
+        hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+        hash |= 0;
+    }
+    return RELIABILITY_ABORT_MESSAGES[Math.abs(hash) % RELIABILITY_ABORT_MESSAGES.length];
 };
 
 /**
@@ -4391,7 +4471,7 @@ const ABORT_REASONS = {
  * @param {string} traceId - Trace ID for debugging
  * @returns {Object} - Aborted analysis_summary with exact required shape
  */
-const generateAbortedSummary = (runId, reason, traceId) => {
+const generateAbortedSummaryLegacy = (runId, reason, traceId) => {
     // Map reason to user-friendly but non-leaking message
     const reasonToMessage = {
         [ABORT_REASONS.AI_UNAVAILABLE]: 'AI service temporarily unavailable',
@@ -4419,13 +4499,52 @@ const generateAbortedSummary = (runId, reason, traceId) => {
  * @param {string} traceId - Trace ID for debugging
  * @returns {Object} - Response body for 503 Service Unavailable
  */
-const generateAbortedDetailsResponse = (runId, reason, traceId) => {
+const generateAbortedDetailsResponseLegacy = (runId, reason, traceId) => {
     return {
         status: 'aborted',
         code: 'analysis_aborted',
         reason: reason,
         message: 'Analysis aborted — no partial results shown',
         trace_id: traceId || `trace-${runId}-${Date.now()}`
+    };
+};
+
+const generateAbortedSummary = (runId, reason, traceId) => {
+    const resolvedTraceId = traceId || `trace-${runId}-${Date.now()}`;
+    if (reason === ABORT_REASONS.RELIABILITY_THRESHOLD_EXCEEDED) {
+        return {
+            version: '1.2.0',
+            run_id: runId,
+            status: 'aborted',
+            reason,
+            message: pickReliabilityAbortMessage(runId, resolvedTraceId),
+            trace_id: resolvedTraceId
+        };
+    }
+    const legacy = generateAbortedSummaryLegacy(runId, reason, resolvedTraceId);
+    return {
+        ...legacy,
+        message: 'Analysis aborted — no partial results shown',
+        trace_id: resolvedTraceId
+    };
+};
+
+const generateAbortedDetailsResponse = (runId, reason, traceId) => {
+    const resolvedTraceId = traceId || `trace-${runId}-${Date.now()}`;
+    if (reason === ABORT_REASONS.RELIABILITY_THRESHOLD_EXCEEDED) {
+        return {
+            status: 'aborted',
+            code: 'analysis_aborted',
+            reason,
+            message: pickReliabilityAbortMessage(runId, resolvedTraceId),
+            trace_id: resolvedTraceId
+        };
+    }
+    const legacy = generateAbortedDetailsResponseLegacy(runId, reason, resolvedTraceId);
+    return {
+        ...legacy,
+        message: 'Analysis aborted — no partial results shown',
+        trace_id: resolvedTraceId
     };
 };
 
@@ -4459,6 +4578,15 @@ const mapErrorToAbortReason = (errorType, errorMessage = '') => {
     if (lowerError.includes('timeout') || lowerMessage.includes('timeout') ||
         lowerError.includes('timed out') || lowerMessage.includes('timed out')) {
         return ABORT_REASONS.TIMEOUT;
+    }
+
+    if (lowerError.includes('analysis_reliability_abort') ||
+        lowerError.includes('failed_chunk_count_exceeded') ||
+        lowerError.includes('synthetic_check_rate_exceeded') ||
+        lowerMessage.includes('reliability threshold') ||
+        lowerMessage.includes('failed chunk threshold exceeded') ||
+        lowerMessage.includes('synthetic check rate threshold exceeded')) {
+        return ABORT_REASONS.RELIABILITY_THRESHOLD_EXCEEDED;
     }
 
     // AI service errors (5xx, model unavailable)

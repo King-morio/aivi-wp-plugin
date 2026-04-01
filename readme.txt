@@ -4,7 +4,7 @@ Tags: ai, seo, structured-data, content-analysis, answer-engine
 Requires at least: 5.8
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.0.44
+Stable tag: 1.0.45
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -57,6 +57,12 @@ No. AiVI does not publish for you. The current overlay flow lets you review revi
 5. Use the Review Rail to inspect findings, open details, and act on recommendations.
 
 == Changelog ==
+
+= 1.0.45 =
+
+* kept the overlay editor steady while you copy Copilot variants and added a one-click action to copy the full overlay draft
+* preserved fuller analyzer explanations in Review Rail details and Copilot notes so issue guidance stays easier to understand and act on
+* stopped low-reliability analysis runs from surfacing misleading partials, and now shows a clearer rerun message when reliability drops too far
 
 = 1.0.44 =
 

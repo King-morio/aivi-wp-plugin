@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AiVI Super Admin Variant C - Operations Atlas</title>
+<style>
+  :root{--shell:#f8fafc;--ink:#16202d;--muted:#607082;--line:#d9e1ea;--navy:#12203a;--blue:#2c6edb;--mint:#197e60;--gold:#b37e26;--rose:#bf4f4f;--mist:#f6f8fb;--sand:#f6ecdb;--shadow:0 26px 72px rgba(22,32,45,.10);--shadow-soft:0 12px 30px rgba(22,32,45,.07)}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:linear-gradient(180deg,#f4f7fb 0%,#ebf0f6 100%);font-family:"Aptos","Segoe UI Variable Text","Segoe UI",sans-serif;color:var(--ink)}
+  body{padding:28px}
+  .shell{max-width:1480px;margin:0 auto;min-height:960px;background:var(--shell);border:1px solid rgba(18,32,58,.08);border-radius:30px;box-shadow:var(--shadow);overflow:hidden}
+  .header{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;padding:24px 26px;border-bottom:1px solid var(--line);background:radial-gradient(circle at right top, rgba(44,110,219,.14) 0, rgba(44,110,219,0) 30%),linear-gradient(180deg,#fbfcfe 0%,#f3f6fa 100%)}
+  .header h1{margin:8px 0 10px;font:700 38px/1 "Georgia","Cambria",serif;letter-spacing:-.05em;max-width:14ch}
+  .eyebrow{color:#6b788b;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.16em}
+  .header p{margin:0;color:var(--muted);line-height:1.6;max-width:68ch}
+  .hero-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+  .pill,.btn,.flag{display:inline-flex;align-items:center;min-height:38px;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:#fff;font-weight:700;font-size:13px}
+  .accent{background:var(--navy);border-color:var(--navy);color:#fff}
+  .header-side{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-content:start}
+  .stat,.card,.section{background:#fff;border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow-soft)}
+  .stat{padding:18px}
+  .stat strong{display:block;margin-top:10px;font-size:28px;letter-spacing:-.04em}
+  .body{display:grid;grid-template-columns:320px minmax(0,1fr);gap:18px;padding:22px}
+  .left,.right,.list,.timeline{display:grid;gap:16px;align-content:start}
+  .card-inner,.atlas,.section{padding:20px}
+  .site-card,.action-card,.health-card,.mini{padding:14px 16px;border-radius:18px;border:1px solid var(--line);background:#fff}
+  .site-card.active{background:linear-gradient(180deg,#eef4ff 0%,#fff 100%);border-color:#c1d2ee}
+  .meta{margin-top:6px;color:var(--muted);font-size:13px;line-height:1.5}
+  .mini-pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .flag{min-height:28px;padding:4px 10px;font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+  .ok{background:#ebf6f1;border-color:#bee0d1;color:var(--mint)} .warn{background:#fff2df;border-color:#ead1a2;color:var(--gold)} .risk{background:#ffeded;border-color:#efc2c2;color:var(--rose)} .soft{background:#edf4fb;border-color:#cadaef;color:#38536f}
+  .atlas{background:linear-gradient(180deg,#fff 0%,#f9fbfd 100%)}
+  .atlas-top{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}
+  .atlas h2{margin:8px 0 8px;font:700 34px/1 "Georgia","Cambria",serif;letter-spacing:-.045em}
+  .atlas p{margin:0;color:var(--muted);line-height:1.55;max-width:64ch}
+  .sections{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .section h3{margin:8px 0 6px;font-size:22px;letter-spacing:-.03em}
+  .timeline-item{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;padding:14px 16px;border:1px solid var(--line);border-radius:18px;background:var(--mist)}
+  .dot{width:10px;height:10px;border-radius:999px;margin-top:7px;background:var(--blue);box-shadow:0 0 0 6px rgba(44,110,219,.12)}
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px}
+  .mini strong{display:block;margin-top:6px;font-size:22px}
+  .note{padding:16px 18px;border-radius:18px;background:var(--sand);border:1px solid #e7d4ab;color:#714f1f;line-height:1.55}
+</style>
+</head>
+<body>
+  <div class="shell">
+    <div class="header">
+      <div>
+        <div class="eyebrow">AiVI Super Admin</div>
+        <h1>Operations Atlas</h1>
+        <p>This direction keeps the live account browser but shifts the main surface toward operational storytelling: site state, diagnostic pressure, actions, and recent interventions all grouped by task rhythm rather than by repeated white panels.</p>
+        <div class="hero-actions"><span class="btn accent">Northlight Media</span><span class="btn">Staging</span><span class="btn">API Mode</span><span class="btn">Refresh</span></div>
+      </div>
+      <div class="header-side">
+        <div class="stat"><div class="eyebrow">Accounts in focus</div><strong>214</strong></div>
+        <div class="stat"><div class="eyebrow">Active alerts</div><strong>11</strong></div>
+        <div class="stat"><div class="eyebrow">Replay eligible</div><strong>6</strong></div>
+        <div class="stat"><div class="eyebrow">Observed 30d revenue</div><strong>$4,780</strong></div>
+      </div>
+    </div>
+    <div class="body">
+      <aside class="left">
+        <section class="card"><div class="card-inner">
+          <div class="eyebrow">Account Browser</div><h3 style="margin:8px 0 0;font-size:24px">Live Sites</h3>
+          <div class="list" style="margin-top:16px">
+            <div class="site-card active"><strong>northlightmedia.com</strong><div class="meta">Primary site · Plugin 1.0.44</div><div class="mini-pills"><span class="flag ok">healthy</span><span class="flag soft">12 mins ago</span></div></div>
+            <div class="site-card"><strong>insights.northlightmedia.com</strong><div class="meta">Secondary site · Plugin 1.0.43</div><div class="mini-pills"><span class="flag warn">upgrade</span><span class="flag soft">1 hr ago</span></div></div>
+            <div class="site-card"><strong>staging.northlightmedia.com</strong><div class="meta">Staging site · Binding drift detected</div><div class="mini-pills"><span class="flag risk">conflict</span><span class="flag soft">42 mins ago</span></div></div>
+          </div>
+        </div></section>
+        <section class="card"><div class="card-inner">
+          <div class="eyebrow">Operator Moves</div>
+          <div class="list" style="margin-top:14px">
+            <div class="action-card"><strong>Issue connection token</strong><div class="meta">Site lifecycle action</div></div>
+            <div class="action-card"><strong>Replay webhook queue</strong><div class="meta">6 recoverable items</div></div>
+            <div class="action-card"><strong>Adjust credits</strong><div class="meta">Fast manual intervention</div></div>
+          </div>
+        </div></section>
+      </aside>
+      <main class="right">
+        <section class="card atlas">
+          <div class="atlas-top">
+            <div><div class="eyebrow">Focused Workspace</div><h2>Northlight Media</h2><p>This version de-emphasizes accordion chrome and treats the current center column more like an operational atlas. The structure stays familiar, but the relationships between state, action, and history become easier to scan.</p></div>
+            <div class="note" style="max-width:300px"><strong>Best fit</strong><br>Choose this if AiVI super admin should feel more like a control room than a CRM-lite customer sheet.</div>
+          </div>
+        </section>
+        <div class="sections">
+          <section class="section"><div class="eyebrow">Health Overview</div><h3>Current account posture</h3><div class="grid"><div class="mini"><div class="eyebrow">Subscription</div><strong>Growth active</strong></div><div class="mini"><div class="eyebrow">Credits</div><strong>9,420</strong></div><div class="mini"><div class="eyebrow">Conflicts</div><strong>1 active</strong></div><div class="mini"><div class="eyebrow">Plugin drift</div><strong>1 site behind</strong></div></div></section>
+          <section class="section"><div class="eyebrow">Diagnostics Lane</div><h3>What deserves action</h3><div class="list" style="margin-top:16px"><div class="health-card"><strong>Webhook failures</strong><div class="meta">2 failed events tied to billing sync.</div></div><div class="health-card"><strong>Replay queue</strong><div class="meta">6 events can be replayed without a destructive move.</div></div><div class="health-card"><strong>Site binding conflict</strong><div class="meta">Staging host needs relationship cleanup.</div></div></div></section>
+          <section class="section"><div class="eyebrow">Operator Timeline</div><h3>Recent interventions</h3><div class="timeline"><div class="timeline-item"><div class="dot"></div><div><strong>Manual replay requested</strong><div class="meta">14 mins ago · Ops</div></div></div><div class="timeline-item"><div class="dot" style="background:var(--gold);box-shadow:0 0 0 6px rgba(179,126,38,.12)"></div><div><strong>Plugin upgrade suggested</strong><div class="meta">42 mins ago · System</div></div></div><div class="timeline-item"><div class="dot" style="background:var(--mint);box-shadow:0 0 0 6px rgba(25,126,96,.12)"></div><div><strong>Credit note added</strong><div class="meta">Yesterday · Finance</div></div></div></div></section>
+          <section class="section"><div class="eyebrow">Billing View</div><h3>Revenue and credit shape</h3><div class="grid"><div class="mini"><div class="eyebrow">Included remaining</div><strong>7,900</strong></div><div class="mini"><div class="eyebrow">Top-up remaining</div><strong>1,520</strong></div><div class="mini"><div class="eyebrow">Reserved</div><strong>240</strong></div><div class="mini"><div class="eyebrow">Used this month</div><strong>3,811</strong></div></div></section>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

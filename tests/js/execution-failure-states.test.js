@@ -28,6 +28,13 @@ const {
 
 describe('Execution & Failure States', () => {
     let consoleLogs;
+    const reliabilityAbortMessages = [
+        'This run did not meet AiVI\'s reliability standard, so we stopped it instead of returning an ambiguous partial. Please try again.',
+        'AiVI paused this run after repeated processing failures. Rather than show a misleading partial result, we recommend running the analysis again.',
+        'We stopped this analysis because the result quality dropped below our reliability threshold. Please run it again to get a cleaner result.',
+        'AiVI aborted this analysis rather than surface a result that could mislead your editorial decision. Please run it again.',
+        'This analysis was stopped because the draft hit too many processing failures to return a result we\'d trust. Please run the analysis again.'
+    ];
 
     beforeEach(() => {
         consoleLogs = [];
@@ -386,6 +393,33 @@ describe('Execution & Failure States', () => {
             expect(mapErrorToAbortReason('unknown_error')).toBe('internal_error');
             expect(mapErrorToAbortReason('')).toBe('internal_error');
             expect(mapErrorToAbortReason(null)).toBe('internal_error');
+        });
+
+        test('should map reliability abort signals to reliability_threshold_exceeded', () => {
+            expect(mapErrorToAbortReason('analysis_reliability_abort')).toBe('reliability_threshold_exceeded');
+            expect(mapErrorToAbortReason('failed_chunk_count_exceeded')).toBe('reliability_threshold_exceeded');
+            expect(mapErrorToAbortReason('synthetic_check_rate_exceeded')).toBe('reliability_threshold_exceeded');
+            expect(mapErrorToAbortReason('failed', 'analysis aborted after reliability threshold exceeded')).toBe('reliability_threshold_exceeded');
+        });
+    });
+
+    describe('Reliability abort messaging', () => {
+        test('reliability abort summary chooses one approved message', () => {
+            const summary = generateAbortedSummary('run-reliability-1', ABORT_REASONS.RELIABILITY_THRESHOLD_EXCEEDED, 'trace-reliability-1');
+
+            expect(summary.status).toBe('aborted');
+            expect(summary.reason).toBe('reliability_threshold_exceeded');
+            expect(reliabilityAbortMessages).toContain(summary.message);
+        });
+
+        test('reliability abort details response uses the same approved message for the same run', () => {
+            const runId = 'run-reliability-2';
+            const traceId = 'trace-reliability-2';
+            const summary = generateAbortedSummary(runId, ABORT_REASONS.RELIABILITY_THRESHOLD_EXCEEDED, traceId);
+            const details = generateAbortedDetailsResponse(runId, ABORT_REASONS.RELIABILITY_THRESHOLD_EXCEEDED, traceId);
+
+            expect(reliabilityAbortMessages).toContain(details.message);
+            expect(details.message).toBe(summary.message);
         });
     });
 });

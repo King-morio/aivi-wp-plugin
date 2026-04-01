@@ -106,9 +106,9 @@
     };
 
     const NAV_ITEMS = [
-        { view: 'overview', label: 'Overview', hint: 'Session and auth', sectionId: 'section-overview' },
+        { view: 'overview', label: 'Dashboard', hint: 'Session and account state', sectionId: 'section-overview' },
         { view: 'accounts', label: 'Accounts', hint: 'Customer state', sectionId: 'section-accounts' },
-        { view: 'operations', label: 'Actions', hint: 'Mutations and recovery', sectionId: 'section-operations' },
+        { view: 'operations', label: 'Operations', hint: 'Mutations and recovery', sectionId: 'section-operations' },
         { view: 'diagnostics', label: 'Diagnostics', hint: 'Webhook and run health', sectionId: 'section-diagnostics' },
         { view: 'billing', label: 'Billing', hint: 'Credits and subscriptions', sectionId: 'section-billing' },
         { view: 'audit', label: 'Audit', hint: 'Operator history', sectionId: 'section-audit' }
@@ -770,6 +770,14 @@
         return card;
     };
 
+    const renderFocusMini = (label, value, detail) => {
+        const card = el('div', 'focus-mini');
+        card.appendChild(el('div', 'metric-label', label));
+        card.appendChild(el('div', 'focus-mini__value', value));
+        if (detail) card.appendChild(el('div', 'metric-detail', detail));
+        return card;
+    };
+
     const renderFinancialMiniMetric = (label, value, copy) => {
         const card = el('div', 'financials-mini');
         card.appendChild(el('div', 'metric-label', label));
@@ -1066,7 +1074,7 @@
         brand.appendChild(badge);
         const brandCopy = el('div', 'rail-brand__copy');
         brandCopy.appendChild(el('div', 'rail-brand__title', 'AiVI'));
-        brandCopy.appendChild(el('div', 'rail-brand__subtitle', 'Operator console'));
+        brandCopy.appendChild(el('div', 'rail-brand__subtitle', 'Control room'));
         brand.appendChild(brandCopy);
         aside.appendChild(brand);
 
@@ -1103,42 +1111,48 @@
     };
 
     const renderTopbar = () => {
-        const header = el('header', 'workspace-topbar');
+        const header = el('header', 'workspace-topbar workspace-topbar--control');
 
-        const copy = el('div', 'workspace-topbar__copy');
-        copy.appendChild(el('div', 'workspace-topbar__eyebrow', 'Minimal SaaS direction'));
-        copy.appendChild(el('h1', 'workspace-topbar__title', 'Compact operations board'));
-        copy.appendChild(el('div', 'workspace-topbar__meta', state.accountDetail
-            ? `Focused on ${state.accountDetail.account_label || state.accountDetail.account_id}. Keep one customer and one task in view at a time.`
-            : 'Review accounts, credits, billing, and recovery from a calmer single workspace.'));
-        header.appendChild(copy);
-
-        const actions = el('div', 'workspace-topbar__actions');
-        [
-            ['accounts', 'Accounts'],
-            ['operations', 'Actions'],
-            ['diagnostics', 'Diagnostics'],
-            ['billing', 'Billing'],
-            ['audit', 'Audit']
-        ].forEach(([view, label]) => {
-            const button = el('button', state.currentView === view ? 'primary-button workspace-nav-button' : 'secondary-button workspace-nav-button', label);
-            button.type = 'button';
-            button.addEventListener('click', () => setCurrentView(view));
-            actions.appendChild(button);
+        const search = el('label', 'topbar-search');
+        const searchInput = el('input', 'topbar-search__input');
+        searchInput.type = 'search';
+        searchInput.placeholder = 'Search everything: account, domain, site ID, email, plugin version, webhook event...';
+        searchInput.value = state.filters.query || '';
+        searchInput.addEventListener('input', (event) => {
+            state.filters.query = event.target.value;
         });
+        searchInput.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            state.currentView = 'accounts';
+            loadAccounts({ resetPaging: true, focusAccountList: true });
+        });
+        search.appendChild(searchInput);
+        header.appendChild(search);
 
-        const envPill = el('span', 'workspace-chip', titleCase(runtime.environment, 'Local'));
-        actions.appendChild(envPill);
-        const modePill = el('span', 'workspace-chip workspace-chip--accent', state.session.mode === 'preview' ? 'Preview data' : 'API mode');
-        actions.appendChild(modePill);
+        const actions = el('div', 'topbar-control-actions');
+        actions.appendChild(el('span', 'workspace-chip workspace-chip--control', titleCase(runtime.environment, 'Local')));
+        actions.appendChild(el('span', 'workspace-chip workspace-chip--control workspace-chip--accent', state.session.mode === 'preview' ? 'Preview data' : 'API mode'));
 
-        const refreshButton = el('button', 'secondary-button workspace-refresh', state.loading ? 'Refreshing...' : 'Refresh');
+        const financialsButton = el('button', state.financials.overlayOpen ? 'primary-button' : 'secondary-button', 'Financials');
+        financialsButton.type = 'button';
+        financialsButton.setAttribute('aria-haspopup', 'dialog');
+        financialsButton.setAttribute('aria-expanded', state.financials.overlayOpen ? 'true' : 'false');
+        financialsButton.addEventListener('click', openFinancialsOverlay);
+        actions.appendChild(financialsButton);
+
+        const quickActionButton = el('button', 'secondary-button', 'Quick action');
+        quickActionButton.type = 'button';
+        quickActionButton.addEventListener('click', () => setCurrentView('operations'));
+        actions.appendChild(quickActionButton);
+
+        const refreshButton = el('button', 'primary-button workspace-refresh', state.loading ? 'Refreshing...' : 'Refresh');
         refreshButton.type = 'button';
         refreshButton.disabled = state.loading;
         refreshButton.addEventListener('click', loadAccounts);
         actions.appendChild(refreshButton);
-        header.appendChild(actions);
 
+        header.appendChild(actions);
         return header;
     };
 
@@ -2069,14 +2083,14 @@
         const fallbackName = selected?.account_label || selected?.account_id || 'selected account';
         const views = {
             overview: {
-                eyebrow: 'Overview',
-                title: 'Workspace overview',
-                copy: 'Keep session state, auth posture, and the selected account in view without the rest of the console competing for attention.'
+                eyebrow: 'Dashboard',
+                title: 'Control room overview',
+                copy: 'Keep the selected account, operator posture, and the current diagnostic pressure in one screen without fighting a long account-list column.'
             },
             accounts: {
                 eyebrow: 'Account workspace',
                 title: `Account and site detail for ${fallbackName}`,
-                copy: 'Focus on one customer at a time, with account state and connected sites in a single scrollable reading area.'
+                copy: 'Browse customers when you need to, then keep account state and connected sites together in the main canvas.'
             },
             operations: {
                 eyebrow: 'Operator actions',
@@ -2100,6 +2114,74 @@
             }
         };
         return views[state.currentView] || views.accounts;
+    };
+
+    const renderAccountJumpPanel = () => {
+        if (!Array.isArray(state.accounts) || state.accounts.length === 0) return null;
+
+        const panel = el('section', 'panel account-ribbon-panel');
+        panel.appendChild(el('div', 'panel-label', 'Quick switch'));
+        panel.appendChild(el('h2', 'panel-title', 'Switch accounts without leaving this workspace'));
+        panel.appendChild(el('p', 'panel-text', 'Keep a few live accounts in reach here. Use the Accounts workspace when you need deeper browsing or filtering.'));
+
+        const strip = el('div', 'account-ribbon');
+        const selectedId = state.selectedAccountId;
+        const ordered = [...state.accounts].sort((left, right) => {
+            if (left.account_id === selectedId) return -1;
+            if (right.account_id === selectedId) return 1;
+            return 0;
+        }).slice(0, 5);
+
+        ordered.forEach((account) => {
+            const item = el('button', `account-ribbon__item${account.account_id === selectedId ? ' account-ribbon__item--active' : ''}`);
+            item.type = 'button';
+            item.addEventListener('click', () => loadAccountDetail(account.account_id));
+            item.appendChild(el('strong', 'account-ribbon__title', account.account_label || account.account_id));
+            item.appendChild(el('div', 'account-ribbon__meta', `${account.plan_name || titleCase(account.plan_code, 'No plan')} · ${String(account.site_count || 0)} sites`));
+            strip.appendChild(item);
+        });
+
+        panel.appendChild(strip);
+        return panel;
+    };
+
+    const renderControlAlert = (detail, diagnostics) => {
+        const alert = el('div', 'control-alert');
+
+        if (state.session.mode === 'api' && !state.session.connected) {
+            alert.classList.add('control-alert--neutral');
+            alert.appendChild(el('div', 'control-alert__copy', 'Sign in to load live admin data and bring the selected account, sites, and operator context into focus.'));
+            return alert;
+        }
+
+        if (!detail) {
+            alert.classList.add('control-alert--neutral');
+            alert.appendChild(el('div', 'control-alert__copy', 'Choose an account to load its customer, site, billing, and operator context into the control room.'));
+            return alert;
+        }
+
+        const conflictCount = (diagnostics?.site_binding_conflicts || []).length;
+        const failureCount = Number(diagnostics?.webhook_health?.failed_count || 0);
+        const replayEligibleCount = Number(diagnostics?.webhook_health?.replay_eligible_count || 0);
+        const fragments = [];
+        if (failureCount > 0) fragments.push(`${failureCount} unresolved webhook failure${failureCount === 1 ? '' : 's'}`);
+        if (conflictCount > 0) fragments.push(`${conflictCount} site binding conflict${conflictCount === 1 ? '' : 's'}`);
+        if (replayEligibleCount > 0) fragments.push(`${replayEligibleCount} replay-eligible event${replayEligibleCount === 1 ? '' : 's'}`);
+
+        if (fragments.length === 0) {
+            alert.classList.add('control-alert--success');
+            alert.appendChild(el('div', 'control-alert__copy', `${detail.account_label || detail.account_id} is stable across connected sites, credits, and recent run health.`));
+            return alert;
+        }
+
+        alert.classList.add(failureCount > 0 || conflictCount > 0 ? 'control-alert--danger' : 'control-alert--warning');
+        alert.appendChild(el('div', 'control-alert__copy', `${detail.account_label || detail.account_id} has ${fragments.join(', ')}.`));
+        const action = el('button', 'control-alert__action');
+        action.type = 'button';
+        action.textContent = 'Open diagnostics';
+        action.addEventListener('click', () => setCurrentView('diagnostics'));
+        alert.appendChild(action);
+        return alert;
     };
 
     const renderSectionPill = (label, tone = 'neutral') => {
@@ -2126,6 +2208,113 @@
         return section;
     };
 
+    const buildWorkspaceSectionsForView = (detail, diagnostics) => {
+        const sections = [];
+
+        if (state.currentView === 'overview') {
+            const overviewBundle = el('div', 'workspace-focus-stack');
+            overviewBundle.appendChild(asEmbeddedPanel(renderOperatorSummary()));
+            overviewBundle.appendChild(asEmbeddedPanel(renderAuthModelPanel()));
+            sections.push(renderWorkspaceSection({
+                title: 'Session and auth',
+                badge: state.session.mode === 'preview' ? 'Preview' : 'API mode',
+                badgeTone: state.session.mode === 'preview' ? 'warning' : 'neutral',
+                panel: overviewBundle,
+                open: true
+            }));
+
+            sections.push(renderWorkspaceSection({
+                title: 'Account summary',
+                badge: titleCase(detail.plan.subscription_status, 'Unknown'),
+                badgeTone: STATUS_TONES[String(detail.plan.subscription_status || '').toLowerCase()] || 'neutral',
+                panel: renderOverviewPanel(detail),
+                open: true
+            }));
+
+            return sections;
+        }
+
+        if (state.currentView === 'accounts') {
+            sections.push(renderWorkspaceSection({
+                title: 'Account summary',
+                badge: titleCase(detail.plan.subscription_status, 'Unknown'),
+                badgeTone: STATUS_TONES[String(detail.plan.subscription_status || '').toLowerCase()] || 'neutral',
+                panel: renderOverviewPanel(detail),
+                open: true
+            }));
+
+            sections.push(renderWorkspaceSection({
+                title: 'Connected sites',
+                badge: `${(detail.sites || []).length} items`,
+                panel: renderSiteDetailPanel(detail),
+                open: true
+            }));
+
+            return sections;
+        }
+
+        if (state.currentView === 'operations') {
+            sections.push(renderWorkspaceSection({
+                title: 'Site lifecycle',
+                badge: state.actionDraft.action === 'issue_connection_token' ? 'Token flow' : 'Operator guided',
+                badgeTone: (diagnostics?.site_binding_conflicts || []).length > 0 ? 'warning' : 'neutral',
+                panel: renderSiteLifecyclePanel(detail, diagnostics),
+                open: true
+            }));
+
+            sections.push(renderWorkspaceSection({
+                title: 'Actions and recovery',
+                badge: 'Operator tools',
+                panel: (() => {
+                    const bundle = el('div', 'workspace-focus-stack');
+                    bundle.appendChild(asEmbeddedPanel(renderActionPanel(detail)));
+                    if (diagnostics) {
+                        bundle.appendChild(asEmbeddedPanel(renderRecoveryPanel(diagnostics)));
+                    }
+                    return bundle;
+                })(),
+                open: true
+            }));
+
+            return sections;
+        }
+
+        if (state.currentView === 'diagnostics') {
+            sections.push(renderWorkspaceSection({
+                title: 'Diagnostics and run health',
+                badge: diagnostics ? `${Number(diagnostics.webhook_health?.failed_count || 0)} webhook issues` : 'Unavailable',
+                badgeTone: diagnostics && Number(diagnostics.webhook_health?.failed_count || 0) > 0 ? 'danger' : 'neutral',
+                panel: diagnostics ? renderDiagnosticsPanel(diagnostics) : el('div', 'empty-state', 'Diagnostics are not available yet for this account.'),
+                open: true
+            }));
+
+            return sections;
+        }
+
+        if (state.currentView === 'billing') {
+            sections.push(renderWorkspaceSection({
+                title: 'Billing and discounts',
+                badge: detail.plan.plan_name || titleCase(detail.plan.plan_code, 'Plan'),
+                panel: renderBillingPanel(detail),
+                open: true
+            }));
+
+            return sections;
+        }
+
+        if (state.currentView === 'audit') {
+            sections.push(renderWorkspaceSection({
+                title: 'Audit and recovery history',
+                badge: Array.isArray(detail.audit?.recent_events) && detail.audit.recent_events.length ? 'Recent activity' : 'No events',
+                badgeTone: Array.isArray(detail.audit?.recent_events) && detail.audit.recent_events.length ? 'success' : 'neutral',
+                panel: renderAuditPanel(detail),
+                open: true
+            }));
+        }
+
+        return sections;
+    };
+
     const renderFocusedWorkspace = (detail, diagnostics) => {
         const panel = el('section', 'panel workspace-focus-panel');
         const meta = getFocusViewMeta();
@@ -2146,78 +2335,9 @@
             return panel;
         }
 
-        if (state.currentView === 'overview') {
-            const overviewBundle = el('div', 'workspace-focus-stack');
-            overviewBundle.appendChild(asEmbeddedPanel(renderOperatorSummary()));
-            overviewBundle.appendChild(asEmbeddedPanel(renderAuthModelPanel()));
-            stack.appendChild(renderWorkspaceSection({
-                title: 'Session and auth',
-                badge: state.session.mode === 'preview' ? 'Preview' : 'API mode',
-                badgeTone: state.session.mode === 'preview' ? 'warning' : 'neutral',
-                panel: overviewBundle,
-                open: true
-            }));
-        }
-
-        stack.appendChild(renderWorkspaceSection({
-            title: 'Account summary',
-            badge: titleCase(detail.plan.subscription_status, 'Unknown'),
-            badgeTone: STATUS_TONES[String(detail.plan.subscription_status || '').toLowerCase()] || 'neutral',
-            panel: renderOverviewPanel(detail),
-            open: state.currentView === 'overview' || state.currentView === 'accounts'
-        }));
-
-        stack.appendChild(renderWorkspaceSection({
-            title: 'Connected sites',
-            badge: `${(detail.sites || []).length} items`,
-            panel: renderSiteDetailPanel(detail),
-            open: state.currentView === 'accounts'
-        }));
-
-        stack.appendChild(renderWorkspaceSection({
-            title: 'Site lifecycle',
-            badge: state.actionDraft.action === 'issue_connection_token' ? 'Token flow' : 'Operator guided',
-            badgeTone: (diagnostics?.site_binding_conflicts || []).length > 0 ? 'warning' : 'neutral',
-            panel: renderSiteLifecyclePanel(detail, diagnostics),
-            open: state.currentView === 'accounts' || state.currentView === 'operations'
-        }));
-
-        stack.appendChild(renderWorkspaceSection({
-            title: 'Billing and discounts',
-            badge: detail.plan.plan_name || titleCase(detail.plan.plan_code, 'Plan'),
-            panel: renderBillingPanel(detail),
-            open: state.currentView === 'billing'
-        }));
-
-        stack.appendChild(renderWorkspaceSection({
-            title: 'Actions and recovery',
-            badge: 'Operator tools',
-            panel: (() => {
-                const bundle = el('div', 'workspace-focus-stack');
-                bundle.appendChild(asEmbeddedPanel(renderActionPanel(detail)));
-                if (diagnostics) {
-                    bundle.appendChild(asEmbeddedPanel(renderRecoveryPanel(diagnostics)));
-                }
-                return bundle;
-            })(),
-            open: state.currentView === 'operations'
-        }));
-
-        stack.appendChild(renderWorkspaceSection({
-            title: 'Diagnostics and run health',
-            badge: diagnostics ? `${Number(diagnostics.webhook_health?.failed_count || 0)} webhook issues` : 'Unavailable',
-            badgeTone: diagnostics && Number(diagnostics.webhook_health?.failed_count || 0) > 0 ? 'danger' : 'neutral',
-            panel: diagnostics ? renderDiagnosticsPanel(diagnostics) : el('div', 'empty-state', 'Diagnostics are not available yet for this account.'),
-            open: state.currentView === 'diagnostics'
-        }));
-
-        stack.appendChild(renderWorkspaceSection({
-            title: 'Audit and recovery history',
-            badge: Array.isArray(detail.audit?.recent_events) && detail.audit.recent_events.length ? 'Recent activity' : 'No events',
-            badgeTone: Array.isArray(detail.audit?.recent_events) && detail.audit.recent_events.length ? 'success' : 'neutral',
-            panel: renderAuditPanel(detail),
-            open: state.currentView === 'audit'
-        }));
+        buildWorkspaceSectionsForView(detail, diagnostics).forEach((section) => {
+            stack.appendChild(section);
+        });
 
         scroll.appendChild(stack);
         panel.appendChild(scroll);
@@ -2227,46 +2347,23 @@
     const renderContextRail = (detail, diagnostics) => {
         const rail = el('div', 'action-rail-stack');
 
-        const shortcuts = el('section', 'panel context-rail-card');
-        shortcuts.appendChild(el('div', 'panel-label', 'Action rail'));
-        shortcuts.appendChild(el('h2', 'panel-title', 'Focused tools'));
-        shortcuts.appendChild(el('p', 'panel-text', 'Keep intervention tools and context cards separate from the main workspace.'));
-        const shortcutActions = el('div', 'panel-actions');
-        [
-            ['accounts', 'Account'],
-            ['operations', 'Actions'],
-            ['diagnostics', 'Diagnostics'],
-            ['billing', 'Billing'],
-            ['audit', 'Audit']
-        ].forEach(([view, label]) => {
-            const button = el('button', state.currentView === view ? 'primary-button' : 'secondary-button', label);
-            button.type = 'button';
-            button.addEventListener('click', () => setCurrentView(view));
-            shortcutActions.appendChild(button);
-        });
-        shortcuts.appendChild(shortcutActions);
-        rail.appendChild(shortcuts);
-
         if (!detail) {
             const emptyCard = el('section', 'panel context-rail-card');
-            emptyCard.appendChild(el('div', 'panel-label', 'Selected account'));
+            emptyCard.appendChild(el('div', 'panel-label', 'Context rail'));
             emptyCard.appendChild(el('h2', 'panel-title', 'Waiting for focus'));
-            emptyCard.appendChild(el('div', 'empty-state empty-state--compact', 'Select an account to populate the action rail.'));
+            emptyCard.appendChild(el('div', 'empty-state empty-state--compact', 'Select an account to populate the context rail.'));
             rail.appendChild(emptyCard);
             return rail;
         }
 
         const accountCard = el('section', 'panel context-rail-card');
-        accountCard.appendChild(el('div', 'panel-label', 'Account status'));
+        accountCard.appendChild(el('div', 'panel-label', 'Selected account'));
         accountCard.appendChild(el('h3', 'context-card__title', detail.account_label || detail.account_id));
-        accountCard.appendChild(el('div', 'status-group', ''));
-        const accountStatus = accountCard.lastChild;
+        accountCard.appendChild(el('div', 'muted', `${detail.plan.plan_name || titleCase(detail.plan.plan_code, 'No plan')} · ${String((detail.sites || []).length)} sites connected`));
+        const accountStatus = el('div', 'status-group');
         accountStatus.appendChild(renderStatusPill(detail.plan.subscription_status));
         accountStatus.appendChild(renderStatusPill(detail.plan.trial_status));
-        const miniMetrics = el('div', 'mini-metrics');
-        miniMetrics.appendChild(renderMetricCard('Credits', formatNumber(detail.credits.total_remaining)));
-        miniMetrics.appendChild(renderMetricCard('Sites', String((detail.sites || []).length)));
-        accountCard.appendChild(miniMetrics);
+        accountCard.appendChild(accountStatus);
         rail.appendChild(accountCard);
 
         const primarySite = (detail.sites || [])[0];
@@ -2341,15 +2438,9 @@
     const renderBody = () => {
         const body = el('div', 'workspace-sections');
 
-        const content = el('div', 'content-layout content-layout--focused');
+        const content = el('div', 'content-layout content-layout--control-room');
 
-        const sidebar = el('div', 'content-sidebar content-sidebar--focused');
-        const browserPanel = renderAccountBrowserPanel();
-        browserPanel.id = 'section-accounts';
-        sidebar.appendChild(browserPanel);
-        content.appendChild(sidebar);
-
-        const main = el('div', 'content-main content-main--focused');
+        const main = el('div', 'content-main content-main--control-room');
         if (state.session.mode === 'api' && !state.session.connected) {
             const gateWorkspace = el('section', 'panel workspace-focus-panel');
             gateWorkspace.id = 'section-overview';
@@ -2377,11 +2468,20 @@
             gateWorkspace.appendChild(scroll);
             main.appendChild(gateWorkspace);
         } else {
+            if (state.currentView === 'accounts') {
+                const browserPanel = renderAccountBrowserPanel();
+                browserPanel.id = 'section-accounts';
+                browserPanel.classList.add('account-browser-panel--workspace');
+                main.appendChild(browserPanel);
+            } else {
+                const accountJumpPanel = renderAccountJumpPanel();
+                if (accountJumpPanel) main.appendChild(accountJumpPanel);
+            }
             main.appendChild(renderFocusedWorkspace(state.accountDetail, state.accountDiagnostics));
         }
         content.appendChild(main);
 
-        const rail = el('div', 'content-rail');
+        const rail = el('div', 'content-rail content-rail--control-room');
         if (state.session.mode === 'api' && !state.session.connected) {
             const gateRail = el('section', 'panel context-rail panel--scroll-shell');
             gateRail.appendChild(el('div', 'panel-label', 'Action rail'));
@@ -2406,24 +2506,54 @@
     const renderHero = () => {
         const rollup = getAccountRollup();
         const financialOverview = state.financials.item;
-        const hero = el('section', 'hero hero--metrics');
+        const detail = state.accountDetail;
+        const diagnostics = state.accountDiagnostics;
+        const hero = el('section', 'hero hero--control-room');
         hero.id = 'section-hero';
 
-        const kpis = el('div', 'hero-kpis');
-        kpis.appendChild(renderQuickStat('Accounts', formatNumber(rollup.totalAccounts)));
-        kpis.appendChild(renderQuickStat('Paid', formatNumber(rollup.activeAccounts)));
-        kpis.appendChild(renderQuickStat('Trial', formatNumber(rollup.trialAccounts)));
-        kpis.appendChild(renderMetricButton({
-            label: 'Financials',
-            value: state.financials.loading ? 'Loading…' : rollup.projectedMrr,
-            detail: financialOverview
-                ? `${formatCurrencyUsd(financialOverview.observed_checkout_revenue?.last_30d_usd)} observed in 30d`
-                : 'Projected MRR plus revenue health. Click to open.',
-            onClick: openFinancialsOverlay,
-            active: state.financials.overlayOpen
-        }));
-        kpis.appendChild(renderQuickStat('Alerts', formatNumber(rollup.alertCount)));
-        hero.appendChild(kpis);
+        hero.appendChild(renderControlAlert(detail, diagnostics));
+
+        const focusGrid = el('div', 'control-focus-grid');
+
+        const focusCard = el('section', 'focus-card');
+        focusCard.appendChild(el('div', 'eyebrow', detail ? 'Dashboard focus' : 'Dashboard'));
+        focusCard.appendChild(el('h1', 'focus-card__title', detail ? (detail.account_label || detail.account_id) : 'AiVI control room'));
+        focusCard.appendChild(el('p', 'panel-text', detail
+            ? 'Selected account context stays visible here while you move between customer, billing, diagnostics, and audit surfaces.'
+            : 'Use the left navigation to move between the major admin surfaces without keeping a long customer list permanently exposed.'));
+        const tags = el('div', 'focus-tags');
+        if (detail) {
+            tags.appendChild(renderStatusPill(detail.plan.subscription_status));
+            tags.appendChild(renderStatusPill(detail.plan.plan_name || titleCase(detail.plan.plan_code, 'No plan')));
+            tags.appendChild(renderStatusPill(`${(detail.sites || []).length} sites`));
+        } else {
+            tags.appendChild(renderStatusPill(titleCase(state.session.mode, 'Preview')));
+            tags.appendChild(renderStatusPill(`${formatNumber(rollup.totalAccounts)} accounts`));
+        }
+        focusCard.appendChild(tags);
+        focusGrid.appendChild(focusCard);
+
+        const statusCard = el('section', 'focus-status-card');
+        statusCard.appendChild(el('div', 'eyebrow', 'System snapshot'));
+        statusCard.appendChild(el('p', 'panel-text', detail
+            ? 'Live operator snapshot across the wider control plane.'
+            : 'High-level operator context stays visible even before an account is selected.'));
+        const metrics = el('div', 'focus-status-grid');
+        metrics.appendChild(renderFocusMini('Accounts', formatNumber(rollup.totalAccounts)));
+        metrics.appendChild(renderFocusMini('Alerts', formatNumber(rollup.alertCount)));
+        metrics.appendChild(renderFocusMini('Paid', formatNumber(rollup.activeAccounts), 'Active subscriptions'));
+        metrics.appendChild(renderFocusMini('Financials', state.financials.loading ? 'Loading…' : rollup.projectedMrr, financialOverview
+            ? `${formatCurrencyUsd(financialOverview.observed_checkout_revenue?.last_30d_usd)} observed in 30d`
+            : 'Projected MRR plus revenue health'));
+        statusCard.appendChild(metrics);
+
+        const financialButton = el('button', state.financials.overlayOpen ? 'primary-button control-room-financials' : 'secondary-button control-room-financials', 'Open financials');
+        financialButton.type = 'button';
+        financialButton.addEventListener('click', openFinancialsOverlay);
+        statusCard.appendChild(financialButton);
+        focusGrid.appendChild(statusCard);
+
+        hero.appendChild(focusGrid);
         return hero;
     };
 
@@ -2431,7 +2561,7 @@
         const root = document.getElementById('app');
         clear(root);
 
-        const shell = el('div', 'console-shell console-shell--compact');
+        const shell = el('div', 'console-shell');
 
         const page = el('main', 'page-shell');
         page.appendChild(renderTopbar());
@@ -2442,6 +2572,7 @@
 
         page.appendChild(renderBody());
 
+        shell.appendChild(renderRail());
         shell.appendChild(page);
         const financialsOverlay = renderFinancialsOverlay();
         if (financialsOverlay) shell.appendChild(financialsOverlay);

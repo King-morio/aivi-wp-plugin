@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AiVI Super Admin UI Compare</title>
+<style>
+  :root{--ink:#182331;--muted:#617082;--line:#d7e0ea}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:linear-gradient(180deg,#f5f7fb 0%,#ebf0f6 100%);font-family:"Aptos","Segoe UI Variable Text","Segoe UI",sans-serif;color:var(--ink)}
+  body{padding:34px}
+  .wrap{max-width:1260px;margin:0 auto}
+  .hero{padding:28px 30px;border:1px solid var(--line);border-radius:28px;background:radial-gradient(circle at top right, rgba(31,94,187,.12) 0, rgba(31,94,187,0) 30%),linear-gradient(180deg,#fff 0%,#f8fafc 100%);box-shadow:0 20px 56px rgba(24,35,49,.08)}
+  .hero h1{margin:10px 0 10px;font:700 40px/1 "Georgia","Cambria",serif;letter-spacing:-.05em;max-width:14ch}
+  .hero p,.card p,.note{margin:0;color:var(--muted);line-height:1.65}
+  .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:22px}
+  .card{padding:22px;border:1px solid var(--line);border-radius:24px;background:#fff;box-shadow:0 12px 32px rgba(24,35,49,.06)}
+  .eyebrow{color:#6c788b;text-transform:uppercase;letter-spacing:.16em;font-size:11px;font-weight:800}
+  .card h2{margin:10px 0 10px;font-size:26px;line-height:1.1;letter-spacing:-.04em}
+  .tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .tag{display:inline-flex;align-items:center;min-height:30px;padding:4px 10px;border-radius:999px;background:#edf4fb;border:1px solid #cadaef;color:#36526e;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+  .link{display:inline-flex;align-items:center;min-height:42px;margin-top:18px;padding:10px 16px;border-radius:999px;background:#14223b;color:#fff;text-decoration:none;font-weight:800}
+  .note{margin-top:22px;padding:18px 20px;border-radius:22px;background:#f6edde;border:1px solid #e7d4ab;color:#6e5124}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">AiVI Super Admin Static Review</div>
+      <h1>Choose the direction, not just the decoration.</h1>
+      <p>These comps are grounded in the live control-plane shell we inspected: left account browser, center focused workspace, right context rail. Each variant pushes the UI into a different CRM-ops personality without changing the underlying data model or workflows.</p>
+    </section>
+    <section class="grid">
+      <article class="card"><div class="eyebrow">Variant A</div><h2>Signal Desk</h2><p>The cleanest balance between CRM discipline and AiVI calmness. Best if you want the current 3-column shell to remain familiar while becoming much more intentional.</p><div class="tags"><span class="tag">Balanced</span><span class="tag">Best first pass</span><span class="tag">Calm</span></div><a class="link" href="AIVI_SUPER_ADMIN_UI_VARIANT_A_SIGNAL_DESK.html">Open Variant A</a></article>
+      <article class="card"><div class="eyebrow">Variant B</div><h2>Account Cockpit</h2><p>The strongest CRM-style direction. The center becomes a customer command surface with clearer stewardship energy and a more premium cockpit feel.</p><div class="tags"><span class="tag">CRM leaning</span><span class="tag">Premium</span><span class="tag">Relationship-first</span></div><a class="link" href="AIVI_SUPER_ADMIN_UI_VARIANT_B_ACCOUNT_COCKPIT.html">Open Variant B</a></article>
+      <article class="card"><div class="eyebrow">Variant C</div><h2>Operations Atlas</h2><p>The most operations-driven direction. Strong if diagnostics, interventions, and recovery posture should visually lead the experience more than account stewardship.</p><div class="tags"><span class="tag">Ops-first</span><span class="tag">Control room</span><span class="tag">Structured</span></div><a class="link" href="AIVI_SUPER_ADMIN_UI_VARIANT_C_OPERATIONS_ATLAS.html">Open Variant C</a></article>
+      <article class="card"><div class="eyebrow">Variant D</div><h2>Control Room</h2><p>This one moves much closer to your reference: persistent dark left nav, top utility bar, alert banner, focused dashboard modules, and no permanently awkward account-list column.</p><div class="tags"><span class="tag">Closest yet</span><span class="tag">Control room</span><span class="tag">Nav-first</span></div><a class="link" href="AIVI_SUPER_ADMIN_UI_VARIANT_D_CONTROL_ROOM.html">Open Variant D</a></article>
+      <article class="card"><div class="eyebrow">Variant E</div><h2>Navigator Dashboard</h2><p>The closest direct borrow from the reference pattern. Left sidebar navigation stays fixed, while account components are pulled into the main canvas through focused modules.</p><div class="tags"><span class="tag">Reference-inspired</span><span class="tag">Effortless scan</span><span class="tag">Dashboard-first</span></div><a class="link" href="AIVI_SUPER_ADMIN_UI_VARIANT_E_NAVIGATOR_DASHBOARD.html">Open Variant E</a></article>
+    </section>
+    <div class="note"><strong>Grounding note</strong><br>These are UI-only concept files. They keep the live AiVI super-admin zones intact: account browser, focused workspace, contextual action rail, account/site/billing/diagnostic surfaces, and operator activity. The goal is to judge hierarchy, density, and tone before we touch runtime code.</div>
+  </div>
+</body>
+</html>

@@ -406,6 +406,11 @@ const stripAnalysisSummary = (summary) => {
     };
     if (summary.status === 'success_partial') {
         stripped.status = 'success_partial';
+    } else if (summary.status === 'aborted') {
+        stripped.status = 'aborted';
+        stripped.reason = summary.reason || null;
+        stripped.message = summary.message || null;
+        stripped.trace_id = summary.trace_id || null;
     }
     const partial = stripPartial(summary.partial);
     if (partial) {

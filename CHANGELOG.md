@@ -2,6 +2,14 @@
 
 All notable public-facing changes to the **AiVI - AI Visibility Inspector** WordPress plugin are documented in this file.
 
+## [1.0.45] - 2026-04-01
+
+### Overlay Stability And Reliability Guardrails
+
+- kept the overlay editor steady while you copy Copilot variants and added a one-click action to copy the full overlay draft
+- preserved fuller analyzer explanations in Review Rail details and Copilot notes so issue guidance stays easier to understand and act on
+- stopped low-reliability analysis runs from surfacing misleading partials, and now shows a clearer rerun message when reliability drops too far
+
 ## [1.0.44] - 2026-03-31
 
 ### Copilot Guidance And Scope Safety

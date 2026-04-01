@@ -1125,6 +1125,84 @@ test('worker and orchestrator keep real broken internal-link failures visible in
         expect(String(orchestratorOverlay.html || orchestratorOverlay.highlighted_html || '')).toContain('data-check-id="appropriate_paragraph_length"');
     });
 
+    test('degraded partial-run extractability findings stay section-level instead of blaming one brittle inline snippet', () => {
+        const manifest = {
+            title: 'What Should Your Resume Look Like In 2023?',
+            block_map: [
+                {
+                    node_ref: 'block-0',
+                    signature: 'sig-0',
+                    block_type: 'core/heading',
+                    text: 'What Should Your Resume Look Like In 2023?'
+                },
+                {
+                    node_ref: 'block-1',
+                    signature: 'sig-1',
+                    block_type: 'core/heading',
+                    text: 'Tips to Make Your Resume Stand Out'
+                },
+                {
+                    node_ref: 'block-2',
+                    signature: 'sig-2',
+                    block_type: 'core/paragraph',
+                    text: 'Do you want your resume to stand out this year? Are you wondering what recruiters expect before they even start scanning the first bullet?'
+                },
+                {
+                    node_ref: 'block-3',
+                    signature: 'sig-3',
+                    block_type: 'core/list-item',
+                    text: 'Use a readable font and a clean layout.'
+                }
+            ]
+        };
+        const analysisResult = {
+            status: 'success_partial',
+            partial_reason: 'chunk_parse_failure',
+            partial_context: {
+                failed_chunk_count: 1,
+                parse_error_total: 2,
+                synthetic_findings_count: 1
+            },
+            scores: { AEO: 20, GEO: 18, GLOBAL: 38 },
+            checks: {
+                immediate_answer_placement: {
+                    verdict: 'partial',
+                    ui_verdict: 'partial',
+                    explanation: 'The section promises resume guidance, but the opening lingers in setup before the actual list begins.',
+                    highlights: [
+                        {
+                            node_ref: 'block-3',
+                            signature: 'sig-3',
+                            start: 0,
+                            end: 39,
+                            snippet: 'Use a readable font and a clean layout.',
+                            message: 'The first actual tip appears only after introductory setup.',
+                            type: 'issue'
+                        }
+                    ]
+                }
+            }
+        };
+
+        const workerOverlay = buildWorkerOverlay(manifest, analysisResult);
+        const orchestratorOverlay = buildOrchestratorOverlay(manifest, analysisResult);
+        const workerIssue = workerOverlay.recommendations.find((issue) => issue.check_id === 'immediate_answer_placement');
+        const orchestratorIssue = orchestratorOverlay.recommendations.find((issue) => issue.check_id === 'immediate_answer_placement');
+
+        expect(workerIssue).toBeDefined();
+        expect(orchestratorIssue).toBeDefined();
+        expect(workerIssue.failure_reason).toBe('degraded_partial_extractability_guardrail');
+        expect(orchestratorIssue.failure_reason).toBe('degraded_partial_extractability_guardrail');
+        expect(workerIssue.anchor_status).toBe('unhighlightable');
+        expect(orchestratorIssue.anchor_status).toBe('unhighlightable');
+        expect(workerIssue.message).toContain('section level');
+        expect(orchestratorIssue.message).toContain('section level');
+        expect(workerOverlay.v2_findings.find((issue) => issue.check_id === 'immediate_answer_placement')).toBeUndefined();
+        expect(orchestratorOverlay.v2_findings.find((issue) => issue.check_id === 'immediate_answer_placement')).toBeUndefined();
+        expect(String(workerOverlay.highlighted_html || '')).not.toContain('data-check-id="immediate_answer_placement"');
+        expect(String(orchestratorOverlay.highlighted_html || '')).not.toContain('data-check-id="immediate_answer_placement"');
+    });
+
     test('partial-run semantic recommendation families keep check-specific narratives when they fall back to recommendations', () => {
         const manifest = {
             title: 'Sample',

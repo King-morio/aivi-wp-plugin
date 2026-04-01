@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AiVI Super Admin Variant D - Control Room</title>
+<style>
+  :root{
+    --bg:#edf1f5;
+    --shell:#f2f5f8;
+    --card:#ffffff;
+    --ink:#162231;
+    --muted:#617284;
+    --line:#d7e0e9;
+    --nav:#243232;
+    --nav-2:#1f2c2c;
+    --nav-ink:#eaf4f1;
+    --brand:#2d6fd6;
+    --brand-soft:#e9f0ff;
+    --good:#2a9d64;
+    --warn:#d29a2c;
+    --danger:#e45243;
+    --shadow:0 24px 68px rgba(22,34,49,.10);
+    --shadow-soft:0 12px 28px rgba(22,34,49,.08);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:linear-gradient(180deg,#f4f7fb 0%,#eaf0f5 100%);font-family:"Aptos","Segoe UI Variable Text","Segoe UI",sans-serif;color:var(--ink)}
+  body{padding:24px}
+  .frame{
+    max-width:1480px;
+    margin:0 auto;
+    min-height:980px;
+    border-radius:30px;
+    overflow:hidden;
+    border:1px solid rgba(22,34,49,.08);
+    box-shadow:var(--shadow);
+    background:var(--shell);
+  }
+  .layout{
+    display:grid;
+    grid-template-columns:220px minmax(0,1fr);
+    min-height:980px;
+  }
+  .sidebar{
+    background:linear-gradient(180deg,var(--nav) 0%,var(--nav-2) 100%);
+    color:var(--nav-ink);
+    padding:22px 18px;
+    display:grid;
+    grid-template-rows:auto auto 1fr auto;
+    gap:22px;
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .brand-mark{
+    width:42px;
+    height:42px;
+    border-radius:14px;
+    background:linear-gradient(135deg,#2d6fd6 0%,#9fc3ff 60%,#f0c776 100%);
+  }
+  .brand h1{
+    margin:0;
+    font:700 22px/1.02 "Georgia","Cambria",serif;
+    letter-spacing:-.04em;
+  }
+  .brand small{
+    display:block;
+    margin-top:4px;
+    color:rgba(234,244,241,.72);
+    text-transform:uppercase;
+    letter-spacing:.16em;
+    font-size:10px;
+    font-weight:800;
+  }
+  .side-group-label{
+    color:rgba(234,244,241,.54);
+    text-transform:uppercase;
+    letter-spacing:.16em;
+    font-size:10px;
+    font-weight:800;
+    margin-bottom:10px;
+  }
+  .nav-list{display:grid;gap:6px}
+  .nav-item{
+    display:grid;
+    grid-template-columns:32px 1fr;
+    gap:10px;
+    align-items:center;
+    min-height:46px;
+    padding:8px 10px;
+    border-radius:14px;
+    color:rgba(234,244,241,.92);
+    background:transparent;
+  }
+  .nav-item.active{
+    background:rgba(255,255,255,.10);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+  }
+  .nav-icon{
+    width:32px;
+    height:32px;
+    border-radius:10px;
+    display:grid;
+    place-items:center;
+    background:rgba(255,255,255,.08);
+    font-size:12px;
+    font-weight:800;
+  }
+  .nav-hint{
+    display:block;
+    color:rgba(234,244,241,.62);
+    font-size:11px;
+    margin-top:2px;
+  }
+  .sidebar-note{
+    padding:14px;
+    border-radius:18px;
+    background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.08);
+    line-height:1.5;
+    color:rgba(234,244,241,.82);
+    font-size:13px;
+  }
+  .main{
+    display:grid;
+    grid-template-rows:auto auto 1fr;
+    min-width:0;
+  }
+  .topbar{
+    min-height:66px;
+    padding:14px 22px;
+    background:#243232;
+    color:#fff;
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:14px;
+    align-items:center;
+  }
+  .search{
+    min-height:40px;
+    border-radius:999px;
+    background:rgba(255,255,255,.12);
+    border:1px solid rgba(255,255,255,.08);
+    padding:10px 16px;
+    display:flex;
+    align-items:center;
+    color:rgba(255,255,255,.86);
+    font-weight:700;
+  }
+  .top-actions{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .chip,.button{
+    min-height:38px;
+    padding:8px 14px;
+    border-radius:999px;
+    border:1px solid rgba(255,255,255,.14);
+    background:rgba(255,255,255,.08);
+    color:#fff;
+    font-weight:700;
+    font-size:13px;
+  }
+  .button.primary{
+    background:#2d6fd6;
+    border-color:#2d6fd6;
+  }
+  .header{
+    padding:18px 22px 16px;
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#f7fafc 0%,#eef3f8 100%);
+  }
+  .alert{
+    min-height:56px;
+    padding:14px 18px;
+    border-radius:18px;
+    background:#ec5346;
+    color:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    font-weight:700;
+  }
+  .focus-strip{
+    display:grid;
+    grid-template-columns:1.2fr .8fr;
+    gap:16px;
+    margin-top:16px;
+  }
+  .focus-card,.status-card,.section,.table-card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:22px;
+    box-shadow:var(--shadow-soft);
+  }
+  .focus-card,.status-card{padding:20px}
+  .eyebrow{
+    color:#6c7a8d;
+    text-transform:uppercase;
+    letter-spacing:.16em;
+    font-size:11px;
+    font-weight:800;
+  }
+  .focus-card h2{
+    margin:8px 0 8px;
+    font:700 34px/1 "Georgia","Cambria",serif;
+    letter-spacing:-.045em;
+  }
+  .focus-card p,.status-card p,.section p{
+    margin:0;
+    color:var(--muted);
+    line-height:1.6;
+  }
+  .focus-tags{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-top:14px;
+  }
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    min-height:28px;
+    padding:4px 10px;
+    border-radius:999px;
+    border:1px solid;
+    font-size:11px;
+    font-weight:800;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+  }
+  .ok{background:#ebf7f0;border-color:#bbdfcb;color:var(--good)}
+  .warn{background:#fff3e2;border-color:#ecd19c;color:#9b6910}
+  .risk{background:#ffeded;border-color:#f0c2c2;color:#b94141}
+  .soft{background:#edf4fb;border-color:#cadaef;color:#3b5774}
+  .status-grid{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:10px;
+    margin-top:14px;
+  }
+  .mini{
+    padding:14px;
+    border-radius:16px;
+    background:#f5f8fb;
+    border:1px solid var(--line);
+  }
+  .mini strong{
+    display:block;
+    margin-top:6px;
+    font-size:24px;
+    letter-spacing:-.04em;
+  }
+  .content{
+    padding:18px 22px 22px;
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 340px;
+    gap:18px;
+    align-items:start;
+  }
+  .left-stack,.right-stack{display:grid;gap:16px}
+  .section,.table-card{padding:18px}
+  .section h3,.table-card h3{
+    margin:8px 0 8px;
+    font-size:24px;
+    letter-spacing:-.03em;
+  }
+  .account-ribbon{
+    display:flex;
+    gap:10px;
+    overflow:hidden;
+    margin-top:16px;
+  }
+  .account-tile{
+    min-width:220px;
+    padding:14px;
+    border-radius:18px;
+    border:1px solid var(--line);
+    background:#fff;
+  }
+  .account-tile.active{
+    background:linear-gradient(180deg,#eef4ff 0%,#fff 100%);
+    border-color:#bfd1ed;
+  }
+  .table{
+    margin-top:14px;
+    border:1px solid var(--line);
+    border-radius:18px;
+    overflow:hidden;
+  }
+  .row{
+    display:grid;
+    grid-template-columns:1.2fr .8fr .8fr .8fr;
+    gap:12px;
+    padding:14px 16px;
+    border-top:1px solid var(--line);
+    align-items:center;
+  }
+  .row:first-child{
+    border-top:0;
+    background:#f7f9fc;
+    color:#56667b;
+    font-weight:800;
+  }
+  .list{display:grid;gap:10px;margin-top:14px}
+  .item{
+    padding:14px 16px;
+    border-radius:18px;
+    border:1px solid var(--line);
+    background:#fff;
+  }
+  .timeline-item{
+    display:grid;
+    grid-template-columns:auto 1fr;
+    gap:12px;
+    align-items:start;
+  }
+  .dot{
+    width:10px;
+    height:10px;
+    border-radius:999px;
+    margin-top:7px;
+    background:var(--brand);
+    box-shadow:0 0 0 6px rgba(45,111,214,.12);
+  }
+</style>
+</head>
+<body>
+  <div class="frame">
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark"></div>
+          <div>
+            <h1>AiVI</h1>
+            <small>Operator Control Room</small>
+          </div>
+        </div>
+        <div>
+          <div class="side-group-label">Navigate</div>
+          <div class="nav-list">
+            <div class="nav-item active"><div class="nav-icon">D</div><div><strong>Dashboard</strong><span class="nav-hint">Current system state</span></div></div>
+            <div class="nav-item"><div class="nav-icon">A</div><div><strong>Accounts</strong><span class="nav-hint">Customer relationships</span></div></div>
+            <div class="nav-item"><div class="nav-icon">S</div><div><strong>Sites</strong><span class="nav-hint">Bound properties</span></div></div>
+            <div class="nav-item"><div class="nav-icon">O</div><div><strong>Operations</strong><span class="nav-hint">Manual actions</span></div></div>
+            <div class="nav-item"><div class="nav-icon">X</div><div><strong>Diagnostics</strong><span class="nav-hint">Run and webhook health</span></div></div>
+            <div class="nav-item"><div class="nav-icon">$</div><div><strong>Billing</strong><span class="nav-hint">Credits and plans</span></div></div>
+            <div class="nav-item"><div class="nav-icon">T</div><div><strong>Audit</strong><span class="nav-hint">Operator timeline</span></div></div>
+          </div>
+        </div>
+        <div></div>
+        <div class="sidebar-note">
+          This variant stops making accounts a permanently exposed long list. The left side becomes navigation, while account and site focus move into the workspace itself.
+        </div>
+      </aside>
+      <main class="main">
+        <div class="topbar">
+          <div class="search">Search everything: account, domain, email, site ID, plugin version, webhook event...</div>
+          <div class="top-actions">
+            <div class="chip">Staging</div>
+            <div class="chip">API mode</div>
+            <div class="button primary">Quick action</div>
+          </div>
+        </div>
+        <section class="header">
+          <div class="alert">Northlight Media has 2 unresolved webhook failures and 1 staging binding conflict.<span>Open diagnostics</span></div>
+          <div class="focus-strip">
+            <div class="focus-card">
+              <div class="eyebrow">Dashboard Focus</div>
+              <h2>Northlight Media</h2>
+              <p>The account stays in focus, but the shell behaves like a control room. Navigation is always available on the left, and the center updates to whatever component of the account you need next.</p>
+              <div class="focus-tags">
+                <span class="pill ok">growth active</span>
+                <span class="pill soft">3 sites</span>
+                <span class="pill warn">6 replay eligible</span>
+                <span class="pill soft">plugin 1.0.44</span>
+              </div>
+            </div>
+            <div class="status-card">
+              <div class="eyebrow">System Snapshot</div>
+              <p>This block replaces the weird “long account list beside empty space” problem with a compact overview layer.</p>
+              <div class="status-grid">
+                <div class="mini"><div class="eyebrow">Credits</div><strong>9,420</strong></div>
+                <div class="mini"><div class="eyebrow">Sites</div><strong>3</strong></div>
+                <div class="mini"><div class="eyebrow">Alerts</div><strong>3</strong></div>
+                <div class="mini"><div class="eyebrow">Recent events</div><strong>18</strong></div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="content">
+          <div class="left-stack">
+            <section class="section">
+              <div class="eyebrow">Focused Accounts</div>
+              <h3>Quick customer jump</h3>
+              <p>Instead of a full permanent list-column, the dashboard uses a horizontal focus strip here. If the operator wants deep account browsing, they go to the dedicated Accounts screen.</p>
+              <div class="account-ribbon">
+                <div class="account-tile active"><strong>Northlight Media</strong><div class="meta">Growth · 9,420 credits · 3 sites</div></div>
+                <div class="account-tile"><strong>Resume Atelier</strong><div class="meta">Starter · 2,118 credits · 1 site</div></div>
+                <div class="account-tile"><strong>Atlas Clinics</strong><div class="meta">Pro · 31,944 credits · 8 sites</div></div>
+              </div>
+            </section>
+            <section class="table-card">
+              <div class="eyebrow">Current Sites</div>
+              <h3>Site surfaces in focus</h3>
+              <div class="table">
+                <div class="row"><div>Site</div><div>Plugin</div><div>Last analysis</div><div>Status</div></div>
+                <div class="row"><div><strong>northlightmedia.com</strong></div><div>1.0.44</div><div>12 mins ago</div><div><span class="pill ok">healthy</span></div></div>
+                <div class="row"><div><strong>insights.northlightmedia.com</strong></div><div>1.0.43</div><div>1 hr ago</div><div><span class="pill warn">upgrade</span></div></div>
+                <div class="row"><div><strong>staging.northlightmedia.com</strong></div><div>1.0.44</div><div>42 mins ago</div><div><span class="pill risk">conflict</span></div></div>
+              </div>
+            </section>
+          </div>
+          <aside class="right-stack">
+            <section class="section">
+              <div class="eyebrow">Attention Flags</div>
+              <h3>What needs action now</h3>
+              <div class="list">
+                <div class="item"><strong>Webhook failures</strong><div class="meta">2 failed billing sync events are still open.</div></div>
+                <div class="item"><strong>Binding conflict</strong><div class="meta">One staging surface is holding a stale relationship.</div></div>
+                <div class="item"><strong>Plugin drift</strong><div class="meta">One secondary site is still one version behind.</div></div>
+              </div>
+            </section>
+            <section class="section">
+              <div class="eyebrow">Recent Activity</div>
+              <h3>Operator timeline</h3>
+              <div class="list">
+                <div class="item timeline-item"><div class="dot"></div><div><strong>Replay batch opened</strong><div class="meta">14 mins ago · Operations</div></div></div>
+                <div class="item timeline-item"><div class="dot" style="background:#d29a2c;box-shadow:0 0 0 6px rgba(210,154,44,.12)"></div><div><strong>Plugin upgrade suggested</strong><div class="meta">42 mins ago · System</div></div></div>
+                <div class="item timeline-item"><div class="dot" style="background:#2a9d64;box-shadow:0 0 0 6px rgba(42,157,100,.12)"></div><div><strong>Credit note added</strong><div class="meta">Yesterday · Finance</div></div></div>
+              </div>
+            </section>
+          </aside>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

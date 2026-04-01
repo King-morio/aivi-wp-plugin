@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AiVI Super Admin Variant A - Signal Desk</title>
+<style>
+  :root{
+    --bg:#eef2f6;
+    --shell:#f8fafc;
+    --card:#ffffff;
+    --card-soft:#f7f2e8;
+    --ink:#182230;
+    --muted:#5f6c7d;
+    --line:#d8e0ea;
+    --brand:#1e5bb8;
+    --success:#18804d;
+    --warning:#b5741c;
+    --danger:#c04646;
+    --shadow:0 22px 60px rgba(24,34,48,.10);
+    --shadow-soft:0 12px 28px rgba(24,34,48,.08);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:linear-gradient(180deg,#f5f7fb 0%,#edf2f6 100%);color:var(--ink);font-family:"Aptos","Segoe UI Variable Text","Segoe UI",sans-serif}
+  body{padding:28px}
+  .frame{max-width:1480px;margin:0 auto;min-height:950px;border:1px solid rgba(17,28,47,.08);border-radius:28px;background:var(--shell);box-shadow:var(--shadow);overflow:hidden}
+  .topbar{display:grid;grid-template-columns:260px minmax(0,1fr) auto;gap:18px;align-items:center;padding:22px 26px 18px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#fbfcfd 0%,#f4f7fa 100%)}
+  .brand{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center}
+  .brand-mark{width:48px;height:48px;border-radius:16px;background:linear-gradient(135deg,#16315f 0%,#214d96 52%,#f0c776 100%)}
+  .brand-title{font:700 20px/1.05 "Georgia","Cambria",serif;letter-spacing:-.03em}
+  .brand-copy small{display:block;margin-top:4px;color:var(--muted);font-size:12px;letter-spacing:.12em;text-transform:uppercase}
+  .search{display:flex;align-items:center;gap:12px;min-height:54px;padding:0 18px;border:1px solid var(--line);border-radius:18px;background:#fff;color:var(--muted)}
+  .search strong{color:var(--ink);font-weight:600}
+  .top-actions{display:flex;gap:10px;align-items:center}
+  .chip,.btn{border-radius:999px;min-height:40px;padding:10px 16px;font-weight:700;font-size:13px;border:1px solid var(--line);background:#fff}
+  .chip-accent{background:#13223c;color:#fff;border-color:#13223c}
+  .workspace{display:grid;grid-template-columns:300px minmax(0,1fr) 320px;gap:20px;padding:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow-soft)}
+  .sidebar,.main,.rail{display:grid;gap:16px;align-content:start}
+  .sidebar-card,.section,.action-card{padding:20px}
+  .eyebrow{color:#6d7990;text-transform:uppercase;letter-spacing:.16em;font-size:11px;font-weight:800}
+  .nav-list,.account-list,.event-list,.alert-list,.site-list,.action-list{display:grid;gap:10px}
+  .nav-item{display:grid;grid-template-columns:34px 1fr;gap:12px;align-items:center;padding:12px 14px;border-radius:18px;background:#f6f8fb}
+  .nav-item.active{background:linear-gradient(180deg,#16233c 0%,#1a3664 100%);color:#fff;box-shadow:0 14px 30px rgba(26,54,100,.22)}
+  .nav-icon{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;font-weight:800;background:rgba(255,255,255,.14)}
+  .account-item,.alert-item,.event-item,.action,.stack-metric{padding:14px;border:1px solid var(--line);border-radius:18px;background:#fff}
+  .account-item.active{border-color:#b8cbed;background:linear-gradient(180deg,#eef4ff 0%,#ffffff 100%)}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .meta{margin-top:8px;color:var(--muted);font-size:13px;line-height:1.45}
+  .pill{display:inline-flex;align-items:center;min-height:28px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border:1px solid}
+  .success{color:var(--success);background:#e9f7ef;border-color:#b8e4c8}
+  .warning{color:var(--warning);background:#fff3df;border-color:#efd6a3}
+  .danger{color:var(--danger);background:#ffeded;border-color:#efc0c0}
+  .neutral{color:#39516f;background:#edf4fb;border-color:#c9d9ee}
+  .hero{padding:22px 24px;background:radial-gradient(circle at top left, rgba(30,91,184,.14) 0, rgba(30,91,184,0) 36%),linear-gradient(135deg,#ffffff 0%,#f7fbff 55%,#fff6e8 100%)}
+  .hero-top{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}
+  .hero h1{margin:8px 0 8px;font:700 34px/1.02 "Georgia","Cambria",serif;letter-spacing:-.04em;max-width:12ch}
+  .hero p{margin:0;max-width:64ch;color:var(--muted);line-height:1.55}
+  .hero-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:18px}
+  .metric{padding:16px;border-radius:20px;border:1px solid var(--line);background:rgba(255,255,255,.86)}
+  .metric strong{display:block;margin-top:10px;font-size:28px;letter-spacing:-.04em}
+  .metric span{color:var(--muted);font-size:13px}
+  .tabs{display:flex;gap:10px;padding:6px;border-radius:18px;border:1px solid var(--line);background:#f7f9fc}
+  .tab{padding:10px 14px;border-radius:14px;font-weight:700;font-size:13px;color:var(--muted)}
+  .tab.active{background:#13223c;color:#fff}
+  .canvas{display:grid;grid-template-columns:1.15fr .85fr;gap:16px}
+  .section h3,.action-card h3{margin:8px 0 6px;font-size:22px;letter-spacing:-.03em}
+  .section p{margin:0;color:var(--muted);line-height:1.55}
+  .site-table{margin-top:16px;border:1px solid var(--line);border-radius:18px;overflow:hidden}
+  .site-row{display:grid;grid-template-columns:1.3fr .7fr .8fr .8fr;gap:12px;align-items:center;padding:14px 16px;border-top:1px solid var(--line)}
+  .site-row:first-child{border-top:0;background:#f7f9fc;font-weight:800;color:#506076}
+  .event-item{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start}
+  .event-dot{width:10px;height:10px;border-radius:999px;margin-top:7px;background:#1e5bb8;box-shadow:0 0 0 6px rgba(30,91,184,.12)}
+  .stack-metrics{display:grid;gap:10px;margin-top:16px}
+  .stack-metric strong{display:block;font-size:22px;margin-top:4px}
+  .note{margin-top:14px;padding:14px 16px;border-radius:18px;background:var(--card-soft);border:1px solid #e6d2a7;color:#73542a;line-height:1.5}
+</style>
+</head>
+<body>
+  <div class="frame">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div class="brand-copy">
+          <div class="brand-title">AiVI Signal Desk</div>
+          <small>Super Admin Console</small>
+        </div>
+      </div>
+      <div class="search"><span>Search</span><strong>Northlight, plugin 1.0.44, webhook failure, account ID...</strong></div>
+      <div class="top-actions"><div class="chip">Staging</div><div class="chip chip-accent">API mode</div><div class="btn">Refresh</div></div>
+    </div>
+    <div class="workspace">
+      <aside class="sidebar">
+        <section class="card sidebar-card">
+          <div class="eyebrow">Workspace</div>
+          <div class="nav-list" style="margin-top:14px">
+            <div class="nav-item active"><div class="nav-icon">A</div><div><strong>Accounts</strong><div class="meta">Customer roster and focus</div></div></div>
+            <div class="nav-item"><div class="nav-icon">O</div><div><strong>Operations</strong><div class="meta">Manual actions and recovery</div></div></div>
+            <div class="nav-item"><div class="nav-icon">D</div><div><strong>Diagnostics</strong><div class="meta">Runs, webhooks, conflicts</div></div></div>
+            <div class="nav-item"><div class="nav-icon">B</div><div><strong>Billing</strong><div class="meta">Credits, plans, discounts</div></div></div>
+            <div class="nav-item"><div class="nav-icon">T</div><div><strong>Audit</strong><div class="meta">Operator timeline</div></div></div>
+          </div>
+        </section>
+        <section class="card sidebar-card">
+          <div class="row"><div><div class="eyebrow">Accounts</div><h3 style="margin:8px 0 0;font-size:22px">Customer Index</h3></div><div class="pill neutral">214 live</div></div>
+          <div class="account-list" style="margin-top:16px">
+            <div class="account-item active"><div class="row"><strong>Northlight Media</strong><span class="pill success">active</span></div><div class="meta">Growth plan · 9,420 credits · 3 sites</div></div>
+            <div class="account-item"><div class="row"><strong>Resume Atelier</strong><span class="pill warning">trial</span></div><div class="meta">Starter plan · 2,118 credits · 1 site</div></div>
+            <div class="account-item"><div class="row"><strong>Atlas Clinics</strong><span class="pill danger">watch</span></div><div class="meta">Pro plan · 31,944 credits · 8 sites</div></div>
+            <div class="account-item"><div class="row"><strong>Studio North</strong><span class="pill success">active</span></div><div class="meta">Growth plan · 12,004 credits · 2 sites</div></div>
+          </div>
+        </section>
+      </aside>
+      <main class="main">
+        <section class="card hero">
+          <div class="hero-top">
+            <div>
+              <div class="eyebrow">Focused Account</div>
+              <h1>Northlight Media</h1>
+              <p>This design turns the current center column into a real account cockpit: one strong summary header, one tab row, one active work canvas, and far less repeated panel chrome.</p>
+              <div class="hero-tags">
+                <span class="pill success">Growth plan</span>
+                <span class="pill neutral">3 connected sites</span>
+                <span class="pill warning">2 webhook failures</span>
+                <span class="pill neutral">Plugin 1.0.44</span>
+              </div>
+            </div>
+            <div class="note" style="max-width:290px;margin-top:0"><strong>Why this direction works</strong><br>It keeps the live 3-column logic, but the center no longer reads like a stack of admin forms. It reads like one customer relationship surface.</div>
+          </div>
+          <div class="metrics">
+            <div class="metric"><span>Credits remaining</span><strong>9,420</strong></div>
+            <div class="metric"><span>Observed 30d revenue</span><strong>$4,780</strong></div>
+            <div class="metric"><span>Replay eligible</span><strong>6</strong></div>
+            <div class="metric"><span>Recent operator events</span><strong>18</strong></div>
+          </div>
+        </section>
+        <div class="tabs card" style="padding:8px">
+          <div class="tab active">Overview</div><div class="tab">Sites</div><div class="tab">Billing</div><div class="tab">Operations</div><div class="tab">Diagnostics</div><div class="tab">Audit</div>
+        </div>
+        <div class="canvas">
+          <section class="card section">
+            <div class="eyebrow">Operational Summary</div>
+            <h3>Connected sites and current health</h3>
+            <p>Instead of splitting site details and lifecycle across separate accordion blocks, this variant gives the account one strong surface for site state, plugin level, last analysis, and intervention posture.</p>
+            <div class="site-table">
+              <div class="site-row"><div>Site</div><div>Plugin</div><div>Last analysis</div><div>Status</div></div>
+              <div class="site-row"><div><strong>northlightmedia.com</strong></div><div>1.0.44</div><div>12 mins ago</div><div><span class="pill success">healthy</span></div></div>
+              <div class="site-row"><div><strong>insights.northlightmedia.com</strong></div><div>1.0.43</div><div>1 hr ago</div><div><span class="pill warning">upgrade</span></div></div>
+              <div class="site-row"><div><strong>staging.northlightmedia.com</strong></div><div>1.0.44</div><div>42 mins ago</div><div><span class="pill danger">binding risk</span></div></div>
+            </div>
+          </section>
+          <section class="card section">
+            <div class="eyebrow">Attention Board</div>
+            <h3>What needs operator eyes</h3>
+            <div class="alert-list" style="margin-top:16px">
+              <div class="alert-item"><div class="row"><strong>Webhook failures</strong><span class="pill danger">2 open</span></div><div class="meta">Payment sync retries are piling up on the staging-bound site.</div></div>
+              <div class="alert-item"><div class="row"><strong>Credit posture</strong><span class="pill warning">watch</span></div><div class="meta">Projected 10-day burn is higher than the current included balance.</div></div>
+              <div class="alert-item"><div class="row"><strong>Recovery queue</strong><span class="pill neutral">6 replay eligible</span></div><div class="meta">Enough to deserve a clear action tile, not just another diagnostics paragraph.</div></div>
+            </div>
+          </section>
+        </div>
+      </main>
+      <aside class="rail">
+        <section class="card action-card">
+          <div class="eyebrow">Focused Tools</div>
+          <h3 style="margin:8px 0 0;font-size:24px">Operator actions</h3>
+          <div class="action-list">
+            <div class="action">Issue connection token</div>
+            <div class="action">Adjust credits</div>
+            <div class="action">Replay webhook batch</div>
+            <div class="action">Inspect latest audit trail</div>
+          </div>
+        </section>
+        <section class="card action-card">
+          <div class="eyebrow">Context Rail</div>
+          <h3 style="margin:8px 0 0;font-size:24px">Relationship snapshot</h3>
+          <div class="stack-metrics">
+            <div class="stack-metric"><span class="eyebrow" style="font-size:10px">Account health</span><strong>Stable with recoverable alerts</strong></div>
+            <div class="stack-metric"><span class="eyebrow" style="font-size:10px">Primary contact</span><strong>ops@northlightmedia.com</strong></div>
+            <div class="stack-metric"><span class="eyebrow" style="font-size:10px">Latest decision</span><strong>Replay webhooks before credit top-up</strong></div>
+          </div>
+        </section>
+        <section class="card action-card">
+          <div class="eyebrow">Recent Activity</div>
+          <div class="event-list" style="margin-top:14px">
+            <div class="event-item"><div class="event-dot"></div><div><strong>Manual replay requested</strong><div class="meta">14 mins ago · Super admin</div></div></div>
+            <div class="event-item"><div class="event-dot" style="background:#b5741c;box-shadow:0 0 0 6px rgba(181,116,28,.12)"></div><div><strong>Plugin drift detected</strong><div class="meta">42 mins ago · insights subsite</div></div></div>
+            <div class="event-item"><div class="event-dot" style="background:#18804d;box-shadow:0 0 0 6px rgba(24,128,77,.12)"></div><div><strong>Credit adjustment approved</strong><div class="meta">Yesterday · Finance operator</div></div></div>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </div>
+</body>
+</html>

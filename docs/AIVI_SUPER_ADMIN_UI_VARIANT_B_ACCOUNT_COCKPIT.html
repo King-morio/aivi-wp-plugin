@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AiVI Super Admin Variant B - Account Cockpit</title>
+<style>
+  :root{
+    --shell:#f8fafc;--ink:#121d2b;--muted:#607083;--line:#d7e0ea;--navy:#0f1b31;--gold:#b27a1f;--teal:#16766a;--rose:#c95252;--shadow:0 28px 80px rgba(18,29,43,.12);--shadow-soft:0 14px 36px rgba(18,29,43,.08);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:linear-gradient(180deg,#f5f7fb 0%,#ebf0f5 100%);font-family:"Aptos","Segoe UI Variable Text","Segoe UI",sans-serif;color:var(--ink)}
+  body{padding:28px}
+  .viewport{max-width:1480px;margin:0 auto;min-height:960px;background:var(--shell);border:1px solid rgba(15,27,49,.08);border-radius:30px;box-shadow:var(--shadow);overflow:hidden}
+  .masthead{padding:24px 28px;background:linear-gradient(135deg,#101b30 0%,#17315e 60%,#10203d 100%);color:#fff}
+  .mast-row{display:flex;align-items:center;justify-content:space-between;gap:20px}
+  .mast-title small{display:block;color:rgba(255,255,255,.72);text-transform:uppercase;letter-spacing:.16em;font-size:11px;font-weight:800}
+  .mast-title h1{margin:10px 0 0;font:700 34px/1 "Georgia","Cambria",serif;letter-spacing:-.04em}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end}
+  .field,.chip,.button{min-height:42px;border-radius:999px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#fff;padding:10px 16px;font-weight:700;font-size:13px}
+  .field{min-width:420px;text-align:left}
+  .hero-band{display:grid;grid-template-columns:260px minmax(0,1fr) 280px;gap:18px;padding:18px 24px 24px;background:linear-gradient(180deg,#f4f7fb 0%,#eff3f8 100%);border-bottom:1px solid var(--line)}
+  .card{background:#fff;border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow-soft)}
+  .mini-card,.account-roster,.context-panel,.focus,.panel-block{padding:20px}
+  .eyebrow{color:#6e7a8e;text-transform:uppercase;letter-spacing:.16em;font-size:11px;font-weight:800}
+  .stat strong{display:block;margin-top:8px;font-size:30px;letter-spacing:-.05em}
+  .workspace{display:grid;grid-template-columns:280px minmax(0,1fr) 300px;gap:18px;padding:22px}
+  .sidebar,.main,.rail,.roster-list,.watch-list,.log-list,.drawer-list{display:grid;gap:16px;align-content:start}
+  .roster-item,.watch-item,.log-item,.drawer-item{padding:14px;border-radius:18px;border:1px solid var(--line);background:#fff}
+  .roster-item.active{border-color:#bfd1ed;background:linear-gradient(180deg,#edf4ff 0%,#fff 100%)}
+  .meta{margin-top:6px;color:var(--muted);font-size:13px;line-height:1.5}
+  .pill{display:inline-flex;align-items:center;min-height:28px;padding:4px 10px;border-radius:999px;border:1px solid;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+  .ok{background:#ebf7f2;border-color:#bbdfcf;color:var(--teal)} .warn{background:#fff4e3;border-color:#e7d1a3;color:var(--gold)} .risk{background:#ffeded;border-color:#efc4c4;color:var(--rose)} .soft{background:#edf4fb;border-color:#cadaef;color:#345572}
+  .focus{background:radial-gradient(circle at right top, rgba(37,104,215,.10) 0, rgba(37,104,215,0) 30%),radial-gradient(circle at left bottom, rgba(178,122,31,.08) 0, rgba(178,122,31,0) 32%),linear-gradient(180deg,#fff 0%,#f9fbfd 100%)}
+  .focus-top{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}
+  .focus h2{margin:8px 0 8px;font:700 36px/1 "Georgia","Cambria",serif;letter-spacing:-.045em}
+  .focus p{margin:0;color:var(--muted);line-height:1.55;max-width:66ch}
+  .focus-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:18px}
+  .focus-metric{padding:16px;border-radius:18px;border:1px solid var(--line);background:rgba(255,255,255,.86)}
+  .focus-metric strong{display:block;font-size:28px;margin-top:8px;letter-spacing:-.04em}
+  .tabs{display:flex;flex-wrap:wrap;gap:10px;padding:16px 20px 0}
+  .tab{min-height:42px;padding:10px 14px;border-radius:14px;background:#f4f7fb;border:1px solid var(--line);font-weight:700;font-size:13px;color:#4e6076}
+  .tab.active{background:#101b30;color:#fff;border-color:#101b30}
+  .content-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px;padding:16px 20px 20px}
+  .panel-block{border:1px solid var(--line);border-radius:20px;background:#fff}
+  .panel-block h3,.context-panel h3{margin:8px 0 6px;font-size:22px;letter-spacing:-.03em}
+  .table{margin-top:16px;border:1px solid var(--line);border-radius:18px;overflow:hidden}
+  .table-row{display:grid;grid-template-columns:1.2fr .9fr .9fr;gap:12px;padding:14px 16px;border-top:1px solid var(--line)}
+  .table-row:first-child{border-top:0;background:#f7f9fc;font-weight:800;color:#526279}
+  .log-item{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+  .rail-callout{padding:18px;border-radius:22px;background:linear-gradient(180deg,#f7efdf 0%,#fffaf1 100%);border:1px solid #e8d4a8;color:#6f5327;line-height:1.55}
+</style>
+</head>
+<body>
+  <div class="viewport">
+    <div class="masthead">
+      <div class="mast-row">
+        <div class="mast-title"><small>AiVI Super Admin</small><h1>Account Cockpit</h1></div>
+        <div class="controls"><div class="field">Jump to account, domain, site ID, email, plugin version...</div><div class="chip">Staging</div><div class="chip">JWT active</div><div class="button">Refresh</div></div>
+      </div>
+    </div>
+    <div class="hero-band">
+      <div class="card mini-card stat"><div class="eyebrow">Loaded accounts</div><strong>214</strong></div>
+      <div class="card mini-card stat"><div class="eyebrow">Why this variant</div><strong style="font-size:22px;line-height:1.2;letter-spacing:-.03em">The center becomes a cockpit, not an accordion. Tabs hold the work. The account stays visually in command.</strong></div>
+      <div class="card mini-card stat"><div class="eyebrow">Open operator risks</div><strong>11</strong></div>
+    </div>
+    <div class="workspace">
+      <aside class="sidebar">
+        <section class="card account-roster">
+          <div class="eyebrow">Account Browser</div><h3 style="margin:8px 0 0;font-size:24px">Relationships</h3>
+          <div class="roster-list" style="margin-top:16px">
+            <div class="roster-item active"><strong>Resume Atelier</strong><div class="meta">Starter · 1 site · 2,118 credits</div><div style="margin-top:10px"><span class="pill warn">trial</span></div></div>
+            <div class="roster-item"><strong>Northlight Media</strong><div class="meta">Growth · 3 sites · 9,420 credits</div><div style="margin-top:10px"><span class="pill ok">active</span></div></div>
+            <div class="roster-item"><strong>Stagecraft Labs</strong><div class="meta">Pro · 5 sites · 24,010 credits</div><div style="margin-top:10px"><span class="pill risk">recovery</span></div></div>
+          </div>
+        </section>
+        <section class="card context-panel">
+          <div class="eyebrow">Selection Context</div><h3 style="margin:8px 0 0;font-size:22px">Why this account is focused</h3>
+          <div class="meta">Recent answer extractability volatility, one stale plugin, and credits projected to dip below comfort in 9 days.</div>
+        </section>
+      </aside>
+      <main class="main">
+        <section class="card focus">
+          <div class="focus-top">
+            <div><div class="eyebrow">Focused Customer</div><h2>Resume Atelier</h2><p>This layout takes the current “focused workspace” and turns it into one command surface with stronger relationship context, calmer hierarchy, and less panel repetition.</p></div>
+            <div><span class="pill warn">trial</span> <span class="pill soft">plugin 1.0.44</span></div>
+          </div>
+          <div class="focus-kpis">
+            <div class="focus-metric"><div class="eyebrow">Credits</div><strong>2,118</strong></div>
+            <div class="focus-metric"><div class="eyebrow">Sites</div><strong>1</strong></div>
+            <div class="focus-metric"><div class="eyebrow">Replay eligible</div><strong>3</strong></div>
+            <div class="focus-metric"><div class="eyebrow">Last operator touch</div><strong>2h</strong></div>
+          </div>
+        </section>
+        <section class="card" style="padding:0">
+          <div class="tabs"><div class="tab active">Overview</div><div class="tab">Sites</div><div class="tab">Billing</div><div class="tab">Operations</div><div class="tab">Diagnostics</div><div class="tab">Audit</div></div>
+          <div class="content-grid">
+            <div class="panel-block">
+              <div class="eyebrow">Overview Canvas</div><h3>Account health at a glance</h3>
+              <div class="table">
+                <div class="table-row"><div>Surface</div><div>Reading</div><div>Status</div></div>
+                <div class="table-row"><div>Connected site</div><div>resumeatelier.com</div><div><span class="pill ok">stable</span></div></div>
+                <div class="table-row"><div>Analysis flow</div><div>Latest run completed 18 mins ago</div><div><span class="pill ok">healthy</span></div></div>
+                <div class="table-row"><div>Billing posture</div><div>Starter trial ends in 5 days</div><div><span class="pill warn">watch</span></div></div>
+              </div>
+            </div>
+            <div class="panel-block">
+              <div class="eyebrow">Watchlist</div><h3>Live concerns</h3>
+              <div class="watch-list" style="margin-top:16px">
+                <div class="watch-item"><strong>Trial conversion risk</strong><div class="meta">Needs a cleaner operator path than a buried billing accordion.</div></div>
+                <div class="watch-item"><strong>Issue volume rising</strong><div class="meta">Answer family volatility climbed after the last article batch.</div></div>
+                <div class="watch-item"><strong>No direct failure</strong><div class="meta">Good example of a case that deserves visible nuance, not red noise.</div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+      <aside class="rail">
+        <section class="card context-panel">
+          <div class="eyebrow">Action Stack</div><h3 style="margin:8px 0 0;font-size:24px">Operator moves</h3>
+          <div class="drawer-list" style="margin-top:16px">
+            <div class="drawer-item"><strong>Adjust credits</strong><div class="meta">Fast credit intervention with clear audit reason.</div></div>
+            <div class="drawer-item"><strong>Issue token</strong><div class="meta">Connection help without jumping across panels.</div></div>
+            <div class="drawer-item"><strong>Inspect diagnostics</strong><div class="meta">Open incident lane, not generic details stack.</div></div>
+          </div>
+        </section>
+        <section class="card context-panel">
+          <div class="eyebrow">Recent Operator Events</div>
+          <div class="log-list" style="margin-top:16px">
+            <div class="log-item"><div><strong>Manual note added</strong><div class="meta">2 hrs ago</div></div><span class="pill soft">audit</span></div>
+            <div class="log-item"><div><strong>Top-up recommended</strong><div class="meta">Today</div></div><span class="pill warn">billing</span></div>
+            <div class="log-item"><div><strong>Replay checked</strong><div class="meta">Yesterday</div></div><span class="pill ok">ops</span></div>
+          </div>
+        </section>
+        <div class="rail-callout"><strong>Design note</strong><br>This direction borrows CRM discipline most directly. It is the strongest option if we want super admin to feel like account stewardship rather than backend paperwork.</div>
+      </aside>
+    </div>
+  </div>
+</body>
+</html>

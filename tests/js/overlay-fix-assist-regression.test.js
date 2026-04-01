@@ -33,6 +33,9 @@ describe('overlay fix assist regression guard', () => {
     test('locks copy-only variant acceptance and keeps panel-seen telemetry deduplicated per issue', () => {
         const overlayPath = path.resolve(__dirname, '../../assets/js/aivi-overlay-editor.js');
         const source = fs.readFileSync(overlayPath, 'utf8');
+        const handleAcceptStart = source.indexOf('async function handleAccept(item, idx) {');
+        const handleRejectStart = source.indexOf('function handleReject(item, idx) {');
+        const handleAcceptSection = source.slice(handleAcceptStart, handleRejectStart);
 
         expect(source).toContain('fixAssistSeenIssueKeys: new Set()');
         expect(source).toContain('state.fixAssistSeenIssueKeys = new Set();');
@@ -44,7 +47,20 @@ describe('overlay fix assist regression guard', () => {
         expect(source).toContain("const text = normalizeFixAssistVariantText(variant.text || '', info.rewrite_target || null);");
         expect(source).toContain("copyBtn.textContent = 'Copy variant';");
         expect(source).toContain("setMetaStatus('Copied revised text. Paste it into the matching WordPress block, then review and update the post.');");
+        expect(handleAcceptSection).not.toContain('renderBlocks(true);');
         expect(source).not.toContain("info.status = 'Applied in editor';");
+    });
+
+    test('offers one rail-level action to copy the full overlay draft from the live overlay state', () => {
+        const overlayPath = path.resolve(__dirname, '../../assets/js/aivi-overlay-editor.js');
+        const source = fs.readFileSync(overlayPath, 'utf8');
+
+        expect(source).toContain("copyAllButton.textContent = 'Copy overlay content';");
+        expect(source).toContain("copyAllButton.addEventListener('click', () => copyOverlayContentToClipboard());");
+        expect(source).toContain('function buildOverlayClipboardHtmlForBody(body, wrapper, blocks) {');
+        expect(source).toContain('function buildOverlayClipboardHtml() {');
+        expect(source).toContain("parts.push(`<h1>${escapeHtml(titleText)}</h1>`);");
+        expect(source).toContain("setMetaStatus('Copied the full overlay draft. Paste it into WordPress, then review the blocks before updating the post.');");
     });
 
     test('prefers local article context for repair targeting before falling back to analyzer rewrite hints', () => {
@@ -84,6 +100,12 @@ describe('overlay fix assist regression guard', () => {
     test('prefers preserved extractability explanations for rail summaries and copilot notes', () => {
         const overlayPath = path.resolve(__dirname, '../../assets/js/aivi-overlay-editor.js');
         const source = fs.readFileSync(overlayPath, 'utf8');
+        const detailStart = source.indexOf('function resolveRecommendationDetailText(issue, explanationPack, summaryText) {');
+        const summaryStart = source.indexOf('function resolvePreferredIssueSummaryText(issueLike, explanationPack, issueDisplayName) {');
+        const analyzerStart = source.indexOf('function resolveCopilotAnalyzerNote(issueLike, issueDisplayName, explanationPack) {');
+        const buildRecordStart = source.indexOf('function buildFixAssistIssueRecord(issue, fallbackIndex) {');
+        const detailSection = source.slice(detailStart, summaryStart);
+        const analyzerSection = source.slice(analyzerStart, buildRecordStart);
 
         expect(source).toContain('const ANSWER_EXTRACTABILITY_CHECK_IDS = new Set([');
         expect(source).toContain('function resolvePreferredIssueSummaryText(issueLike, explanationPack, issueDisplayName) {');
@@ -91,8 +113,13 @@ describe('overlay fix assist regression guard', () => {
         expect(source).toContain('issueLike.issue_explanation,');
         expect(source).toContain('explanationPack && explanationPack.issue_explanation,');
         expect(source).toContain('explanationPack && explanationPack.what_failed,');
+        expect(analyzerSection).toContain('const composedNarrative = composeIssueExplanationNarrative(explanationPack);');
+        expect(analyzerSection).toContain('composedNarrative,');
+        expect(analyzerSection).toContain('explanationPack && explanationPack.why_it_matters,');
         expect(source).toContain('const summaryText = resolvePreferredIssueSummaryText(issue, explanationPack, issueDisplayName)');
         expect(source).toContain('const summaryText = resolvePreferredIssueSummaryText(item, explanationPack, issueDisplayName)');
+        expect(detailSection).not.toContain('const sentences = splitGuidanceSentences(fallback);');
+        expect(detailSection).not.toContain('sentences.slice(1).join');
         expect(source).not.toContain('question heading');
     });
 

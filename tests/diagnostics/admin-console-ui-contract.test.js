@@ -34,6 +34,14 @@ describe('admin console UI scaffold contract', () => {
         expect(app).toContain("renderAuditPanel");
         expect(app).toContain("renderDiagnosticsPanel");
         expect(app).toContain("renderRecoveryPanel");
+        expect(app).toContain("buildWorkspaceSectionsForView");
+        expect(app).toContain("if (state.currentView === 'operations')");
+        expect(app).toContain("if (state.currentView === 'diagnostics')");
+        expect(app).toContain("if (state.currentView === 'billing')");
+        expect(app).toContain("if (state.currentView === 'audit')");
+        expect(app).toContain("Switch accounts without leaving this workspace");
+        expect(app).toContain("Select an account to populate the context rail.");
+        expect(app).not.toContain("Focused tools");
         expect(app).toContain("renderFinancialsOverlay");
         expect(app).toContain("openFinancialsOverlay");
         expect(app).toContain("Financials");

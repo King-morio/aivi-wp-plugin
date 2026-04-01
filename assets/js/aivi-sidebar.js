@@ -3168,7 +3168,7 @@
                                 success: false,
                                 aborted: true,
                                 reason: result.data.analysis_summary.reason || result.data.error,
-                                message: result.data.analysis_summary.message || 'Analysis aborted Ã¢â‚¬â€ no partial results shown',
+                                message: result.data.analysis_summary.message || result.data.message || 'Analysis aborted - no partial results shown',
                                 traceId: result.data.analysis_summary.trace_id || result.data.trace_id
                             };
                         }

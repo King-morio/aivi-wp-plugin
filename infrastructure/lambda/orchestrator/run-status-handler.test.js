@@ -37,6 +37,8 @@ jest.mock('./analysis-serializer', () => ({
   mapErrorToAbortReason: jest.fn(() => 'analysis_failed')
 }));
 
+const analysisSerializer = require('./analysis-serializer');
+
 jest.mock('./analysis-details-handler', () => ({
   generateSessionToken: (...args) => mockGenerateSessionToken(...args)
 }));
@@ -216,5 +218,46 @@ describe('runStatusHandler', () => {
     expect(body.superseded_by_run_id).toBe('run-456');
     expect(body.message).toMatch(/newer analysis run/i);
     expect(mockPrepareSidebarPayload).not.toHaveBeenCalled();
+  });
+
+  test('relays reliability abort summary message for failed runs without exposing partials', async () => {
+    mockUnmarshall.mockReturnValue({
+      run_id: 'run-123',
+      status: 'failed',
+      error: 'analysis_reliability_abort',
+      error_message: 'analysis aborted after reliability threshold exceeded',
+      abort: {
+        reason: 'failed_chunk_count_exceeded'
+      },
+      created_at: '2026-04-01T09:11:50.000Z',
+      completed_at: '2026-04-01T09:15:22.000Z'
+    });
+    analysisSerializer.mapErrorToAbortReason.mockReturnValueOnce('reliability_threshold_exceeded');
+    analysisSerializer.generateAbortedSummary.mockReturnValueOnce({
+      version: '1.2.0',
+      run_id: 'run-123',
+      status: 'aborted',
+      reason: 'reliability_threshold_exceeded',
+      message: 'We stopped this analysis because the result quality dropped below our reliability threshold. Please run it again to get a cleaner result.',
+      trace_id: 'trace-run-123'
+    });
+
+    const response = await runStatusHandler({
+      pathParameters: {
+        run_id: 'run-123'
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.ok).toBe(false);
+    expect(body.status).toBe('failed');
+    expect(body.error).toBe('reliability_threshold_exceeded');
+    expect(body.message).toBe('We stopped this analysis because the result quality dropped below our reliability threshold. Please run it again to get a cleaner result.');
+    expect(body.analysis_summary.status).toBe('aborted');
+    expect(analysisSerializer.mapErrorToAbortReason).toHaveBeenCalledWith(
+      'failed_chunk_count_exceeded',
+      'analysis aborted after reliability threshold exceeded'
+    );
   });
 });

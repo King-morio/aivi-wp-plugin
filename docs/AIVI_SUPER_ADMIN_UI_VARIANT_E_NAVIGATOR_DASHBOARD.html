@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AiVI Super Admin Variant E - Navigator Dashboard</title>
+<style>
+  :root{
+    --bg:#eef2f6;
+    --shell:#f5f7fa;
+    --card:#ffffff;
+    --ink:#182433;
+    --muted:#647487;
+    --line:#d9e1ea;
+    --slate:#223336;
+    --slate-2:#1c2a2d;
+    --accent:#2c70d9;
+    --good:#2b9e68;
+    --warn:#cf972d;
+    --danger:#e25545;
+    --shadow:0 24px 66px rgba(24,36,51,.10);
+    --shadow-soft:0 10px 26px rgba(24,36,51,.07);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:linear-gradient(180deg,#f4f7fb 0%,#eaf0f5 100%);font-family:"Aptos","Segoe UI Variable Text","Segoe UI",sans-serif;color:var(--ink)}
+  body{padding:24px}
+  .shell{
+    max-width:1480px;
+    margin:0 auto;
+    min-height:980px;
+    border-radius:30px;
+    overflow:hidden;
+    border:1px solid rgba(24,36,51,.08);
+    box-shadow:var(--shadow);
+    background:var(--shell);
+  }
+  .root{
+    display:grid;
+    grid-template-columns:210px minmax(0,1fr);
+    min-height:980px;
+  }
+  .nav{
+    background:linear-gradient(180deg,var(--slate) 0%,var(--slate-2) 100%);
+    color:#eef5f3;
+    padding:22px 16px;
+    display:grid;
+    grid-template-rows:auto 1fr auto;
+    gap:22px;
+  }
+  .logo{
+    display:flex;align-items:center;gap:10px;
+  }
+  .logo-mark{
+    width:40px;height:40px;border-radius:14px;background:linear-gradient(135deg,#2c70d9 0%,#9ec3ff 60%,#f0c776 100%);
+  }
+  .logo h1{margin:0;font:700 22px/1 "Georgia","Cambria",serif;letter-spacing:-.04em}
+  .logo small{display:block;margin-top:4px;color:rgba(238,245,243,.68);text-transform:uppercase;letter-spacing:.16em;font-size:10px;font-weight:800}
+  .menu{display:grid;gap:6px}
+  .menu-item{
+    display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 10px;border-radius:14px;background:transparent;color:#eef5f3;
+  }
+  .menu-item.active{background:rgba(255,255,255,.10)}
+  .menu-icon{
+    width:30px;height:30px;border-radius:10px;background:rgba(255,255,255,.08);display:grid;place-items:center;font-size:12px;font-weight:800;
+  }
+  .nav-note{
+    padding:14px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.08);color:rgba(238,245,243,.82);line-height:1.5;font-size:13px;
+  }
+  .main{display:grid;grid-template-rows:auto auto 1fr}
+  .top{
+    min-height:64px;padding:14px 22px;background:#233336;color:#fff;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;
+  }
+  .search{
+    min-height:40px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.08);padding:10px 16px;font-weight:700;
+  }
+  .actions{display:flex;gap:10px}
+  .chip,.btn{
+    min-height:38px;padding:8px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:#fff;font-weight:700;font-size:13px;
+  }
+  .btn.primary{background:var(--accent);border-color:var(--accent)}
+  .header{
+    padding:20px 22px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#f9fbfd 0%,#eef3f7 100%);
+  }
+  .eyebrow{color:#6c798c;text-transform:uppercase;letter-spacing:.16em;font-size:11px;font-weight:800}
+  .header-grid{
+    display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin-top:0;
+  }
+  .hero,.selector,.card,.module{
+    background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow-soft);
+  }
+  .hero,.selector,.module{padding:20px}
+  .hero h2{margin:8px 0 8px;font:700 34px/1 "Georgia","Cambria",serif;letter-spacing:-.045em}
+  .hero p,.selector p,.module p{margin:0;color:var(--muted);line-height:1.58}
+  .selector-grid{
+    display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:16px;
+  }
+  .selector-card{
+    padding:14px;border-radius:16px;border:1px solid var(--line);background:#fff;
+  }
+  .selector-card.active{background:linear-gradient(180deg,#eef4ff 0%,#fff 100%);border-color:#bfd2ee}
+  .pill{
+    display:inline-flex;align-items:center;min-height:28px;padding:4px 10px;border-radius:999px;border:1px solid;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  }
+  .ok{background:#ebf7f0;border-color:#bbdfcb;color:var(--good)}
+  .warn{background:#fff3e2;border-color:#ecd19c;color:#9b6910}
+  .risk{background:#ffeded;border-color:#f0c2c2;color:#b94141}
+  .soft{background:#edf4fb;border-color:#cadaef;color:#3b5774}
+  .body{
+    padding:18px 22px 22px;display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;align-items:start;
+  }
+  .left-stack,.right-stack{display:grid;gap:16px}
+  .module h3{margin:8px 0 8px;font-size:24px;letter-spacing:-.03em}
+  .table{
+    margin-top:14px;border:1px solid var(--line);border-radius:18px;overflow:hidden;
+  }
+  .row{
+    display:grid;grid-template-columns:1.1fr .9fr .8fr .8fr;gap:12px;align-items:center;padding:14px 16px;border-top:1px solid var(--line);
+  }
+  .row:first-child{border-top:0;background:#f7f9fc;color:#55657a;font-weight:800}
+  .list{display:grid;gap:10px;margin-top:14px}
+  .item{
+    padding:14px 16px;border-radius:18px;border:1px solid var(--line);background:#fff;
+  }
+  .stats{
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px;
+  }
+  .stat{
+    padding:14px;border-radius:16px;background:#f5f8fb;border:1px solid var(--line);
+  }
+  .stat strong{display:block;margin-top:6px;font-size:22px}
+</style>
+</head>
+<body>
+  <div class="shell">
+    <div class="root">
+      <aside class="nav">
+        <div class="logo">
+          <div class="logo-mark"></div>
+          <div><h1>AiVI</h1><small>Navigator</small></div>
+        </div>
+        <div class="menu">
+          <div class="menu-item active"><div class="menu-icon">D</div><strong>Dashboard</strong></div>
+          <div class="menu-item"><div class="menu-icon">A</div><strong>Accounts</strong></div>
+          <div class="menu-item"><div class="menu-icon">S</div><strong>Sites</strong></div>
+          <div class="menu-item"><div class="menu-icon">O</div><strong>Operations</strong></div>
+          <div class="menu-item"><div class="menu-icon">G</div><strong>Diagnostics</strong></div>
+          <div class="menu-item"><div class="menu-icon">B</div><strong>Billing</strong></div>
+          <div class="menu-item"><div class="menu-icon">T</div><strong>Audit</strong></div>
+        </div>
+        <div class="nav-note">This version is closest to your reference. Navigation lives on the left full-time, while account components get pulled into focus in the screen body.</div>
+      </aside>
+      <main class="main">
+        <div class="top">
+          <div class="search">Search everything</div>
+          <div class="actions"><div class="chip">Staging</div><div class="btn primary">Quick add</div></div>
+        </div>
+        <section class="header">
+          <div class="header-grid">
+            <div class="hero">
+              <div class="eyebrow">Dashboard Focus</div>
+              <h2>Northlight Media</h2>
+              <p>This layout behaves more like a control-room dashboard. The left sidebar takes you anywhere, and the main screen keeps changing its modules based on the account component the operator is focusing on.</p>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+                <span class="pill ok">growth active</span>
+                <span class="pill soft">3 sites</span>
+                <span class="pill warn">6 replay eligible</span>
+                <span class="pill risk">2 webhook failures</span>
+              </div>
+            </div>
+            <div class="selector">
+              <div class="eyebrow">Focused Components</div>
+              <p>Instead of a long weird accounts column, this uses component selectors and lets the rest of the screen fill with what matters now.</p>
+              <div class="selector-grid">
+                <div class="selector-card active"><strong>Account</strong><div class="meta">Relationship health</div></div>
+                <div class="selector-card"><strong>Sites</strong><div class="meta">Connected surfaces</div></div>
+                <div class="selector-card"><strong>Diagnostics</strong><div class="meta">Run health</div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="body">
+          <div class="left-stack">
+            <section class="module">
+              <div class="eyebrow">Live Overview</div>
+              <h3>Primary surfaces</h3>
+              <div class="table">
+                <div class="row"><div>Surface</div><div>State</div><div>Last touch</div><div>Status</div></div>
+                <div class="row"><div><strong>northlightmedia.com</strong></div><div>Primary site</div><div>12 mins ago</div><div><span class="pill ok">healthy</span></div></div>
+                <div class="row"><div><strong>insights.northlightmedia.com</strong></div><div>Content satellite</div><div>1 hr ago</div><div><span class="pill warn">upgrade</span></div></div>
+                <div class="row"><div><strong>staging.northlightmedia.com</strong></div><div>Staging</div><div>42 mins ago</div><div><span class="pill risk">conflict</span></div></div>
+              </div>
+            </section>
+            <section class="module">
+              <div class="eyebrow">Account Health</div>
+              <h3>Why this screen works better</h3>
+              <p>It lets the dashboard remain full and useful even when there are many accounts, because browsing accounts becomes a dedicated action, not a giant permanently visible column.</p>
+              <div class="stats">
+                <div class="stat"><div class="eyebrow">Credits</div><strong>9,420</strong></div>
+                <div class="stat"><div class="eyebrow">Observed 30d</div><strong>$4,780</strong></div>
+                <div class="stat"><div class="eyebrow">Site conflicts</div><strong>1</strong></div>
+                <div class="stat"><div class="eyebrow">Recent events</div><strong>18</strong></div>
+              </div>
+            </section>
+          </div>
+          <aside class="right-stack">
+            <section class="module">
+              <div class="eyebrow">Alerts</div>
+              <h3>Needs attention</h3>
+              <div class="list">
+                <div class="item"><strong>Billing sync failures</strong><div class="meta">2 failed events ready for replay.</div></div>
+                <div class="item"><strong>Plugin drift</strong><div class="meta">One connected surface is still behind.</div></div>
+                <div class="item"><strong>Binding cleanup</strong><div class="meta">Staging relationship needs operator review.</div></div>
+              </div>
+            </section>
+            <section class="module">
+              <div class="eyebrow">Recent Activity</div>
+              <h3>Latest operator actions</h3>
+              <div class="list">
+                <div class="item"><strong>Replay opened</strong><div class="meta">14 mins ago · Operations</div></div>
+                <div class="item"><strong>Upgrade flagged</strong><div class="meta">42 mins ago · System</div></div>
+                <div class="item"><strong>Credit note added</strong><div class="meta">Yesterday · Finance</div></div>
+              </div>
+            </section>
+          </aside>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

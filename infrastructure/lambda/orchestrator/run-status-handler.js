@@ -600,7 +600,7 @@ const runStatusHandler = async (event) => {
 
                 // Map error to abort reason
                 const abortReason = mapErrorToAbortReason(
-                    run.error || finalStatus,
+                    run.abort?.reason || run.error || finalStatus,
                     run.error_message || ''
                 );
 
@@ -612,7 +612,9 @@ const runStatusHandler = async (event) => {
 
                 // Also set top-level fields for backward compatibility
                 response.error = abortReason;
+                response.message = response.analysis_summary.message || response.message || 'Analysis aborted - no partial results shown';
                 response.message = 'Analysis aborted — no partial results shown';
+                response.message = response.analysis_summary.message || response.message || 'Analysis aborted - no partial results shown';
                 response.trace_id = traceId;
 
                 telemetryContext.categoriesCount = response.analysis_summary?.categories?.length || 0;

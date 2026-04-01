@@ -314,6 +314,50 @@ const shouldExposeRecommendationInRail = ({ checkData, failureReason }) => {
     if (!isSyntheticFallbackReason(normalizedReason)) return true;
     return isDeterministicCheckData(checkData);
 };
+const deriveSerializerPartialReason = (analysisResult) => {
+    const partialContext = analysisResult && analysisResult.partial_context && typeof analysisResult.partial_context === 'object'
+        ? analysisResult.partial_context
+        : {};
+    const explicitReason = String(
+        (analysisResult && analysisResult.partial_reason)
+        || partialContext.partial_reason
+        || ''
+    ).trim().toLowerCase();
+    if (explicitReason) return explicitReason;
+    const status = String((analysisResult && analysisResult.status) || '').trim().toLowerCase();
+    if (status !== 'success_partial') return '';
+    if (partialContext.budget_hit) return 'time_budget_exceeded';
+    if (partialContext.was_truncated) return 'truncated_response';
+    if (Number(partialContext.failed_chunk_count || 0) > 0) return 'chunk_parse_failure';
+    if (Number(partialContext.synthetic_findings_count || 0) > 0 || Number(partialContext.missing_ai_checks || 0) > 0) {
+        return 'missing_ai_checks';
+    }
+    return '';
+};
+const shouldGuardDegradedExtractabilityRelease = ({ analysisResult, checkId, checkData }) => {
+    if (!QUESTION_ANCHOR_GATED_CHECKS.has(String(checkId || '').trim())) return false;
+    if (!analysisResult || String(analysisResult.status || '').trim().toLowerCase() !== 'success_partial') return false;
+    if (isSyntheticDiagnosticCheck(checkData)) return false;
+    const partialReason = deriveSerializerPartialReason(analysisResult);
+    const partialContext = analysisResult.partial_context && typeof analysisResult.partial_context === 'object'
+        ? analysisResult.partial_context
+        : {};
+    if (partialReason !== 'chunk_parse_failure') return false;
+    return Number(partialContext.failed_chunk_count || 0) > 0
+        || Number(partialContext.parse_error_total || 0) > 0
+        || Number(partialContext.synthetic_findings_count || 0) > 0;
+};
+const buildDegradedExtractabilityGuardrailMessage = (checkId) => {
+    const normalizedCheckId = String(checkId || '').trim();
+    const byCheckId = {
+        immediate_answer_placement: 'This run only partially recovered the answer-structure checks, so AiVI is holding this issue at section level instead of pinning it to one exact snippet.',
+        answer_sentence_concise: 'This run only partially recovered the answer-structure checks, so AiVI is keeping this snippet-quality issue at section level for now.',
+        question_answer_alignment: 'This run only partially recovered the answer-structure checks, so AiVI is keeping this alignment issue at section level instead of forcing one exact span.',
+        clear_answer_formatting: 'This run only partially recovered the answer-structure checks, so AiVI is holding this formatting issue at section level instead of blaming one exact snippet.'
+    };
+    return byCheckId[normalizedCheckId]
+        || 'This run only partially recovered the answer-structure checks, so AiVI is keeping this issue at section level for now.';
+};
 
 const AGGREGATE_INLINE_MESSAGE_PATTERNS = [
     /\b\d+\s+[a-z0-9_-]+\(s\)/i,
@@ -3097,6 +3141,8 @@ function buildHighlightedHtml(manifest, analysisResult) {
                 return 'The model response was truncated for this check. Tighten the section and re-run analysis.';
             case 'invalid_checks_filtered':
                 return 'Strengthen this section with explicit claims and concrete support, then re-run analysis.';
+            case 'degraded_partial_extractability_guardrail':
+                return 'Tighten the opening under this heading so the direct answer or first structured item appears earlier, then re-run analysis for a clean snippet-level verdict.';
             case 'no_highlight_candidates':
                 return `Refine the section tied to ${checkName}: make one explicit claim, add one concrete support detail, and remove vague phrasing.`;
             default:
@@ -3274,6 +3320,21 @@ function buildHighlightedHtml(manifest, analysisResult) {
                 message: check.explanation || `${String(checkId || '')} could not be completed by AI analyzer`,
                 snippet: '',
                 failureReason: syntheticReason,
+                nodeRef: '',
+                signature: '',
+                sourcePack: check.ai_explanation_pack || check.explanation_pack || null
+            }));
+            return;
+        }
+        if (shouldGuardDegradedExtractabilityRelease({ analysisResult, checkId, checkData: check })) {
+            pushUnhighlightableIssue(buildUnhighlightableIssue({
+                checkId,
+                check,
+                instanceIndex: 0,
+                verdict,
+                message: buildDegradedExtractabilityGuardrailMessage(checkId),
+                snippet: '',
+                failureReason: 'degraded_partial_extractability_guardrail',
                 nodeRef: '',
                 signature: '',
                 sourcePack: check.ai_explanation_pack || check.explanation_pack || null
